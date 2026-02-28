@@ -1,14 +1,22 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Zap, Check } from 'lucide-react';
+import { useNavigate } from 'react-router';
 
 interface UpgradeModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-export function UpgradeModal({ open, onOpenChange }: UpgradeModalProps) {
+export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
+  const navigate = useNavigate();
+
+  const handleUpgrade = () => {
+    navigate('/pricing');
+    onClose();
+  };
+
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={isOpen} onOpenChange={onClose}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-in fade-in" />
         <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-white rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-200">
@@ -69,7 +77,10 @@ export function UpgradeModal({ open, onOpenChange }: UpgradeModalProps) {
                   ))}
                 </ul>
 
-                <button className="w-full bg-gradient-to-r from-[#0EA5E9] to-[#06B6D4] text-white py-3 rounded-lg font-semibold hover:shadow-lg hover:scale-[1.02] transition-all duration-200">
+                <button
+                  onClick={handleUpgrade}
+                  className="w-full bg-gradient-to-r from-[#0EA5E9] to-[#06B6D4] text-white py-3 rounded-lg font-semibold hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+                >
                   Upgrade to Pro
                 </button>
               </div>
@@ -81,7 +92,7 @@ export function UpgradeModal({ open, onOpenChange }: UpgradeModalProps) {
                   Continue with 3 Auto-Apply actions per day. Your quota resets every 24 hours.
                 </p>
                 <button
-                  onClick={() => onOpenChange(false)}
+                  onClick={() => onClose()}
                   className="text-sm text-[#0EA5E9] font-medium hover:underline"
                 >
                   Maybe later

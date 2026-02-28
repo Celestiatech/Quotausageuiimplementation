@@ -73,9 +73,11 @@ export default function Pricing() {
   const handleSelectPlan = (planName: string) => {
     if (planName === 'Coach') {
       // Navigate to contact or show modal
+      window.location.href = 'mailto:sales@careerpilot.com';
       return;
     }
-    navigate('/thank-you');
+    // Navigate to signup page with plan parameter
+    navigate(`/signup?plan=${planName.toLowerCase()}`);
   };
 
   return (

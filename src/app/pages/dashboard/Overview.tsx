@@ -12,9 +12,17 @@ import {
   Users
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { QuotaUsage } from '../../components/quota-usage';
+import { UpgradeModal } from '../../components/upgrade-modal';
+import { useState } from 'react';
 
 export default function Overview() {
   const { user } = useAuth();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // Calculate quota reset time (24 hours from now)
+  const quotaResetTime = new Date();
+  quotaResetTime.setHours(quotaResetTime.getHours() + 24);
 
   const stats = [
     {
@@ -261,8 +269,27 @@ export default function Overview() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </motion.div>
+
+          {/* Quota Usage */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.8 }}
+            className="bg-white rounded-2xl p-6 border-2 border-gray-200"
+          >
+            <QuotaUsage
+              quotaResetTime={quotaResetTime}
+              onUpgradeClick={() => setShowUpgradeModal(true)}
+            />
+          </motion.div>
         </div>
       </div>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </div>
   );
 }

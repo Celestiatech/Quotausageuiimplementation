@@ -8,6 +8,9 @@ interface User {
   avatar?: string;
   plan: 'free' | 'pro' | 'coach';
   createdAt: string;
+  quotaUsed: number;
+  quotaTotal: number;
+  quotaResetTime: string;
 }
 
 interface AuthContextType {
@@ -17,6 +20,7 @@ interface AuthContextType {
   login: (email: string, password: string, role?: 'user' | 'admin') => Promise<void>;
   logout: () => void;
   signup: (name: string, email: string, password: string) => Promise<void>;
+  incrementQuota: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,7 +47,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400',
       plan: role === 'admin' ? 'coach' : 'pro',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      quotaUsed: 0,
+      quotaTotal: 100,
+      quotaResetTime: new Date().toISOString()
     };
 
     setUser(mockUser);
@@ -61,7 +68,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: 'user',
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400',
       plan: 'free',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      quotaUsed: 0,
+      quotaTotal: 100,
+      quotaResetTime: new Date().toISOString()
     };
 
     setUser(mockUser);
@@ -73,6 +83,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('user');
   };
 
+  const incrementQuota = () => {
+    if (user) {
+      const updatedUser: User = {
+        ...user,
+        quotaUsed: user.quotaUsed + 1
+      };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -81,7 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin: user?.role === 'admin',
         login,
         logout,
-        signup
+        signup,
+        incrementQuota
       }}
     >
       {children}
@@ -99,7 +121,8 @@ export function useAuth() {
       isAdmin: false,
       login: async () => {},
       logout: () => {},
-      signup: async () => {}
+      signup: async () => {},
+      incrementQuota: () => {}
     };
   }
   return context;

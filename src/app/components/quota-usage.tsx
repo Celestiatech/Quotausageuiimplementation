@@ -1,22 +1,25 @@
 import { useState, useEffect } from 'react';
 import { Zap, Clock, Lock, TrendingUp } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface QuotaUsageProps {
-  used: number;
-  total: number;
-  resetTime: Date;
-  onLimitReached: () => void;
+  quotaResetTime: Date;
+  onUpgradeClick: () => void;
 }
 
-export function QuotaUsage({ used, total, resetTime, onLimitReached }: QuotaUsageProps) {
+export function QuotaUsage({ quotaResetTime, onUpgradeClick }: QuotaUsageProps) {
+  const { user } = useAuth();
   const [timeLeft, setTimeLeft] = useState('');
-  const isLocked = used >= total;
-  const percentage = (used / total) * 100;
+  
+  const used = user?.plan === 'free' ? 2 : user?.quotaUsed || 0;
+  const total = user?.plan === 'free' ? 3 : Infinity;
+  const isLocked = user?.plan === 'free' && used >= total;
+  const percentage = user?.plan === 'free' ? (used / total) * 100 : 0;
 
   useEffect(() => {
     const updateTimer = () => {
       const now = new Date();
-      const diff = resetTime.getTime() - now.getTime();
+      const diff = quotaResetTime.getTime() - now.getTime();
 
       if (diff <= 0) {
         setTimeLeft('Resetting...');
@@ -34,13 +37,7 @@ export function QuotaUsage({ used, total, resetTime, onLimitReached }: QuotaUsag
     const interval = setInterval(updateTimer, 1000);
 
     return () => clearInterval(interval);
-  }, [resetTime]);
-
-  useEffect(() => {
-    if (isLocked) {
-      onLimitReached();
-    }
-  }, [isLocked, onLimitReached]);
+  }, [quotaResetTime]);
 
   return (
     <div className="w-full max-w-md">
@@ -131,22 +128,38 @@ export function QuotaUsage({ used, total, resetTime, onLimitReached }: QuotaUsag
 
           {/* Status Message */}
           {isLocked ? (
-            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
-              <p className="text-sm text-red-700 font-medium">
-                You've reached your daily limit. Upgrade to Pro for unlimited Auto-Apply actions.
-              </p>
+            <div className="mt-4 space-y-3">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-sm text-red-700 font-medium">
+                  You've reached your daily limit. Upgrade to Pro for unlimited Auto-Apply actions.
+                </p>
+              </div>
+              <button
+                onClick={onUpgradeClick}
+                className="w-full px-4 py-3 bg-gradient-to-r from-[#0EA5E9] to-[#06B6D4] text-white rounded-lg font-semibold hover:shadow-lg transition-all"
+              >
+                Upgrade to Pro
+              </button>
             </div>
           ) : (
-            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-              <div className="flex items-start gap-2">
-                <TrendingUp className="w-5 h-5 text-[#0EA5E9] flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-medium text-[#030213]">{total - used} actions remaining</span> today. 
-                    Upgrade to Pro for unlimited Auto-Apply.
-                  </p>
+            <div className="mt-4 space-y-3">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <div className="flex items-start gap-2">
+                  <TrendingUp className="w-5 h-5 text-[#0EA5E9] flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      <span className="font-medium text-[#030213]">{total - used} actions remaining</span> today. 
+                      Upgrade to Pro for unlimited Auto-Apply.
+                    </p>
+                  </div>
                 </div>
               </div>
+              <button
+                onClick={onUpgradeClick}
+                className="w-full px-4 py-3 bg-gradient-to-r from-[#0EA5E9] to-[#06B6D4] text-white rounded-lg font-semibold hover:shadow-lg transition-all"
+              >
+                Upgrade to Pro
+              </button>
             </div>
           )}
         </div>

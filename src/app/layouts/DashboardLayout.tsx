@@ -16,7 +16,8 @@ import {
   LogOut,
   User,
   CreditCard,
-  ChevronDown
+  ChevronDown,
+  Zap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -119,15 +120,17 @@ export default function DashboardLayout() {
               {profileOpen && (
                 <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                   <Link
-                    to="/dashboard/settings/profile"
+                    to="/dashboard/profile"
                     className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                    onClick={() => setProfileOpen(false)}
                   >
                     <User className="w-5 h-5 text-gray-400" />
                     <span className="text-sm font-medium text-gray-700">Profile</span>
                   </Link>
                   <Link
-                    to="/dashboard/settings/billing"
+                    to="/dashboard/billing"
                     className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                    onClick={() => setProfileOpen(false)}
                   >
                     <CreditCard className="w-5 h-5 text-gray-400" />
                     <span className="text-sm font-medium text-gray-700">Billing</span>
@@ -170,6 +173,17 @@ export default function DashboardLayout() {
             </div>
 
             <div className="flex items-center gap-4">
+              {user?.plan === 'free' && (
+                <Link
+                  to="/dashboard/billing"
+                  className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg hover:shadow-md transition-all"
+                >
+                  <Zap className="w-4 h-4 text-purple-600" />
+                  <span className="text-sm font-semibold text-purple-700">
+                    {2}/3 Daily Quota
+                  </span>
+                </Link>
+              )}
               <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 <Bell className="w-6 h-6 text-gray-600" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>

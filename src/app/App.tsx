@@ -25,6 +25,8 @@ import Resume from './pages/dashboard/Resume';
 import Interview from './pages/dashboard/Interview';
 import DashboardAnalytics from './pages/dashboard/Analytics';
 import Settings from './pages/dashboard/Settings';
+import Profile from './pages/dashboard/Profile';
+import Billing from './pages/dashboard/Billing';
 
 // Admin Pages
 import AdminOverview from './pages/admin/Overview';
@@ -93,6 +95,8 @@ export default function App() {
             <Route path="interview" element={<Interview />} />
             <Route path="analytics" element={<DashboardAnalytics />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="billing" element={<Billing />} />
           </Route>
 
           {/* Admin */}
