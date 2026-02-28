@@ -1,13 +1,28 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Briefcase, Menu, X, Sparkles } from 'lucide-react';
+import { Briefcase, Menu, X, Sparkles, LogOut, LayoutDashboard, Shield } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const { isAuthenticated, isAdmin, logout, user } = useAuth();
 
   const handleGetStarted = () => {
-    navigate('/pricing');
+    if (isAuthenticated) {
+      navigate(isAdmin ? '/admin' : '/dashboard');
+    } else {
+      navigate('/pricing');
+    }
+  };
+
+  const handleAuthAction = () => {
+    if (isAuthenticated) {
+      logout();
+      navigate('/');
+    } else {
+      navigate('/login');
+    }
   };
 
   return (
@@ -55,15 +70,39 @@ export function Navigation() {
 
             {/* CTA Buttons */}
             <div className="hidden lg:flex items-center gap-4">
-              <button className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
-                Sign In
-              </button>
-              <button 
-                onClick={handleGetStarted}
-                className="px-6 py-2.5 bg-gradient-to-r from-[#6366F1] via-[#8B5CF6] to-[#A855F7] text-white rounded-lg font-semibold hover:shadow-xl hover:scale-105 transition-all duration-200"
-              >
-                Get Started
-              </button>
+              {isAuthenticated ? (
+                <>
+                  <button
+                    onClick={() => navigate(isAdmin ? '/admin' : '/dashboard')}
+                    className="flex items-center gap-2 text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
+                  >
+                    {isAdmin ? <Shield className="w-4 h-4" /> : <LayoutDashboard className="w-4 h-4" />}
+                    {isAdmin ? 'Admin' : 'Dashboard'}
+                  </button>
+                  <button
+                    onClick={handleAuthAction}
+                    className="flex items-center gap-2 text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleAuthAction}
+                    className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
+                  >
+                    Sign In
+                  </button>
+                  <button 
+                    onClick={handleGetStarted}
+                    className="px-6 py-2.5 bg-gradient-to-r from-[#6366F1] via-[#8B5CF6] to-[#A855F7] text-white rounded-lg font-semibold hover:shadow-xl hover:scale-105 transition-all duration-200"
+                  >
+                    Get Started
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Mobile Menu Button */}
@@ -115,18 +154,42 @@ export function Navigation() {
                   FAQ
                 </Link>
                 <div className="pt-4 border-t border-gray-200 flex flex-col gap-2">
-                  <button className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors text-left">
-                    Sign In
-                  </button>
-                  <button 
-                    onClick={() => {
-                      handleGetStarted();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="px-6 py-2.5 bg-gradient-to-r from-[#6366F1] via-[#8B5CF6] to-[#A855F7] text-white rounded-lg font-semibold"
-                  >
-                    Get Started
-                  </button>
+                  {isAuthenticated ? (
+                    <>
+                      <button
+                        onClick={() => navigate(isAdmin ? '/admin' : '/dashboard')}
+                        className="flex items-center gap-2 text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors text-left"
+                      >
+                        {isAdmin ? <Shield className="w-4 h-4" /> : <LayoutDashboard className="w-4 h-4" />}
+                        {isAdmin ? 'Admin' : 'Dashboard'}
+                      </button>
+                      <button
+                        onClick={handleAuthAction}
+                        className="flex items-center gap-2 text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors text-left"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleAuthAction}
+                        className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors text-left"
+                      >
+                        Sign In
+                      </button>
+                      <button 
+                        onClick={() => {
+                          handleGetStarted();
+                          setMobileMenuOpen(false);
+                        }}
+                        className="px-6 py-2.5 bg-gradient-to-r from-[#6366F1] via-[#8B5CF6] to-[#A855F7] text-white rounded-lg font-semibold"
+                      >
+                        Get Started
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
