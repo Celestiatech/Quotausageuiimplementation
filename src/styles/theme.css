@@ -204,3 +204,37 @@
     line-height: 1.5;
   }
 }
+
+/* Premium Utilities */
+@layer utilities {
+  .gradient-primary {
+    @apply bg-gradient-to-r from-[#6366F1] via-[#8B5CF6] to-[#A855F7];
+  }
+  
+  .text-gradient {
+    @apply bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent;
+  }
+  
+  .glass {
+    @apply bg-white/80 backdrop-blur-lg;
+  }
+  
+  .shadow-premium {
+    box-shadow: 0 10px 40px rgba(99, 102, 241, 0.15);
+  }
+  
+  .shadow-premium-lg {
+    box-shadow: 0 20px 60px rgba(99, 102, 241, 0.25);
+  }
+  
+  .btn-premium {
+    @apply hover:scale-105 active:scale-95 transition-transform duration-200;
+  }
+  
+  .bg-grid-pattern {
+    background-image: 
+      linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+}
