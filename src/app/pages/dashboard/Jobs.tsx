@@ -158,12 +158,22 @@ export default function Jobs() {
     };
     if (!payload.questionKey || !payload.answer) return;
 
-    await fetch("/api/user/screening/answers", {
+    const res = await fetch("/api/user/screening/answers", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      let message = "Failed to save answer on site";
+      try {
+        const data = await res.json();
+        if (data?.message) message = String(data.message);
+      } catch {
+        // Keep default error.
+      }
+      throw new Error(message);
+    }
 
     setSiteScreeningAnswers((prev) => ({
       ...prev,
@@ -353,6 +363,14 @@ export default function Jobs() {
     try {
       setSyncingSettings(true);
       setError("");
+      const screeningAnswersForSync: Record<string, string> = {};
+      for (const [rawKey, rawValue] of Object.entries(siteScreeningAnswers)) {
+        const answer = String(rawValue || "").trim();
+        if (!answer) continue;
+        const canonicalKey = toQuestionKey(rawKey);
+        if (!canonicalKey) continue;
+        screeningAnswersForSync[canonicalKey] = answer;
+      }
       const settingsPayload = {
         currentCity: user?.currentCity || "",
         searchLocation: user?.currentCity || "",
@@ -370,6 +388,7 @@ export default function Jobs() {
         maxSkipsPerRun: 50,
         blacklistedCompanies: [],
         badWords: [],
+        screeningAnswers: screeningAnswersForSync,
       };
 
       const ack = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
@@ -414,25 +433,22 @@ export default function Jobs() {
   };
 
   const saveAnswerForQuestion = async (questionKey: string, questionLabel: string) => {
-    const answer = (answerDrafts[questionKey] || "").trim();
+    const canonicalKey = toQuestionKey(questionKey || questionLabel);
+    const label = String(questionLabel || "").trim() || labelFromQuestionKey(canonicalKey);
+    const answer = (answerDrafts[canonicalKey] || answerDrafts[questionKey] || "").trim();
     if (!answer) {
       setError("Answer cannot be empty.");
       return;
     }
+    if (!canonicalKey) {
+      setError("Question key is invalid.");
+      return;
+    }
     try {
-      setSavingAnswerKey(questionKey);
+      setSavingAnswerKey(canonicalKey);
       setError("");
 
-      await fetch("/api/user/screening/answers", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          questionKey,
-          questionLabel,
-          answer,
-        }),
-      });
+      await saveAnswerToSite(canonicalKey, label, answer);
 
       const ack = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
         const requestId = `cp_save_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -457,8 +473,8 @@ export default function Jobs() {
           {
             type: "CP_WEB_SAVE_ANSWER",
             requestId,
-            questionKey,
-            questionLabel,
+            questionKey: canonicalKey,
+            questionLabel: label,
             answer,
           },
           window.location.origin,
@@ -468,6 +484,10 @@ export default function Jobs() {
       if (!ack.ok) {
         throw new Error(ack.error || "Failed to save answer in extension");
       }
+      setAnswerDrafts((prev) => ({
+        ...prev,
+        [canonicalKey]: answer,
+      }));
       await checkExtensionStatus();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save answer");
@@ -499,15 +519,20 @@ export default function Jobs() {
 
   useEffect(() => {
     void loadJobs();
+    void loadSiteScreeningAnswers();
     void checkExtensionStatus();
     const jobsIntervalId = setInterval(() => {
       void loadJobs();
     }, 10000);
+    const siteAnswersIntervalId = setInterval(() => {
+      void loadSiteScreeningAnswers();
+    }, 12000);
     const extensionIntervalId = setInterval(() => {
       void checkExtensionStatus();
     }, 4000);
     return () => {
       clearInterval(jobsIntervalId);
+      clearInterval(siteAnswersIntervalId);
       clearInterval(extensionIntervalId);
     };
   }, []);
@@ -520,7 +545,7 @@ export default function Jobs() {
     // Best-effort auto-sync once extension is detected.
     void syncProfileToExtension();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extensionStatus.installed, user?.id]);
+  }, [extensionStatus.installed, user?.id, Object.keys(siteScreeningAnswers).length]);
 
   const filteredJobs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -538,6 +563,38 @@ export default function Jobs() {
       );
     });
   }, [jobs, searchQuery]);
+
+  const allScreeningFields = useMemo(() => {
+    const merged = new Map<string, { questionKey: string; questionLabel: string; answer: string }>();
+    const upsert = (rawKey: string, questionLabel: string, answer: string) => {
+      const questionKey = toQuestionKey(rawKey || questionLabel);
+      if (!questionKey) return;
+      const cleanAnswer = String(answer || "").trim();
+      const cleanLabel = String(questionLabel || "").trim() || siteQuestionLabels[questionKey] || labelFromQuestionKey(questionKey);
+      const existing = merged.get(questionKey);
+      merged.set(questionKey, {
+        questionKey,
+        questionLabel: existing?.questionLabel || cleanLabel,
+        answer: cleanAnswer || existing?.answer || "",
+      });
+    };
+
+    for (const [rawKey, rawAnswer] of Object.entries(siteScreeningAnswers)) {
+      const questionKey = toQuestionKey(rawKey);
+      if (!questionKey) continue;
+      upsert(questionKey, siteQuestionLabels[questionKey] || labelFromQuestionKey(questionKey), String(rawAnswer || ""));
+    }
+    for (const [rawKey, rawAnswer] of Object.entries(extensionStatus.screeningAnswers || {})) {
+      const questionKey = toQuestionKey(rawKey);
+      if (!questionKey) continue;
+      upsert(questionKey, siteQuestionLabels[questionKey] || labelFromQuestionKey(questionKey), String(rawAnswer || ""));
+    }
+    for (const pending of extensionStatus.pendingQuestions || []) {
+      upsert(pending.questionKey || pending.questionLabel, pending.questionLabel, resolveKnownAnswer(pending.questionKey, pending.questionLabel, extensionStatus.screeningAnswers || {}));
+    }
+
+    return Array.from(merged.values()).sort((a, b) => a.questionLabel.localeCompare(b.questionLabel));
+  }, [siteScreeningAnswers, siteQuestionLabels, extensionStatus.pendingQuestions, extensionStatus.screeningAnswers, answerDrafts]);
 
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || null;
 
@@ -721,6 +778,14 @@ export default function Jobs() {
           <li>Click extension icon, choose CareerPilot extension, then click Start.</li>
         </ol>
 
+        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <div className="text-sm font-semibold text-blue-900">Resume Requirement Handling</div>
+          <div className="text-sm text-blue-800 mt-1">
+            If a job says resume is required, upload your resume in LinkedIn Easy Apply profile first.
+            The copilot automatically picks the latest attached resume option in the modal.
+          </div>
+        </div>
+
         {(extensionStatus.pendingQuestions || []).length > 0 ? (
           <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
             <h3 className="font-semibold text-gray-900">Action Needed: Answer Required Fields</h3>
@@ -728,19 +793,61 @@ export default function Jobs() {
               <div key={q.questionKey} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <div className="text-sm font-semibold text-gray-900">{q.questionLabel}</div>
                 {q.validationMessage ? <div className="text-xs text-amber-700 mt-1">{q.validationMessage}</div> : null}
+                {(q.questionKey === "resume_upload_required" || /resume/i.test(String(q.validationMessage || ""))) ? (
+                  <div className="text-xs text-blue-700 mt-2">
+                    Upload resume in LinkedIn Easy Apply profile. Copilot will auto-select the newest attached resume.
+                  </div>
+                ) : null}
                 <div className="mt-2 flex gap-2">
                   <input
-                    value={answerDrafts[q.questionKey] || ""}
-                    onChange={(e) => setAnswerDrafts((prev) => ({ ...prev, [q.questionKey]: e.target.value }))}
+                    value={answerDrafts[toQuestionKey(q.questionKey || q.questionLabel)] || ""}
+                    onChange={(e) =>
+                      setAnswerDrafts((prev) => ({
+                        ...prev,
+                        [toQuestionKey(q.questionKey || q.questionLabel)]: e.target.value,
+                      }))
+                    }
                     placeholder="Enter answer to reuse in next applications"
                     className="flex-1 px-3 py-2 rounded-lg border border-amber-300 bg-white text-sm outline-none focus:border-purple-400"
                   />
                   <button
                     onClick={() => void saveAnswerForQuestion(q.questionKey, q.questionLabel)}
-                    disabled={savingAnswerKey === q.questionKey}
+                    disabled={savingAnswerKey === toQuestionKey(q.questionKey || q.questionLabel)}
                     className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
                   >
-                    {savingAnswerKey === q.questionKey ? "Saving..." : "Save"}
+                    {savingAnswerKey === toQuestionKey(q.questionKey || q.questionLabel) ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {allScreeningFields.length > 0 ? (
+          <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
+            <h3 className="font-semibold text-gray-900">Saved Screening Fields (Synced)</h3>
+            {allScreeningFields.map((field) => (
+              <div key={field.questionKey} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="text-sm font-semibold text-gray-900">{field.questionLabel}</div>
+                <div className="text-[11px] text-gray-500 mt-1">{field.questionKey}</div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={answerDrafts[field.questionKey] ?? field.answer}
+                    onChange={(e) =>
+                      setAnswerDrafts((prev) => ({
+                        ...prev,
+                        [field.questionKey]: e.target.value,
+                      }))
+                    }
+                    placeholder="Type answer and click Save"
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:border-purple-400"
+                  />
+                  <button
+                    onClick={() => void saveAnswerForQuestion(field.questionKey, field.questionLabel)}
+                    disabled={savingAnswerKey === field.questionKey}
+                    className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
+                  >
+                    {savingAnswerKey === field.questionKey ? "Saving..." : "Save"}
                   </button>
                 </div>
               </div>
