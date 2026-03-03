@@ -1,81 +1,108 @@
 import { motion } from 'motion/react';
 import {
   Users,
-  TrendingUp,
   DollarSign,
   Activity,
-  ArrowUp,
-  ArrowDown,
   Briefcase,
-  FileText,
-  CheckCircle
+  CheckCircle,
+  RefreshCw
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+
+type Metrics = {
+  users: number;
+  activeSubscriptions: number;
+  jobsTotal: number;
+  jobsSucceeded: number;
+  jobsFailed: number;
+  successRatePercent: number;
+};
+
+type Health = {
+  db: { healthy: boolean; message: string };
+  mail: { healthy: boolean; message: string };
+  queue: { enabled: boolean; healthy: boolean; message: string };
+  timestamp: string;
+};
+
+type AdminUser = {
+  id: string;
+  name: string;
+  email: string;
+  plan: 'free' | 'pro' | 'coach';
+  createdAt: string;
+};
 
 export default function AdminOverview() {
+  const [metrics, setMetrics] = useState<Metrics>({
+    users: 0,
+    activeSubscriptions: 0,
+    jobsTotal: 0,
+    jobsSucceeded: 0,
+    jobsFailed: 0,
+    successRatePercent: 0,
+  });
+  const [health, setHealth] = useState<Health | null>(null);
+  const [recentUsers, setRecentUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [mRes, hRes, uRes] = await Promise.all([
+        fetch('/api/admin/metrics', { credentials: 'include' }),
+        fetch('/api/admin/system/health', { credentials: 'include' }),
+        fetch('/api/admin/users', { credentials: 'include' }),
+      ]);
+      const [mData, hData, uData] = await Promise.all([mRes.json(), hRes.json(), uRes.json()]);
+      if (mRes.ok && mData?.success) setMetrics(mData.data);
+      if (hRes.ok && hData?.success) setHealth(hData.data);
+      if (uRes.ok && uData?.success) setRecentUsers((uData.data.users || []).slice(0, 5));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
   const stats = [
     {
       name: 'Total Users',
-      value: '52,431',
-      change: '+12.5%',
-      trend: 'up',
+      value: String(metrics.users),
+      change: 'live',
       icon: Users,
       color: 'from-blue-500 to-cyan-500'
     },
     {
       name: 'Active Subscriptions',
-      value: '12,845',
-      change: '+8.2%',
-      trend: 'up',
+      value: String(metrics.activeSubscriptions),
+      change: 'live',
       icon: CheckCircle,
       color: 'from-green-500 to-emerald-500'
     },
     {
-      name: 'Monthly Revenue',
-      value: '$387,420',
-      change: '+18.7%',
-      trend: 'up',
+      name: 'Success Rate',
+      value: `${metrics.successRatePercent}%`,
+      change: 'live',
       icon: DollarSign,
       color: 'from-purple-500 to-pink-500'
     },
     {
-      name: 'System Uptime',
-      value: '99.9%',
-      change: '+0.1%',
-      trend: 'up',
+      name: 'System Health',
+      value: health?.db.healthy && health?.mail.healthy ? 'Healthy' : 'Warning',
+      change: loading ? 'loading' : 'live',
       icon: Activity,
       color: 'from-orange-500 to-red-500'
     }
   ];
 
-  const recentUsers = [
-    {
-      name: 'John Doe',
-      email: 'john@example.com',
-      plan: 'Pro',
-      joined: '2 hours ago',
-      status: 'active'
-    },
-    {
-      name: 'Jane Smith',
-      email: 'jane@example.com',
-      plan: 'Free',
-      joined: '5 hours ago',
-      status: 'active'
-    },
-    {
-      name: 'Mike Johnson',
-      email: 'mike@example.com',
-      plan: 'Coach',
-      joined: '1 day ago',
-      status: 'active'
-    }
-  ];
-
   const quickStats = [
-    { label: 'Total Applications', value: '245,678' },
-    { label: 'Active Jobs', value: '8,432' },
-    { label: 'Success Rate', value: '68%' },
-    { label: 'Avg Response Time', value: '2.4h' }
+    { label: 'Total Jobs', value: String(metrics.jobsTotal) },
+    { label: 'Succeeded Jobs', value: String(metrics.jobsSucceeded) },
+    { label: 'Failed Jobs', value: String(metrics.jobsFailed) },
+    { label: 'Success Rate', value: `${metrics.successRatePercent}%` }
   ];
 
   return (
@@ -85,8 +112,15 @@ export default function AdminOverview() {
         animate={{ opacity: 1, y: 0 }}
       >
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-        <p className="text-gray-600">Welcome back! Here's what's happening today.</p>
+        <p className="text-gray-600">Live platform metrics and system status.</p>
       </motion.div>
+      <button
+        onClick={() => void load()}
+        className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold inline-flex items-center gap-2"
+      >
+        <RefreshCw className="w-4 h-4" />
+        Refresh
+      </button>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -102,10 +136,7 @@ export default function AdminOverview() {
               <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg`}>
                 <stat.icon className="w-6 h-6 text-white" />
               </div>
-              <div className={`flex items-center gap-1 text-sm font-semibold ${
-                stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {stat.trend === 'up' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+              <div className="text-xs font-semibold text-gray-500 uppercase">
                 {stat.change}
               </div>
             </div>
@@ -127,7 +158,7 @@ export default function AdminOverview() {
           <div className="space-y-4">
             {recentUsers.map((user, index) => (
               <div
-                key={index}
+                key={user.id}
                 className="flex items-center justify-between p-4 rounded-xl hover:bg-purple-50 transition-colors"
               >
                 <div className="flex items-center gap-4">
@@ -141,15 +172,15 @@ export default function AdminOverview() {
                 </div>
                 <div className="text-right">
                   <div className={`text-sm font-semibold px-3 py-1 rounded-full ${
-                    user.plan === 'Pro'
+                    user.plan === 'pro'
                       ? 'bg-purple-100 text-purple-700'
-                      : user.plan === 'Coach'
+                      : user.plan === 'coach'
                       ? 'bg-pink-100 text-pink-700'
                       : 'bg-gray-100 text-gray-700'
                   }`}>
-                    {user.plan}
+                    {user.plan.toUpperCase()}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">{user.joined}</div>
+                  <div className="text-xs text-gray-500 mt-1">{new Date(user.createdAt).toLocaleString()}</div>
                 </div>
               </div>
             ))}
@@ -180,20 +211,26 @@ export default function AdminOverview() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">API</span>
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
-                  Operational
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                  health?.db.healthy ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}>
+                  {health?.db.healthy ? 'Operational' : 'Degraded'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Database</span>
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
-                  Operational
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                  health?.db.healthy ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}>
+                  {health?.db.healthy ? 'Operational' : 'Degraded'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-gray-600">AI Service</span>
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
-                  Operational
+                <span className="text-gray-600">Mail</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                  health?.mail.healthy ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {health?.mail.healthy ? 'Operational' : 'Needs Attention'}
                 </span>
               </div>
             </div>

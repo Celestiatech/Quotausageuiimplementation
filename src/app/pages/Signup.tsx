@@ -7,21 +7,97 @@ import { useAuth } from '../context/AuthContext';
 export default function Signup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpMessage, setOtpMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
   const { signup } = useAuth();
 
+  const sendOtp = async () => {
+    setErrorMessage('');
+    setOtpMessage('');
+    if (!email.trim()) {
+      setErrorMessage('Enter your email first');
+      return;
+    }
+
+    setIsSendingOtp(true);
+    try {
+      const response = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Failed to send OTP');
+      }
+      const devOtp = data?.data?.otp as string | undefined;
+      setOtpSent(true);
+      setOtpVerified(false);
+      if (devOtp) {
+        setOtp(devOtp);
+        setOtpMessage(`Dev OTP: ${devOtp}`);
+      } else {
+        setOtpMessage('OTP sent to your email');
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to send OTP');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const verifyOtpCode = async () => {
+    setErrorMessage('');
+    setOtpMessage('');
+    if (!otp.trim()) {
+      setErrorMessage('Enter OTP to verify');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    try {
+      const response = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'OTP verification failed');
+      }
+      setOtpVerified(true);
+      setOtpMessage('Email verified successfully');
+    } catch (error) {
+      setOtpVerified(false);
+      setErrorMessage(error instanceof Error ? error.message : 'OTP verification failed');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!otpVerified) {
+      setErrorMessage('Please verify your email with OTP before creating account');
+      return;
+    }
     setIsLoading(true);
+    setErrorMessage('');
     
     try {
       await signup(name, email, password);
       navigate('/dashboard');
     } catch (error) {
-      console.error('Signup failed:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Signup failed');
     } finally {
       setIsLoading(false);
     }
@@ -93,6 +169,11 @@ export default function Signup() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {errorMessage && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {errorMessage}
+                  </div>
+                )}
                 {/* Name */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -116,18 +197,65 @@ export default function Signup() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Email Address
                   </label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
-                      placeholder="you@example.com"
-                      required
-                    />
+                  <div className="flex gap-3">
+                    <div className="relative flex-1">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          setOtpVerified(false);
+                        }}
+                        className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                        placeholder="you@example.com"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={sendOtp}
+                      disabled={isSendingOtp}
+                      className="px-4 py-3 rounded-xl bg-purple-100 text-purple-700 font-semibold hover:bg-purple-200 transition-colors disabled:opacity-60"
+                    >
+                      {isSendingOtp ? 'Sending...' : 'Send OTP'}
+                    </button>
                   </div>
                 </div>
+
+                {/* OTP */}
+                {otpSent && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Email OTP
+                    </label>
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                        className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none tracking-widest"
+                        placeholder="Enter 6-digit OTP"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={verifyOtpCode}
+                        disabled={isVerifyingOtp}
+                        className="px-4 py-3 rounded-xl bg-emerald-100 text-emerald-700 font-semibold hover:bg-emerald-200 transition-colors disabled:opacity-60"
+                      >
+                        {isVerifyingOtp ? 'Verifying...' : 'Verify'}
+                      </button>
+                    </div>
+                    {otpMessage && (
+                      <p className={`mt-2 text-sm ${otpVerified ? 'text-emerald-600' : 'text-gray-600'}`}>
+                        {otpMessage}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Password */}
                 <div>
@@ -174,7 +302,7 @@ export default function Signup() {
                 {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !otpVerified}
                   className="w-full btn-premium gradient-primary text-white py-4 rounded-xl font-bold shadow-premium hover:shadow-premium-lg transition-all duration-300 disabled:opacity-50"
                 >
                   {isLoading ? 'Creating account...' : 'Create Free Account'}

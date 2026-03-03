@@ -1,60 +1,99 @@
-import { useState } from 'react';
-import { motion } from 'motion/react';
-import { Plus, Search, Filter, Calendar, MessageSquare, FileText, MoreVertical } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { motion } from "motion/react";
+import { Search, Calendar, FileText, RefreshCw } from "lucide-react";
+
+type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
+
+type Job = {
+  id: string;
+  status: JobStatus;
+  createdAt: string;
+  criteriaJson?: Record<string, unknown>;
+};
+
+type View = "kanban" | "list";
+
+const columns: Array<{ id: JobStatus; title: string; badge: string; card: string }> = [
+  { id: "queued", title: "Queued", badge: "text-purple-700 bg-purple-100", card: "border-purple-200" },
+  { id: "running", title: "Running", badge: "text-blue-700 bg-blue-100", card: "border-blue-200" },
+  { id: "succeeded", title: "Submitted", badge: "text-green-700 bg-green-100", card: "border-green-200" },
+  { id: "failed", title: "Failed", badge: "text-red-700 bg-red-100", card: "border-red-200" },
+  { id: "cancelled", title: "Cancelled", badge: "text-gray-700 bg-gray-100", card: "border-gray-200" },
+  { id: "dead_letter", title: "Dead Letter", badge: "text-red-700 bg-red-100", card: "border-red-200" },
+];
 
 export default function Applications() {
-  const [view, setView] = useState<'kanban' | 'list'>('kanban');
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [view, setView] = useState<View>("kanban");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const columns = [
-    { id: 'saved', title: 'Saved', color: 'gray', count: 8 },
-    { id: 'applied', title: 'Applied', color: 'blue', count: 12 },
-    { id: 'screening', title: 'Screening', color: 'purple', count: 5 },
-    { id: 'interview', title: 'Interview', color: 'orange', count: 3 },
-    { id: 'offer', title: 'Offer', color: 'green', count: 1 },
-    { id: 'rejected', title: 'Rejected', color: 'red', count: 4 }
-  ];
-
-  const applications = {
-    saved: [
-      { id: 1, company: 'Stripe', position: 'Senior Engineer', date: '2024-02-28', notes: 2 },
-      { id: 2, company: 'Coinbase', position: 'Full Stack', date: '2024-02-27', notes: 0 }
-    ],
-    applied: [
-      { id: 3, company: 'Google', position: 'Senior SWE', date: '2024-02-26', notes: 3 },
-      { id: 4, company: 'Meta', position: 'Frontend Engineer', date: '2024-02-25', notes: 1 }
-    ],
-    screening: [
-      { id: 5, company: 'Amazon', position: 'SDE II', date: '2024-02-24', notes: 4 }
-    ],
-    interview: [
-      { id: 6, company: 'Microsoft', position: 'Software Engineer', date: '2024-02-23', notes: 5 },
-      { id: 7, company: 'Apple', position: 'iOS Developer', date: '2024-02-22', notes: 2 }
-    ],
-    offer: [
-      { id: 8, company: 'Netflix', position: 'Senior Engineer', date: '2024-02-21', notes: 6 }
-    ],
-    rejected: []
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const res = await fetch("/api/auto-apply/jobs");
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to fetch applications");
+      setJobs((data?.data?.jobs || []) as Job[]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to fetch applications");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return jobs;
+    return jobs.filter((j) => {
+      const title = String(j.criteriaJson?.title || j.criteriaJson?.keywords || "").toLowerCase();
+      const company = String(j.criteriaJson?.company || "").toLowerCase();
+      return (
+        j.id.toLowerCase().includes(q) ||
+        j.status.toLowerCase().includes(q) ||
+        title.includes(q) ||
+        company.includes(q)
+      );
+    });
+  }, [jobs, searchQuery]);
+
+  const grouped = useMemo(() => {
+    const map: Record<JobStatus, Job[]> = {
+      queued: [],
+      running: [],
+      succeeded: [],
+      failed: [],
+      cancelled: [],
+      dead_letter: [],
+    };
+    filtered.forEach((job) => {
+      map[job.status].push(job);
+    });
+    return map;
+  }, [filtered]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Applications</h1>
-          <p className="text-gray-600">Track and manage your job applications</p>
+          <p className="text-gray-600">Real application pipeline from your auto-apply jobs</p>
         </div>
-        <button className="px-6 py-3 gradient-primary text-white rounded-xl font-semibold shadow-premium hover:shadow-premium-lg transition-all flex items-center gap-2">
-          <Plus className="w-5 h-5" />
-          Add Application
+        <button
+          onClick={() => void load()}
+          className="px-5 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh
         </button>
       </motion.div>
 
-      {/* Filters */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -66,27 +105,25 @@ export default function Applications() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search applications..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by title, company, job id, status..."
               className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
             />
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => setView('kanban')}
+              onClick={() => setView("kanban")}
               className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-                view === 'kanban'
-                  ? 'gradient-primary text-white shadow-md'
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                view === "kanban" ? "gradient-primary text-white shadow-md" : "bg-gray-100 hover:bg-gray-200 text-gray-700"
               }`}
             >
               Kanban
             </button>
             <button
-              onClick={() => setView('list')}
+              onClick={() => setView("list")}
               className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-                view === 'list'
-                  ? 'gradient-primary text-white shadow-md'
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                view === "list" ? "gradient-primary text-white shadow-md" : "bg-gray-100 hover:bg-gray-200 text-gray-700"
               }`}
             >
               List
@@ -95,66 +132,71 @@ export default function Applications() {
         </div>
       </motion.div>
 
-      {/* Kanban Board */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {columns.map((column, colIndex) => (
-          <motion.div
-            key={column.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: colIndex * 0.1 }}
-            className="bg-gray-50 rounded-2xl p-4"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full bg-${column.color}-500`}></div>
+      {error ? <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-4">{error}</div> : null}
+      {loading ? <div className="text-sm text-gray-500">Loading applications...</div> : null}
+
+      {!loading && view === "kanban" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {columns.map((column) => (
+            <div key={column.id} className="bg-gray-50 rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-gray-900">{column.title}</h3>
+                <span className={`px-2 py-1 text-xs rounded-full font-semibold ${column.badge}`}>{grouped[column.id].length}</span>
               </div>
-              <span className="text-sm font-semibold text-gray-500">{column.count}</span>
-            </div>
-
-            <div className="space-y-3">
-              {applications[column.id as keyof typeof applications]?.map((app) => (
-                <motion.div
-                  key={app.id}
-                  whileHover={{ scale: 1.02 }}
-                  className="bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-purple-300 hover:shadow-lg transition-all cursor-pointer"
-                >
-                  <h4 className="font-semibold text-gray-900 mb-1">{app.company}</h4>
-                  <p className="text-sm text-gray-600 mb-3">{app.position}</p>
-                  
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {new Date(app.date).toLocaleDateString()}
-                    </div>
-                    {app.notes > 0 && (
-                      <div className="flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3" />
-                        {app.notes}
+              <div className="space-y-3">
+                {grouped[column.id].map((job) => {
+                  const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "Auto-Apply Job");
+                  const company = String(job.criteriaJson?.company || "LinkedIn");
+                  return (
+                    <div key={job.id} className={`bg-white rounded-xl p-4 border ${column.card}`}>
+                      <div className="font-semibold text-gray-900 text-sm">{title}</div>
+                      <div className="text-xs text-gray-600 mt-1">{company}</div>
+                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-3">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(job.createdAt).toLocaleDateString()}
                       </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                    <button className="flex-1 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold transition-colors">
-                      View
-                    </button>
-                    <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-                      <MoreVertical className="w-4 h-4 text-gray-400" />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-
-              <button className="w-full px-4 py-3 border-2 border-dashed border-gray-300 hover:border-purple-400 rounded-xl text-gray-400 hover:text-purple-600 transition-colors flex items-center justify-center gap-2">
-                <Plus className="w-4 h-4" />
-                <span className="text-sm font-semibold">Add Card</span>
-              </button>
+                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                        <FileText className="w-3 h-3" />
+                        {job.id.slice(0, 10)}
+                      </div>
+                    </div>
+                  );
+                })}
+                {grouped[column.id].length === 0 ? <div className="text-xs text-gray-400">No jobs</div> : null}
+              </div>
             </div>
-          </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : null}
+
+      {!loading && view === "list" ? (
+        <div className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden">
+          <div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase">
+            <div className="col-span-4">Job</div>
+            <div className="col-span-2">Company</div>
+            <div className="col-span-2">Status</div>
+            <div className="col-span-2">Created</div>
+            <div className="col-span-2">Job ID</div>
+          </div>
+          {filtered.map((job) => {
+            const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "Auto-Apply Job");
+            const company = String(job.criteriaJson?.company || "LinkedIn");
+            const col = columns.find((c) => c.id === job.status);
+            return (
+              <div key={job.id} className="grid grid-cols-12 gap-3 px-4 py-3 border-b border-gray-100 text-sm">
+                <div className="col-span-4 font-medium text-gray-900">{title}</div>
+                <div className="col-span-2 text-gray-700">{company}</div>
+                <div className="col-span-2">
+                  <span className={`px-2 py-1 text-xs rounded-full font-semibold ${col?.badge || "bg-gray-100 text-gray-700"}`}>{job.status}</span>
+                </div>
+                <div className="col-span-2 text-gray-600">{new Date(job.createdAt).toLocaleDateString()}</div>
+                <div className="col-span-2 text-gray-600">{job.id.slice(0, 10)}</div>
+              </div>
+            );
+          })}
+          {filtered.length === 0 ? <div className="px-4 py-6 text-sm text-gray-500">No applications found.</div> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

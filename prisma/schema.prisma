@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum UserPlan {
+  free
+  pro
+  coach
+}
+
+enum OtpPurpose {
+  signup
+  login
+  password_reset
+}
+
+enum EmailStatus {
+  sent
+  failed
+}
+
+enum SessionStatus {
+  active
+  revoked
+  expired
+}
+
+enum ConsentType {
+  auto_apply_terms
+  communication_opt_in
+}
+
+enum JobStatus {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+  dead_letter
+}
+
+enum JobLogLevel {
+  info
+  warn
+  error
+}
+
+enum ApplicationStatus {
+  submitted
+  skipped
+  failed
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  cancelled
+  expired
+}
+
+enum HireTxnType {
+  credit_purchase
+  credit_bonus
+  debit_apply
+  refund_apply
+  admin_adjustment
+}
+
+enum HireTxnStatus {
+  posted
+  voided
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  role          UserRole @default(user)
+  avatar        String?
+  phone         String?
+  currentCity   String?
+  addressLine   String?
+  linkedinUrl   String?
+  portfolioUrl  String?
+  resumeFileName String?
+  resumeFilePath String?
+  resumeText    String?
+  onboardingCompleted Boolean @default(false)
+  plan          UserPlan @default(free)
+  createdAt     DateTime @default(now())
+  quotaUsed     Int      @default(0)
+  quotaTotal    Int      @default(3)
+  quotaResetTime DateTime @default(now())
+  hireBalance   Int      @default(0)
+  hireSpent     Int      @default(0)
+  hirePurchased Int      @default(0)
+  dailyHireUsed Int      @default(0)
+  dailyHireCap  Int      @default(3)
+  dailyHireResetTime DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions      Session[]
+  consentLogs   ConsentLog[]
+  userSecrets   UserSecret[]
+  jobs          AutoApplyJob[]
+  applications  Application[]
+  subscription  Subscription?
+  hireTransactions HireTransaction[]
+  auditLogs     AuditLog[] @relation("actorAuditLogs")
+}
+
+model EmailOtp {
+  id           String     @id @default(cuid())
+  email        String
+  purpose      OtpPurpose @default(signup)
+  codeHash     String
+  expiresAt    DateTime
+  attempts     Int        @default(0)
+  maxAttempts  Int        @default(5)
+  verifiedAt   DateTime?
+  consumedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([email, purpose, createdAt])
+}
+
+model EmailLog {
+  id                String      @id @default(cuid())
+  toEmail           String
+  subject           String
+  template          String?
+  status            EmailStatus
+  providerMessageId String?
+  errorMessage      String?
+  createdAt         DateTime    @default(now())
+}
+
+model Session {
+  id               String        @id @default(cuid())
+  userId           String
+  refreshTokenHash String
+  family           String
+  userAgent        String?
+  ipAddress        String?
+  status           SessionStatus @default(active)
+  expiresAt        DateTime
+  lastUsedAt       DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([family, status])
+}
+
+model ConsentLog {
+  id         String      @id @default(cuid())
+  userId     String
+  consentType ConsentType
+  version    String
+  acceptedAt DateTime    @default(now())
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consentType, acceptedAt])
+}
+
+model UserSecret {
+  id            String   @id @default(cuid())
+  userId         String
+  provider       String
+  encryptedValue String
+  keyVersion     Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
+model AutoApplyJob {
+  id              String      @id @default(cuid())
+  userId           String
+  status           JobStatus   @default(queued)
+  idempotencyKey   String?     @unique
+  criteriaJson     Json
+  profileSnapshot  Json?
+  attempts         Int         @default(0)
+  maxAttempts      Int         @default(3)
+  scheduledAt      DateTime    @default(now())
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  errorMessage     String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs             AutoApplyJobLog[]
+  applications     Application[]
+
+  @@index([userId, status, createdAt])
+}
+
+model AutoApplyJobLog {
+  id          String      @id @default(cuid())
+  jobId        String
+  level        JobLogLevel @default(info)
+  step         String
+  message      String
+  metadataJson Json?
+  createdAt    DateTime    @default(now())
+
+  job          AutoApplyJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+}
+
+model Application {
+  id             String            @id @default(cuid())
+  userId          String
+  jobId           String
+  externalJobId   String?
+  company         String?
+  title           String?
+  status          ApplicationStatus @default(submitted)
+  submittedAt     DateTime          @default(now())
+  metadataJson    Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job             AutoApplyJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([userId, submittedAt])
+  @@index([jobId, submittedAt])
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                  String             @unique
+  provider                String             @default("razorpay")
+  providerCustomerId      String?
+  providerSubscriptionId  String?            @unique
+  providerPlanId          String?
+  status                  SubscriptionStatus @default(trialing)
+  plan                    UserPlan           @default(free)
+  currentPeriodStart      DateTime?
+  currentPeriodEnd        DateTime?
+  cancelAtPeriodEnd       Boolean            @default(false)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PaymentEvent {
+  id            String   @id @default(cuid())
+  provider      String   @default("razorpay")
+  eventId       String   @unique
+  eventType     String
+  payload       Json
+  processedAt   DateTime?
+  createdAt     DateTime @default(now())
+}
+
+model HireTransaction {
+  id            String        @id @default(cuid())
+  userId         String
+  type           HireTxnType
+  status         HireTxnStatus @default(posted)
+  amount         Int
+  balanceAfter   Int
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String?       @unique
+  metadataJson   Json?
+  createdAt      DateTime      @default(now())
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  targetType  String
+  targetId    String?
+  metadataJson Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  actor       User?    @relation("actorAuditLogs", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+}

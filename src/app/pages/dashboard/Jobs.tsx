@@ -1,123 +1,759 @@
-import { useState } from 'react';
-import { motion } from 'motion/react';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import {
   Search,
   MapPin,
-  DollarSign,
   Briefcase,
   Clock,
-  Star,
-  Bookmark,
-  X,
   SlidersHorizontal,
-  TrendingUp,
-  Building
-} from 'lucide-react';
+  RefreshCw,
+  AlertCircle,
+  Play,
+  XCircle,
+  FileText,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  Link2,
+} from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+
+type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
+
+type JobLog = {
+  id: string;
+  step: string;
+  level: "info" | "warn" | "error";
+  message: string;
+  createdAt: string;
+};
+
+type AutoApplyJob = {
+  id: string;
+  status: JobStatus;
+  createdAt: string;
+  updatedAt: string;
+  attempts: number;
+  maxAttempts: number;
+  errorMessage?: string | null;
+  criteriaJson: Record<string, unknown>;
+  logs?: JobLog[];
+};
+
+type ExtensionStatus = {
+  installed: boolean;
+  runtimeId?: string;
+  linkedIn?: {
+    hasLinkedInTab: boolean;
+    hasJobsTab: boolean;
+  };
+  state?: {
+    running?: boolean;
+    paused?: boolean;
+    applied?: number;
+    skipped?: number;
+    failed?: number;
+  } | null;
+  error?: string | null;
+  pendingQuestions?: Array<{
+    questionKey: string;
+    questionLabel: string;
+    validationMessage?: string;
+    createdAt?: string;
+  }>;
+  screeningAnswers?: Record<string, string>;
+};
+
+type ScreeningAnswerApiItem = {
+  questionKey: string;
+  questionLabel: string;
+  answer: string;
+  updatedAt?: string;
+};
+
+function statusBadge(status: JobStatus) {
+  if (status === "succeeded") return "bg-green-100 text-green-700";
+  if (status === "running") return "bg-blue-100 text-blue-700";
+  if (status === "queued") return "bg-purple-100 text-purple-700";
+  if (status === "cancelled") return "bg-gray-100 text-gray-700";
+  return "bg-red-100 text-red-700";
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString();
+}
+
+function normalizeLabel(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toQuestionKey(value: string) {
+  const normalized = normalizeLabel(value);
+  if (!normalized) return "";
+  return normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 160);
+}
+
+function labelFromQuestionKey(questionKey: string) {
+  const key = String(questionKey || "").trim();
+  if (!key) return "Screening field";
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 export default function Jobs() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const { user } = useAuth();
+  const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<number | null>(0);
+  const [jobs, setJobs] = useState<AutoApplyJob[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [checkingExtension, setCheckingExtension] = useState(false);
+  const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({
+    installed: false,
+  });
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const [siteScreeningAnswers, setSiteScreeningAnswers] = useState<Record<string, string>>({});
+  const [siteQuestionLabels, setSiteQuestionLabels] = useState<Record<string, string>>({});
+  const [savingAnswerKey, setSavingAnswerKey] = useState<string | null>(null);
+  const [syncingSettings, setSyncingSettings] = useState(false);
+  const syncedAnswerRef = useRef<Record<string, string>>({});
+  const reportedIssueRef = useRef<Record<string, string>>({});
+  const [criteria, setCriteria] = useState({
+    keywords: "",
+    location: "",
+    company: "",
+    easyApplyOnly: true,
+  });
 
-  const jobs = [
-    {
-      id: 1,
-      title: 'Senior Software Engineer',
-      company: 'Google',
-      location: 'Mountain View, CA',
-      type: 'Full-time',
-      salary: '$150K - $200K',
-      match: 95,
-      posted: '2 days ago',
-      description: 'We are looking for a Senior Software Engineer to join our team...',
-      requirements: ['5+ years experience', 'React, Node.js', 'System Design'],
-      benefits: ['Health Insurance', '401(k)', 'Remote Work', 'Stock Options']
-    },
-    {
-      id: 2,
-      title: 'Full Stack Developer',
-      company: 'Meta',
-      location: 'Menlo Park, CA',
-      type: 'Full-time',
-      salary: '$140K - $180K',
-      match: 92,
-      posted: '3 days ago',
-      description: 'Join Meta to build the future of social technology...',
-      requirements: ['3+ years experience', 'React, GraphQL', 'Agile'],
-      benefits: ['Health Insurance', 'Unlimited PTO', 'Gym Membership']
-    },
-    {
-      id: 3,
-      title: 'Frontend Engineer',
-      company: 'Amazon',
-      location: 'Seattle, WA',
-      type: 'Full-time',
-      salary: '$130K - $170K',
-      match: 88,
-      posted: '5 days ago',
-      description: 'Amazon Web Services is seeking a talented Frontend Engineer...',
-      requirements: ['4+ years experience', 'React, TypeScript', 'AWS'],
-      benefits: ['Health Insurance', 'RSUs', 'Relocation']
-    },
-    {
-      id: 4,
-      title: 'Software Development Engineer',
-      company: 'Microsoft',
-      location: 'Redmond, WA',
-      type: 'Full-time',
-      salary: '$145K - $190K',
-      match: 90,
-      posted: '1 week ago',
-      description: 'Microsoft Azure team is hiring SDEs...',
-      requirements: ['3+ years experience', 'C#, .NET', 'Cloud'],
-      benefits: ['Health Insurance', 'Stock Purchase Plan', 'Remote Option']
-    },
-    {
-      id: 5,
-      title: 'Backend Engineer',
-      company: 'Apple',
-      location: 'Cupertino, CA',
-      type: 'Full-time',
-      salary: '$155K - $195K',
-      match: 87,
-      posted: '1 week ago',
-      description: 'Apple is looking for a Backend Engineer for iCloud services...',
-      requirements: ['5+ years experience', 'Python, Go', 'Distributed Systems'],
-      benefits: ['Health Insurance', 'Product Discounts', 'Onsite Gym']
+  const resolveKnownAnswer = (
+    questionKey: string,
+    questionLabel: string,
+    extensionAnswers: Record<string, string> = {},
+  ) => {
+    const normalizedLabel = normalizeLabel(questionLabel);
+    return (
+      String(answerDrafts[questionKey] || "").trim() ||
+      String(siteScreeningAnswers[questionKey] || "").trim() ||
+      String(siteScreeningAnswers[normalizedLabel] || "").trim() ||
+      String(extensionAnswers[questionKey] || "").trim() ||
+      String(extensionAnswers[normalizedLabel] || "").trim() ||
+      ""
+    );
+  };
+
+  const saveAnswerToSite = async (questionKey: string, questionLabel: string, answer: string) => {
+    const payload = {
+      questionKey: String(questionKey || "").trim(),
+      questionLabel: String(questionLabel || "").trim() || labelFromQuestionKey(questionKey),
+      answer: String(answer || "").trim(),
+    };
+    if (!payload.questionKey || !payload.answer) return;
+
+    await fetch("/api/user/screening/answers", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    setSiteScreeningAnswers((prev) => ({
+      ...prev,
+      [payload.questionKey]: payload.answer,
+      [normalizeLabel(payload.questionLabel)]: payload.answer,
+    }));
+    setSiteQuestionLabels((prev) => ({
+      ...prev,
+      [payload.questionKey]: payload.questionLabel,
+    }));
+    syncedAnswerRef.current[payload.questionKey] = payload.answer;
+  };
+
+  const loadSiteScreeningAnswers = async () => {
+    try {
+      const res = await fetch("/api/user/screening/answers", { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok || !data?.success) return;
+      const answers = Array.isArray(data?.data?.answers) ? (data.data.answers as ScreeningAnswerApiItem[]) : [];
+      const answerMap: Record<string, string> = {};
+      const labelMap: Record<string, string> = {};
+      for (const item of answers) {
+        const questionKey = String(item?.questionKey || "").trim();
+        const questionLabel = String(item?.questionLabel || "").trim();
+        const answer = String(item?.answer || "").trim();
+        if (!questionKey || !answer) continue;
+        answerMap[questionKey] = answer;
+        if (questionLabel) {
+          answerMap[normalizeLabel(questionLabel)] = answer;
+          labelMap[questionKey] = questionLabel;
+        }
+        syncedAnswerRef.current[questionKey] = answer;
+      }
+      setSiteScreeningAnswers(answerMap);
+      setSiteQuestionLabels(labelMap);
+      setAnswerDrafts((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const [key, value] of Object.entries(answerMap)) {
+          if (!value) continue;
+          if (!next[key]) {
+            next[key] = value;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    } catch {
+      // Best effort.
     }
-  ];
+  };
 
-  const filters = [
-    { label: 'Remote', count: 23 },
-    { label: 'On-site', count: 45 },
-    { label: 'Hybrid', count: 18 },
-    { label: '$150K+', count: 34 },
-    { label: 'Senior Level', count: 29 },
-  ];
+  const syncExtensionAnswersToSite = async (status: ExtensionStatus) => {
+    const extensionAnswers = status.screeningAnswers || {};
+    const entries = Object.entries(extensionAnswers);
+    if (!entries.length) return;
+
+    const pendingLabelMap = new Map<string, string>();
+    for (const pending of status.pendingQuestions || []) {
+      const key = toQuestionKey(pending.questionKey || pending.questionLabel || "");
+      if (!key) continue;
+      pendingLabelMap.set(key, String(pending.questionLabel || "").trim() || labelFromQuestionKey(key));
+    }
+
+    for (const [rawKey, rawValue] of entries) {
+      const answer = String(rawValue || "").trim();
+      if (!answer) continue;
+      const canonicalKey = toQuestionKey(rawKey);
+      if (!canonicalKey) continue;
+      if (syncedAnswerRef.current[canonicalKey] === answer) continue;
+      const questionLabel =
+        pendingLabelMap.get(canonicalKey) ||
+        siteQuestionLabels[canonicalKey] ||
+        labelFromQuestionKey(canonicalKey);
+      try {
+        await saveAnswerToSite(canonicalKey, questionLabel, answer);
+      } catch {
+        // Keep running if one answer fails to sync.
+      }
+    }
+  };
+
+  const checkExtensionStatus = async () => {
+    if (typeof window === "undefined") return;
+    setCheckingExtension(true);
+    try {
+      const result = await new Promise<ExtensionStatus>((resolve) => {
+        const requestId = `cp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        let settled = false;
+        const timeout = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener("message", onMessage);
+          resolve({ installed: false });
+        }, 1600);
+
+        const onMessage = (event: MessageEvent) => {
+          const data = event.data as any;
+          if (!data || data.type !== "CP_WEB_PONG" || data.requestId !== requestId) return;
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeout);
+          window.removeEventListener("message", onMessage);
+          resolve({
+            installed: Boolean(data.installed),
+            runtimeId: data.runtimeId || undefined,
+            linkedIn: data.linkedIn || undefined,
+            state: data.state || null,
+            pendingQuestions: Array.isArray(data.pendingQuestions) ? data.pendingQuestions : [],
+            screeningAnswers: data.screeningAnswers || {},
+            error: data.error || null,
+          });
+        };
+
+        window.addEventListener("message", onMessage);
+        window.postMessage({ type: "CP_WEB_PING", requestId }, window.location.origin);
+      });
+      setExtensionStatus(result);
+      await syncExtensionAnswersToSite(result);
+
+      if (result.pendingQuestions?.length) {
+        const presetDrafts: Record<string, string> = {};
+        for (const q of result.pendingQuestions) {
+          const normalizedKey = toQuestionKey(q.questionKey || q.questionLabel || "");
+          if (!normalizedKey) continue;
+          const preset = resolveKnownAnswer(normalizedKey, q.questionLabel, result.screeningAnswers || {});
+          if (preset) presetDrafts[normalizedKey] = preset;
+
+          if (q.questionKey && q.questionLabel) {
+            const issueSignature = `${q.questionKey}::${String(q.validationMessage || "").trim()}`;
+            if (reportedIssueRef.current[q.questionKey] !== issueSignature) {
+              reportedIssueRef.current[q.questionKey] = issueSignature;
+              fetch("/api/user/screening/issues", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  questionKey: q.questionKey,
+                  questionLabel: q.questionLabel,
+                  validationMessage: q.validationMessage || "",
+                }),
+              }).catch(() => {});
+            }
+          }
+        }
+        if (Object.keys(presetDrafts).length) {
+          setAnswerDrafts((prev) => {
+            const next = { ...prev };
+            let changed = false;
+            for (const [key, value] of Object.entries(presetDrafts)) {
+              if (!next[key]) {
+                next[key] = value;
+                changed = true;
+              }
+            }
+            return changed ? next : prev;
+          });
+        }
+      }
+    } finally {
+      setCheckingExtension(false);
+    }
+  };
+
+  const derivePhoneCountryCode = (phone?: string) => {
+    const raw = String(phone || "").trim();
+    if (!raw) return "+91";
+    if (raw.startsWith("+")) {
+      const m = raw.match(/^\+\d{1,3}/);
+      return m ? m[0] : "+91";
+    }
+    return "+91";
+  };
+
+  const derivePhoneNumber = (phone?: string) => {
+    const raw = String(phone || "").trim();
+    if (!raw) return "";
+    return raw.replace(/[^\d]/g, "");
+  };
+
+  const syncProfileToExtension = async () => {
+    if (typeof window === "undefined") return;
+    if (!extensionStatus.installed) {
+      setError("Extension not detected. Install/reload extension first.");
+      return;
+    }
+    try {
+      setSyncingSettings(true);
+      setError("");
+      const settingsPayload = {
+        currentCity: user?.currentCity || "",
+        searchLocation: user?.currentCity || "",
+        contactEmail: user?.email || "",
+        phoneNumber: derivePhoneNumber(user?.phone),
+        phoneCountryCode: derivePhoneCountryCode(user?.phone),
+        marketingConsent: "No",
+        requireVisa: "No",
+        easyApplyOnly: true,
+        debugMode: true,
+        dryRun: false,
+        autoSubmit: true,
+        autoResumeOnAnswer: true,
+        maxApplicationsPerRun: 3,
+        maxSkipsPerRun: 50,
+        blacklistedCompanies: [],
+        badWords: [],
+      };
+
+      const ack = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        const requestId = `cp_sync_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        let done = false;
+        const timer = window.setTimeout(() => {
+          if (done) return;
+          done = true;
+          window.removeEventListener("message", onMessage);
+          resolve({ ok: false, error: "Extension did not acknowledge settings sync" });
+        }, 2500);
+        const onMessage = (event: MessageEvent) => {
+          const data = event.data as any;
+          if (!data || data.type !== "CP_WEB_SYNC_SETTINGS_ACK" || data.requestId !== requestId) return;
+          if (done) return;
+          done = true;
+          window.clearTimeout(timer);
+          window.removeEventListener("message", onMessage);
+          resolve({ ok: Boolean(data.ok), error: data.error || undefined });
+        };
+        window.addEventListener("message", onMessage);
+        window.postMessage(
+          {
+            type: "CP_WEB_SYNC_SETTINGS",
+            requestId,
+            settings: settingsPayload,
+          },
+          window.location.origin,
+        );
+      });
+
+      if (!ack.ok) {
+        throw new Error(ack.error || "Failed to sync settings");
+      }
+
+      await checkExtensionStatus();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to sync extension settings");
+    } finally {
+      setSyncingSettings(false);
+    }
+  };
+
+  const saveAnswerForQuestion = async (questionKey: string, questionLabel: string) => {
+    const answer = (answerDrafts[questionKey] || "").trim();
+    if (!answer) {
+      setError("Answer cannot be empty.");
+      return;
+    }
+    try {
+      setSavingAnswerKey(questionKey);
+      setError("");
+
+      await fetch("/api/user/screening/answers", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionKey,
+          questionLabel,
+          answer,
+        }),
+      });
+
+      const ack = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        const requestId = `cp_save_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        let done = false;
+        const timer = window.setTimeout(() => {
+          if (done) return;
+          done = true;
+          window.removeEventListener("message", onMessage);
+          resolve({ ok: false, error: "Extension did not acknowledge answer save. Reload extension and retry." });
+        }, 2000);
+        const onMessage = (event: MessageEvent) => {
+          const data = event.data as any;
+          if (!data || data.type !== "CP_WEB_SAVE_ANSWER_ACK" || data.requestId !== requestId) return;
+          if (done) return;
+          done = true;
+          window.clearTimeout(timer);
+          window.removeEventListener("message", onMessage);
+          resolve({ ok: Boolean(data.ok), error: data.error || undefined });
+        };
+        window.addEventListener("message", onMessage);
+        window.postMessage(
+          {
+            type: "CP_WEB_SAVE_ANSWER",
+            requestId,
+            questionKey,
+            questionLabel,
+            answer,
+          },
+          window.location.origin,
+        );
+      });
+
+      if (!ack.ok) {
+        throw new Error(ack.error || "Failed to save answer in extension");
+      }
+      await checkExtensionStatus();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save answer");
+    } finally {
+      setSavingAnswerKey(null);
+    }
+  };
+
+  const loadJobs = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const res = await fetch("/api/auto-apply/jobs", { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to fetch jobs");
+      const nextJobs = (data?.data?.jobs || []) as AutoApplyJob[];
+      setJobs(nextJobs);
+      if (!selectedJobId && nextJobs.length > 0) {
+        setSelectedJobId(nextJobs[0].id);
+      } else if (selectedJobId && !nextJobs.find((j) => j.id === selectedJobId)) {
+        setSelectedJobId(nextJobs[0]?.id || null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to fetch jobs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadJobs();
+    void checkExtensionStatus();
+    const jobsIntervalId = setInterval(() => {
+      void loadJobs();
+    }, 10000);
+    const extensionIntervalId = setInterval(() => {
+      void checkExtensionStatus();
+    }, 4000);
+    return () => {
+      clearInterval(jobsIntervalId);
+      clearInterval(extensionIntervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!extensionStatus.installed) return;
+    if (!user) return;
+    if (!user.email) return;
+    if (!user.currentCity && !user.phone) return;
+    // Best-effort auto-sync once extension is detected.
+    void syncProfileToExtension();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extensionStatus.installed, user?.id]);
+
+  const filteredJobs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return jobs;
+    return jobs.filter((job) => {
+      const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "").toLowerCase();
+      const company = String(job.criteriaJson?.company || "").toLowerCase();
+      const location = String(job.criteriaJson?.location || job.criteriaJson?.currentCity || "").toLowerCase();
+      return (
+        job.id.toLowerCase().includes(q) ||
+        title.includes(q) ||
+        company.includes(q) ||
+        location.includes(q) ||
+        job.status.toLowerCase().includes(q)
+      );
+    });
+  }, [jobs, searchQuery]);
+
+  const selectedJob = jobs.find((j) => j.id === selectedJobId) || null;
+
+  const submitAutoApply = async () => {
+    try {
+      setSubmitting(true);
+      setError("");
+      const consentRes = await fetch("/api/user/consent", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          consentType: "auto_apply_terms",
+          version: "v1",
+        }),
+      });
+      const consentData = await consentRes.json();
+      if (!consentRes.ok || !consentData?.success) {
+        throw new Error(consentData?.message || "Consent recording failed");
+      }
+
+      const body = {
+        criteria: {
+          keywords: criteria.keywords.trim(),
+          title: criteria.keywords.trim(),
+          location: criteria.location.trim(),
+          currentCity: criteria.location.trim(),
+          company: criteria.company.trim(),
+          easyApplyOnly: criteria.easyApplyOnly,
+        },
+      };
+      const res = await fetch("/api/auto-apply/jobs", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to queue auto-apply job");
+      await loadJobs();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to queue auto-apply job");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const cancelSelected = async () => {
+    if (!selectedJob) return;
+    try {
+      setCancelling(true);
+      setError("");
+      const res = await fetch(`/api/auto-apply/jobs/${selectedJob.id}/cancel`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Cancelled from dashboard" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to cancel job");
+      await loadJobs();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to cancel job");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Auto-Apply Jobs</h1>
+          <p className="text-gray-600">Showing {jobs.length} real jobs from your backend queue</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => void loadJobs()}
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+          <button
+            onClick={() => void submitAutoApply()}
+            disabled={submitting}
+            className="px-6 py-3 gradient-primary text-white rounded-xl font-semibold shadow-premium hover:shadow-premium-lg transition-all disabled:opacity-60"
+          >
+            {submitting ? "Queuing..." : "Create Auto-Apply Job"}
+          </button>
+        </div>
+      </motion.div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 text-red-700">
+          <AlertCircle className="w-5 h-5" />
+          <span>{error}</span>
+        </div>
+      )}
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        className="bg-white rounded-2xl p-6 border-2 border-gray-200"
       >
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Job Matches</h1>
-          <p className="text-gray-600">Found {jobs.length} opportunities matching your profile</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">LinkedIn Extension Setup</h2>
+            <p className="text-sm text-gray-600">Login LinkedIn, install extension, then click Start inside extension panel.</p>
+          </div>
+          <button
+            onClick={() => void checkExtensionStatus()}
+            disabled={checkingExtension}
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold disabled:opacity-60"
+          >
+            {checkingExtension ? "Checking..." : "Check Extension"}
+          </button>
         </div>
-        <button className="px-6 py-3 gradient-primary text-white rounded-xl font-semibold shadow-premium hover:shadow-premium-lg transition-all">
-          Auto-Apply to Top 10
-        </button>
+
+        <div className="grid md:grid-cols-3 gap-3">
+          <div className={`rounded-xl border p-4 ${extensionStatus.installed ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+            <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              {extensionStatus.installed ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+              Extension Installed
+            </div>
+            <p className="text-sm text-gray-700">
+              {extensionStatus.installed ? "Detected on dashboard." : "Not detected. Install/reload CareerPilot extension."}
+            </p>
+          </div>
+          <div className={`rounded-xl border p-4 ${extensionStatus.linkedIn?.hasLinkedInTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+            <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              {extensionStatus.linkedIn?.hasLinkedInTab ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+              LinkedIn Open
+            </div>
+            <p className="text-sm text-gray-700">
+              {extensionStatus.linkedIn?.hasLinkedInTab ? "LinkedIn tab found." : "Open linkedin.com and login first."}
+            </p>
+          </div>
+          <div className={`rounded-xl border p-4 ${extensionStatus.linkedIn?.hasJobsTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+            <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              {extensionStatus.linkedIn?.hasJobsTab ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+              Jobs Page Ready
+            </div>
+            <p className="text-sm text-gray-700">
+              {extensionStatus.linkedIn?.hasJobsTab ? "LinkedIn Jobs tab found." : "Open LinkedIn Jobs page to run automation."}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <a
+            href="https://www.linkedin.com/jobs/"
+            target="_blank"
+            rel="noreferrer"
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Open LinkedIn Jobs
+          </a>
+          <a
+            href="chrome://extensions/"
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Install / Reload Extension
+          </a>
+          <button
+            onClick={() => void syncProfileToExtension()}
+            disabled={syncingSettings}
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2 disabled:opacity-60"
+          >
+            <Link2 className="w-4 h-4" />
+            {syncingSettings ? "Syncing..." : "Sync Profile to Extension"}
+          </button>
+        </div>
+
+        <ol className="mt-4 text-sm text-gray-700 list-decimal pl-5 space-y-1">
+          <li>Login to LinkedIn in your browser.</li>
+          <li>Install CareerPilot extension from `e:\Autoapply\CareerPilotLinkedInExtension` (Load unpacked).</li>
+          <li>Open LinkedIn Jobs page.</li>
+          <li>Click extension icon, choose CareerPilot extension, then click Start.</li>
+        </ol>
+
+        {(extensionStatus.pendingQuestions || []).length > 0 ? (
+          <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
+            <h3 className="font-semibold text-gray-900">Action Needed: Answer Required Fields</h3>
+            {(extensionStatus.pendingQuestions || []).map((q) => (
+              <div key={q.questionKey} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="text-sm font-semibold text-gray-900">{q.questionLabel}</div>
+                {q.validationMessage ? <div className="text-xs text-amber-700 mt-1">{q.validationMessage}</div> : null}
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={answerDrafts[q.questionKey] || ""}
+                    onChange={(e) => setAnswerDrafts((prev) => ({ ...prev, [q.questionKey]: e.target.value }))}
+                    placeholder="Enter answer to reuse in next applications"
+                    className="flex-1 px-3 py-2 rounded-lg border border-amber-300 bg-white text-sm outline-none focus:border-purple-400"
+                  />
+                  <button
+                    onClick={() => void saveAnswerForQuestion(q.questionKey, q.questionLabel)}
+                    disabled={savingAnswerKey === q.questionKey}
+                    className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
+                  >
+                    {savingAnswerKey === q.questionKey ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </motion.div>
 
-      {/* Search & Filters */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-white rounded-2xl p-6 border-2 border-gray-200"
+        className="bg-white rounded-2xl p-6 border-2 border-gray-200 space-y-4"
       >
         <div className="flex gap-4">
           <div className="flex-1 relative">
@@ -126,7 +762,7 @@ export default function Jobs() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by title, company, or skills..."
+              placeholder="Search queued jobs by id, title, company, status..."
               className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
             />
           </div>
@@ -135,188 +771,175 @@ export default function Jobs() {
             className="px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
           >
             <SlidersHorizontal className="w-5 h-5" />
-            Filters
+            Criteria
           </button>
         </div>
 
-        {/* Quick Filters */}
         {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-200"
-          >
-            {filters.map((filter) => (
-              <button
-                key={filter.label}
-                className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg font-medium transition-colors text-sm"
-              >
-                {filter.label} ({filter.count})
-              </button>
-            ))}
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="grid md:grid-cols-2 gap-4">
+            <input
+              value={criteria.keywords}
+              onChange={(e) => setCriteria((p) => ({ ...p, keywords: e.target.value }))}
+              placeholder="Keywords / title"
+              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
+            />
+            <input
+              value={criteria.company}
+              onChange={(e) => setCriteria((p) => ({ ...p, company: e.target.value }))}
+              placeholder="Company"
+              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
+            />
+            <input
+              value={criteria.location}
+              onChange={(e) => setCriteria((p) => ({ ...p, location: e.target.value }))}
+              placeholder="Location / city"
+              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
+            />
+            <label className="flex items-center gap-2 px-3">
+              <input
+                type="checkbox"
+                checked={criteria.easyApplyOnly}
+                onChange={(e) => setCriteria((p) => ({ ...p, easyApplyOnly: e.target.checked }))}
+              />
+              <span className="text-sm font-medium text-gray-700">Easy Apply only</span>
+            </label>
           </motion.div>
         )}
       </motion.div>
 
-      {/* Jobs Grid */}
       <div className="grid lg:grid-cols-5 gap-6">
-        {/* Job List */}
         <div className="lg:col-span-2 space-y-4 max-h-[800px] overflow-y-auto">
-          {jobs.map((job, index) => (
-            <motion.div
-              key={job.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-              onClick={() => setSelectedJob(index)}
-              className={`bg-white rounded-2xl p-6 border-2 cursor-pointer transition-all duration-300 ${
-                selectedJob === index
-                  ? 'border-purple-400 shadow-xl'
-                  : 'border-gray-200 hover:border-purple-300 hover:shadow-lg'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center font-bold text-purple-700">
-                    {job.company.charAt(0)}
+          {loading ? <div className="text-sm text-gray-500">Loading jobs...</div> : null}
+          {!loading && filteredJobs.length === 0 ? <div className="text-sm text-gray-500">No jobs found.</div> : null}
+          {filteredJobs.map((job, index) => {
+            const company = String(job.criteriaJson?.company || "LinkedIn");
+            const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "Auto-Apply Job");
+            const location = String(job.criteriaJson?.location || job.criteriaJson?.currentCity || "N/A");
+            return (
+              <motion.div
+                key={job.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.04 }}
+                onClick={() => setSelectedJobId(job.id)}
+                className={`bg-white rounded-2xl p-6 border-2 cursor-pointer transition-all duration-300 ${
+                  selectedJobId === job.id ? "border-purple-400 shadow-xl" : "border-gray-200 hover:border-purple-300 hover:shadow-lg"
+                }`}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center font-bold text-purple-700">
+                      {company.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">{title}</h3>
+                      <p className="text-sm text-gray-600">{company}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-gray-900">{job.title}</h3>
-                    <p className="text-sm text-gray-600">{job.company}</p>
+                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge(job.status)}`}>{job.status}</div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <MapPin className="w-4 h-4" />
+                    {location}
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Clock className="w-4 h-4" />
+                    {formatDate(job.createdAt)}
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Briefcase className="w-4 h-4" />
+                    Attempts {job.attempts}/{job.maxAttempts}
                   </div>
                 </div>
-                <div className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  job.match >= 90
-                    ? 'bg-green-100 text-green-700'
-                    : job.match >= 85
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-purple-100 text-purple-700'
-                }`}>
-                  {job.match}% Match
-                </div>
-              </div>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-gray-600">
-                  <MapPin className="w-4 h-4" />
-                  {job.location}
-                </div>
-                <div className="flex items-center gap-2 text-gray-600">
-                  <DollarSign className="w-4 h-4" />
-                  {job.salary}
-                </div>
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Clock className="w-4 h-4" />
-                  {job.posted}
-                </div>
-              </div>
-
-              <div className="flex gap-2 mt-4">
-                <button className="flex-1 px-4 py-2 gradient-primary text-white rounded-lg font-semibold hover:shadow-lg transition-all">
-                  Apply Now
-                </button>
-                <button className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors">
-                  <Bookmark className="w-5 h-5" />
-                </button>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
 
-        {/* Job Details */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           className="lg:col-span-3 bg-white rounded-2xl p-8 border-2 border-gray-200 max-h-[800px] overflow-y-auto sticky top-0"
         >
-          {selectedJob !== null && jobs[selectedJob] && (
+          {!selectedJob ? (
+            <div className="text-sm text-gray-500">Select a job to view details.</div>
+          ) : (
             <>
               <div className="flex items-start justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center font-bold text-2xl text-purple-700">
-                    {jobs[selectedJob].company.charAt(0)}
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{jobs[selectedJob].title}</h2>
-                    <p className="text-gray-600 flex items-center gap-2 mt-1">
-                      <Building className="w-4 h-4" />
-                      {jobs[selectedJob].company}
-                    </p>
-                  </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">{String(selectedJob.criteriaJson?.title || selectedJob.criteriaJson?.keywords || "Auto-Apply Job")}</h2>
+                  <p className="text-sm text-gray-600 mt-2">Job ID: {selectedJob.id}</p>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold text-gradient mb-1">
-                    {jobs[selectedJob].match}%
-                  </div>
-                  <div className="text-sm text-gray-600">Match Score</div>
-                </div>
+                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${statusBadge(selectedJob.status)}`}>{selectedJob.status}</div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="grid md:grid-cols-2 gap-4 mb-6">
                 <div className="bg-purple-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-purple-700 mb-1">
-                    <MapPin className="w-4 h-4" />
-                    <span className="text-sm font-semibold">Location</span>
-                  </div>
-                  <p className="text-gray-900 font-medium">{jobs[selectedJob].location}</p>
+                  <div className="text-xs uppercase text-purple-700 font-semibold mb-1">Created</div>
+                  <div className="text-sm text-gray-900">{formatDate(selectedJob.createdAt)}</div>
                 </div>
                 <div className="bg-blue-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-blue-700 mb-1">
-                    <DollarSign className="w-4 h-4" />
-                    <span className="text-sm font-semibold">Salary</span>
+                  <div className="text-xs uppercase text-blue-700 font-semibold mb-1">Attempts</div>
+                  <div className="text-sm text-gray-900">
+                    {selectedJob.attempts} / {selectedJob.maxAttempts}
                   </div>
-                  <p className="text-gray-900 font-medium">{jobs[selectedJob].salary}</p>
-                </div>
-                <div className="bg-green-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-green-700 mb-1">
-                    <Briefcase className="w-4 h-4" />
-                    <span className="text-sm font-semibold">Type</span>
-                  </div>
-                  <p className="text-gray-900 font-medium">{jobs[selectedJob].type}</p>
                 </div>
               </div>
 
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-bold text-gray-900 mb-3">Job Description</h3>
-                  <p className="text-gray-600 leading-relaxed">{jobs[selectedJob].description}</p>
-                </div>
+              {selectedJob.errorMessage ? (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{selectedJob.errorMessage}</div>
+              ) : null}
 
-                <div>
-                  <h3 className="font-bold text-gray-900 mb-3">Requirements</h3>
-                  <ul className="space-y-2">
-                    {jobs[selectedJob].requirements.map((req, i) => (
-                      <li key={i} className="flex items-center gap-2 text-gray-700">
-                        <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                          <Star className="w-3 h-3 text-green-600" />
-                        </div>
-                        {req}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              <div className="mb-6">
+                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Criteria
+                </h3>
+                <pre className="text-xs bg-gray-50 border border-gray-200 rounded-xl p-4 overflow-auto">
+{JSON.stringify(selectedJob.criteriaJson || {}, null, 2)}
+                </pre>
+              </div>
 
-                <div>
-                  <h3 className="font-bold text-gray-900 mb-3">Benefits</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {jobs[selectedJob].benefits.map((benefit, i) => (
-                      <span
-                        key={i}
-                        className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg font-medium text-sm"
-                      >
-                        {benefit}
-                      </span>
-                    ))}
-                  </div>
+              <div className="mb-6">
+                <h3 className="font-bold text-gray-900 mb-3">Recent Logs</h3>
+                <div className="space-y-2">
+                  {(selectedJob.logs || []).length === 0 ? (
+                    <div className="text-sm text-gray-500">No logs available.</div>
+                  ) : (
+                    (selectedJob.logs || []).map((log) => (
+                      <div key={log.id} className="border border-gray-200 rounded-lg px-3 py-2">
+                        <div className="text-xs text-gray-500">{formatDate(log.createdAt)} | {log.step} | {log.level}</div>
+                        <div className="text-sm text-gray-800">{log.message}</div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
               <div className="flex gap-4 mt-8 pt-6 border-t border-gray-200">
-                <button className="flex-1 btn-premium gradient-primary text-white py-4 rounded-xl font-bold shadow-premium hover:shadow-premium-lg transition-all">
-                  Apply with AI Resume
+                <button
+                  onClick={() => void submitAutoApply()}
+                  disabled={submitting}
+                  className="flex-1 px-6 py-3 gradient-primary text-white rounded-xl font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  {submitting ? "Queuing..." : "Queue New Job"}
                 </button>
-                <button className="px-6 py-4 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl font-semibold transition-colors">
-                  <Bookmark className="w-5 h-5" />
+                <button
+                  onClick={() => void cancelSelected()}
+                  disabled={
+                    cancelling ||
+                    selectedJob.status === "running" ||
+                    selectedJob.status === "succeeded" ||
+                    selectedJob.status === "failed" ||
+                    selectedJob.status === "dead_letter" ||
+                    selectedJob.status === "cancelled"
+                  }
+                  className="px-6 py-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-semibold transition-colors disabled:opacity-60 flex items-center gap-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  {cancelling ? "Cancelling..." : "Cancel Job"}
                 </button>
               </div>
             </>

@@ -89,7 +89,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <h4 className="text-sm font-semibold text-[#030213] mb-2">Stay on Free Plan</h4>
                 <p className="text-sm text-gray-600 mb-3">
-                  Continue with 3 Auto-Apply actions per day. Your quota resets every 24 hours.
+                  Continue with daily free Hires. Add Hires when wallet is empty.
                 </p>
                 <button
                   onClick={() => onClose()}

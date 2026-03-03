@@ -1,5 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
+import { SeoManager } from './components/SeoManager';
 
 // Layouts
 import Root from './Root';
@@ -16,6 +18,7 @@ import FAQ from './pages/FAQ';
 import ThankYou from './pages/ThankYou';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import AdminLogin from './pages/AdminLogin';
 
 // Dashboard Pages
 import DashboardOverview from './pages/dashboard/Overview';
@@ -27,6 +30,7 @@ import DashboardAnalytics from './pages/dashboard/Analytics';
 import Settings from './pages/dashboard/Settings';
 import Profile from './pages/dashboard/Profile';
 import Billing from './pages/dashboard/Billing';
+import Onboarding from './pages/dashboard/Onboarding';
 
 // Admin Pages
 import AdminOverview from './pages/admin/Overview';
@@ -41,19 +45,32 @@ import AdminSettings from './pages/admin/AdminSettings';
 
 // Protected Route Components
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isBootstrapping, user } = useAuth();
+  const location = useLocation();
+  if (isBootstrapping) return null;
+  if (isAuthenticated && user?.role === 'admin' && location.pathname.startsWith('/dashboard')) {
+    return <Navigate to="/login" replace />;
+  }
+  const onboardingComplete = hasCompletedRequiredOnboarding(user) && Boolean(user?.onboardingCompleted);
+  if (isAuthenticated && user?.role === 'user' && !onboardingComplete && location.pathname !== '/dashboard/onboarding') {
+    return <Navigate to="/dashboard/onboarding" replace />;
+  }
+  if (isAuthenticated && user?.role === 'user' && onboardingComplete && location.pathname === '/dashboard/onboarding') {
+    return <Navigate to="/dashboard" replace />;
+  }
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated, isAdmin, isBootstrapping } = useAuth();
+  if (isBootstrapping) return null;
   
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
   
   if (!isAdmin) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
   
   return <>{children}</>;
@@ -63,6 +80,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <SeoManager />
         <Routes>
           {/* Marketing Pages */}
           <Route path="/" element={<Root />}>
@@ -77,6 +95,7 @@ export default function App() {
 
           {/* Auth Pages */}
           <Route path="/login" element={<Login />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/signup" element={<Signup />} />
 
           {/* Dashboard */}
@@ -97,6 +116,7 @@ export default function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="profile" element={<Profile />} />
             <Route path="billing" element={<Billing />} />
+            <Route path="onboarding" element={<Onboarding />} />
           </Route>
 
           {/* Admin */}

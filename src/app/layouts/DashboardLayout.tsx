@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
-import { motion } from 'motion/react';
 import {
   LayoutDashboard,
   Briefcase,
@@ -20,6 +19,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -27,6 +27,7 @@ export default function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const onboardingComplete = hasCompletedRequiredOnboarding(user) && Boolean(user?.onboardingCompleted);
 
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
@@ -35,6 +36,9 @@ export default function DashboardLayout() {
     { name: 'Resume Builder', href: '/dashboard/resume', icon: FileText },
     { name: 'Interview Prep', href: '/dashboard/interview', icon: MessageSquare },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+    onboardingComplete
+      ? { name: 'Billing', href: '/dashboard/billing', icon: CreditCard }
+      : { name: 'Onboarding', href: '/dashboard/onboarding', icon: FileText },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 
@@ -54,10 +58,10 @@ export default function DashboardLayout() {
       )}
 
       {/* Sidebar */}
-      <motion.aside
-        initial={false}
-        animate={{ x: sidebarOpen ? 0 : -300 }}
-        className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 z-50 lg:translate-x-0 transition-transform duration-300`}
+      <aside
+        className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
@@ -147,7 +151,7 @@ export default function DashboardLayout() {
             </div>
           </div>
         </div>
-      </motion.aside>
+      </aside>
 
       {/* Main Content */}
       <div className="lg:pl-64">
@@ -173,17 +177,18 @@ export default function DashboardLayout() {
             </div>
 
             <div className="flex items-center gap-4">
-              {user?.plan === 'free' && (
-                <Link
-                  to="/dashboard/billing"
-                  className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg hover:shadow-md transition-all"
-                >
-                  <Zap className="w-4 h-4 text-purple-600" />
-                  <span className="text-sm font-semibold text-purple-700">
-                    {2}/3 Daily Quota
-                  </span>
-                </Link>
-              )}
+              <Link
+                to="/dashboard/billing"
+                className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg hover:shadow-md transition-all"
+              >
+                <Zap className="w-4 h-4 text-purple-600" />
+                <span className="text-sm font-semibold text-purple-700">
+                  {user?.hireBalance ?? 0} Hires
+                </span>
+                <span className="text-xs text-purple-600">
+                  {user?.dailyHireUsed ?? 0}/{user?.dailyHireCap ?? 0} today
+                </span>
+              </Link>
               <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 <Bell className="w-6 h-6 text-gray-600" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>

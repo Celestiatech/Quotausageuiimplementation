@@ -1,27 +1,77 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { User, Mail, Phone, MapPin, Briefcase, Calendar, Camera, Save, AlertCircle } from 'lucide-react';
+import { User, Phone, MapPin, Link as LinkIcon, Camera, Save, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    phone: '+1 (555) 123-4567',
-    location: 'San Francisco, CA',
-    title: 'Senior Software Engineer',
-    company: 'Tech Corp',
-    bio: 'Passionate software engineer with 5+ years of experience in full-stack development. Seeking new opportunities to build innovative solutions.'
+    phone: user?.phone || '',
+    currentCity: user?.currentCity || '',
+    addressLine: user?.addressLine || '',
+    linkedinUrl: user?.linkedinUrl || '',
+    portfolioUrl: user?.portfolioUrl || ''
   });
 
-  const handleSave = () => {
-    setSaved(true);
-    setIsEditing(false);
-    setTimeout(() => setSaved(false), 3000);
+  useEffect(() => {
+    setFormData({
+      name: user?.name || '',
+      email: user?.email || '',
+      phone: user?.phone || '',
+      currentCity: user?.currentCity || '',
+      addressLine: user?.addressLine || '',
+      linkedinUrl: user?.linkedinUrl || '',
+      portfolioUrl: user?.portfolioUrl || ''
+    });
+  }, [user]);
+
+  const handleSave = async () => {
+    try {
+      setError('');
+      setIsSaving(true);
+      const profileRes = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: formData.name })
+      });
+      const profileData = await profileRes.json();
+      if (!profileRes.ok || !profileData?.success) {
+        throw new Error(profileData?.message || 'Failed to update profile name');
+      }
+
+      const onboardingRes = await fetch('/api/user/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          phone: formData.phone,
+          currentCity: formData.currentCity,
+          addressLine: formData.addressLine,
+          linkedinUrl: formData.linkedinUrl,
+          portfolioUrl: formData.portfolioUrl
+        })
+      });
+      const onboardingData = await onboardingRes.json();
+      if (!onboardingRes.ok || !onboardingData?.success) {
+        throw new Error(onboardingData?.message || 'Failed to update onboarding details');
+      }
+
+      await refreshUser();
+      setSaved(true);
+      setIsEditing(false);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save profile');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -48,11 +98,12 @@ export default function Profile() {
               Cancel
             </button>
             <button
-              onClick={handleSave}
+              onClick={() => void handleSave()}
+              disabled={isSaving}
               className="px-6 py-3 bg-gradient-to-r from-[#6366F1] to-[#A855F7] text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center gap-2"
             >
               <Save className="w-5 h-5" />
-              Save Changes
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         )}
@@ -70,6 +121,11 @@ export default function Profile() {
           </div>
           <span className="text-green-700 font-medium">Profile updated successfully!</span>
         </motion.div>
+      )}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <span className="text-red-700 font-medium">{error}</span>
+        </div>
       )}
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -90,7 +146,7 @@ export default function Profile() {
                 )}
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-1">{user?.name}</h3>
-              <p className="text-gray-600 mb-4">{formData.title}</p>
+              <p className="text-gray-600 mb-4">{formData.currentCity || 'No city set'}</p>
               <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full">
                 <span className="text-sm font-semibold text-purple-700 capitalize">{user?.plan} Plan</span>
               </div>
@@ -103,7 +159,9 @@ export default function Profile() {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Member since</span>
-                <span className="font-semibold text-gray-900">Jan 2026</span>
+                <span className="font-semibold text-gray-900">
+                  {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Account status</span>
@@ -111,7 +169,7 @@ export default function Profile() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Profile completion</span>
-                <span className="font-semibold text-gray-900">85%</span>
+                <span className="font-semibold text-gray-900">{user?.onboardingCompleted ? '100%' : 'Incomplete'}</span>
               </div>
             </div>
           </div>
@@ -147,8 +205,7 @@ export default function Profile() {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  disabled={!isEditing}
+                  disabled
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none disabled:bg-gray-50 disabled:cursor-not-allowed"
                 />
               </div>
@@ -168,68 +225,52 @@ export default function Profile() {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Location
+                  Current City
                 </label>
                 <input
                   type="text"
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  value={formData.currentCity}
+                  onChange={(e) => setFormData({ ...formData, currentCity: e.target.value })}
                   disabled={!isEditing}
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none disabled:bg-gray-50 disabled:cursor-not-allowed"
                 />
               </div>
-            </div>
-          </div>
-
-          {/* Professional Information */}
-          <div className="bg-white rounded-2xl p-6 border-2 border-gray-200">
-            <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <Briefcase className="w-5 h-5" />
-              Professional Information
-            </h3>
-
-            <div className="grid md:grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Current Title
+                  Address
                 </label>
                 <input
                   type="text"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  value={formData.addressLine}
+                  onChange={(e) => setFormData({ ...formData, addressLine: e.target.value })}
                   disabled={!isEditing}
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none disabled:bg-gray-50 disabled:cursor-not-allowed"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Current Company
+                  LinkedIn URL
                 </label>
                 <input
-                  type="text"
-                  value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  type="url"
+                  value={formData.linkedinUrl}
+                  onChange={(e) => setFormData({ ...formData, linkedinUrl: e.target.value })}
                   disabled={!isEditing}
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none disabled:bg-gray-50 disabled:cursor-not-allowed"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Professional Bio
-              </label>
-              <textarea
-                value={formData.bio}
-                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                disabled={!isEditing}
-                rows={4}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
-              />
-              <p className="text-sm text-gray-500 mt-2">
-                Brief description for your profile. This will be visible to potential employers.
-              </p>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Portfolio URL
+                </label>
+                <input
+                  type="url"
+                  value={formData.portfolioUrl}
+                  onChange={(e) => setFormData({ ...formData, portfolioUrl: e.target.value })}
+                  disabled={!isEditing}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+              </div>
             </div>
           </div>
 

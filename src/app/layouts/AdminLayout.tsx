@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
-import { motion } from 'motion/react';
 import {
   LayoutDashboard,
   Users,
@@ -52,10 +51,10 @@ export default function AdminLayout() {
         />
       )}
 
-      <motion.aside
-        initial={false}
-        animate={{ x: sidebarOpen ? 0 : -300 }}
-        className="fixed top-0 left-0 h-full w-64 bg-gradient-to-br from-gray-900 to-gray-800 border-r border-gray-700 z-50 lg:translate-x-0 transition-transform duration-300"
+      <aside
+        className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-br from-gray-900 to-gray-800 border-r border-gray-700 z-50 transform transition-transform duration-300 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0`}
       >
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between px-6 py-5 border-b border-gray-700">
@@ -117,7 +116,7 @@ export default function AdminLayout() {
             </button>
           </div>
         </div>
-      </motion.aside>
+      </aside>
 
       <div className="lg:pl-64">
         <header className="sticky top-0 z-30 bg-white border-b border-gray-200 px-6 py-4">

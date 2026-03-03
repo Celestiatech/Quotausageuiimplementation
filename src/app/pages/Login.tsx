@@ -9,35 +9,46 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [loginAs, setLoginAs] = useState<'user' | 'admin'>('user');
+  const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
   const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+    setErrorMessage('');
+
     try {
-      await login(email, password, loginAs);
-      navigate(loginAs === 'admin' ? '/admin' : '/dashboard');
+      await login(email, password, 'user');
+      navigate('/dashboard');
     } catch (error) {
-      console.error('Login failed:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Login failed');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDemoLogin = async (role: 'user' | 'admin') => {
+  const handleDemoLogin = async () => {
     setIsLoading(true);
+    setErrorMessage('');
     try {
-      await login(
-        role === 'admin' ? 'admin@careerpilot.com' : 'demo@example.com',
-        'demo123',
-        role
-      );
-      navigate(role === 'admin' ? '/admin' : '/dashboard');
+      const demoEmail = 'demo@careerpilot.com';
+      const demoPassword = 'demo12345';
+
+      await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Demo User',
+          email: demoEmail,
+          password: demoPassword,
+        }),
+      });
+
+      await login(demoEmail, demoPassword, 'user');
+      navigate('/dashboard');
     } catch (error) {
-      console.error('Demo login failed:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Demo login failed');
     } finally {
       setIsLoading(false);
     }
@@ -45,12 +56,10 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      {/* Background Pattern */}
       <div className="absolute inset-0 bg-grid-pattern opacity-40"></div>
-      
+
       <div className="max-w-6xl w-full relative">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left Side - Branding */}
           <motion.div
             className="hidden lg:block"
             initial={{ opacity: 0, x: -30 }}
@@ -65,8 +74,7 @@ export default function Login() {
             </Link>
 
             <h1 className="text-5xl font-bold text-gray-900 mb-6">
-              Welcome back to your{' '}
-              <span className="text-gradient">career journey</span>
+              Welcome back to your <span className="text-gradient">career journey</span>
             </h1>
 
             <p className="text-xl text-gray-600 mb-8">
@@ -95,7 +103,6 @@ export default function Login() {
             </div>
           </motion.div>
 
-          {/* Right Side - Login Form */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -104,37 +111,16 @@ export default function Login() {
             <div className="glass rounded-3xl shadow-premium-lg p-8 lg:p-10 border-2 border-white">
               <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Sign In</h2>
-                <p className="text-gray-600">Choose your account type to continue</p>
-              </div>
-
-              {/* Account Type Toggle */}
-              <div className="flex gap-4 mb-6">
-                <button
-                  type="button"
-                  onClick={() => setLoginAs('user')}
-                  className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-200 ${
-                    loginAs === 'user'
-                      ? 'gradient-primary text-white shadow-premium'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  User Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLoginAs('admin')}
-                  className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-200 ${
-                    loginAs === 'admin'
-                      ? 'gradient-primary text-white shadow-premium'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Admin Login
-                </button>
+                <p className="text-gray-600">User account login</p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Email */}
+                {errorMessage && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {errorMessage}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Email Address
@@ -152,7 +138,6 @@ export default function Login() {
                   </div>
                 </div>
 
-                {/* Password */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Password
@@ -164,7 +149,7 @@ export default function Login() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full pl-12 pr-12 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
-                      placeholder="••••••••"
+                      placeholder="Enter your password"
                       required
                     />
                     <button
@@ -177,18 +162,6 @@ export default function Login() {
                   </div>
                 </div>
 
-                {/* Remember & Forgot */}
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-                    <span className="text-sm text-gray-600">Remember me</span>
-                  </label>
-                  <button type="button" className="text-sm text-purple-600 hover:text-purple-700 font-semibold">
-                    Forgot password?
-                  </button>
-                </div>
-
-                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -198,37 +171,26 @@ export default function Login() {
                 </button>
               </form>
 
-              {/* Divider */}
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white text-gray-500">Or try demo accounts</span>
+                  <span className="px-4 bg-white text-gray-500">Or use demo account</span>
                 </div>
               </div>
 
-              {/* Demo Logins */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <button
                   type="button"
-                  onClick={() => handleDemoLogin('user')}
+                  onClick={handleDemoLogin}
                   disabled={isLoading}
                   className="px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold transition-all duration-200 border-2 border-blue-200"
                 >
                   Demo User
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemoLogin('admin')}
-                  disabled={isLoading}
-                  className="px-4 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl font-semibold transition-all duration-200 border-2 border-purple-200"
-                >
-                  Demo Admin
-                </button>
               </div>
 
-              {/* Sign Up Link */}
               <p className="text-center text-gray-600 mt-6">
                 Don't have an account?{' '}
                 <Link to="/signup" className="text-purple-600 hover:text-purple-700 font-semibold">
@@ -236,10 +198,14 @@ export default function Login() {
                 </Link>
               </p>
 
-              {/* Back to Home */}
               <div className="text-center mt-4">
                 <Link to="/" className="text-sm text-gray-500 hover:text-gray-700">
-                  ← Back to home
+                  Back to home
+                </Link>
+              </div>
+              <div className="text-center mt-2">
+                <Link to="/admin/login" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold">
+                  Admin login
                 </Link>
               </div>
             </div>
