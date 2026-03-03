@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mock LinkedIn Jobs Search</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; padding: 16px; }
+      .jobs-search-results-list__list-item { border: 1px solid #ddd; margin: 8px 0; padding: 10px; }
+      .jobs-apply-button { margin-top: 12px; padding: 8px 12px; }
+      .jobs-easy-apply-modal { position: fixed; inset: 20% 20%; background: #fff; border: 1px solid #333; padding: 16px; z-index: 9999; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>Jobs Search</h1>
+    <button aria-label="Easy Apply filter" aria-pressed="false" id="easy-filter-btn">Easy Apply</button>
+
+    <ul>
+      <li class="jobs-search-results__list-item jobs-search-results-list__list-item">
+        <a href="https://www.linkedin.com/jobs/view/1001/" onclick="return false;"><span>Frontend Engineer</span></a>
+      </li>
+      <li class="jobs-search-results__list-item jobs-search-results-list__list-item">
+        <a href="https://www.linkedin.com/jobs/view/1002/" onclick="return false;"><span>Backend Engineer</span></a>
+      </li>
+    </ul>
+
+    <button class="jobs-apply-button" aria-label="Easy Apply">Easy Apply</button>
+
+    <div class="jobs-easy-apply-modal hidden" id="apply-modal">
+      <div class="fb-dash-form-element">
+        <label>Location (city)</label>
+        <input type="text" />
+      </div>
+      <div class="fb-dash-form-element">
+        <label>Would you like to receive emails, text messages, or phone calls?</label>
+        <select>
+          <option value="">Select an option</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+      <button aria-label="Submit application">Submit application</button>
+      <button aria-label="Done">Done</button>
+    </div>
+
+    <script>
+      const filterBtn = document.getElementById("easy-filter-btn");
+      filterBtn.addEventListener("click", () => {
+        const pressed = filterBtn.getAttribute("aria-pressed") === "true";
+        filterBtn.setAttribute("aria-pressed", pressed ? "false" : "true");
+      });
+
+      const modal = document.getElementById("apply-modal");
+      document.querySelector(".jobs-apply-button").addEventListener("click", () => {
+        modal.classList.remove("hidden");
+      });
+      modal.querySelector("[aria-label='Done']").addEventListener("click", () => {
+        modal.classList.add("hidden");
+      });
+      modal.querySelector("[aria-label='Submit application']").addEventListener("click", () => {
+        modal.classList.add("hidden");
+      });
+    </script>
+  </body>
+</html>

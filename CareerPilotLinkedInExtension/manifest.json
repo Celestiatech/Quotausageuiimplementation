@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "CareerPilot LinkedIn Copilot",
+  "version": "0.1.0",
+  "description": "Battle-tested LinkedIn auto-apply copilot with live status panel.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "http://localhost:3000/*",
+    "http://localhost:5000/*",
+    "http://127.0.0.1:3000/*",
+    "http://127.0.0.1:5000/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "css": [
+        "src/panel.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://localhost:5000/*",
+        "http://127.0.0.1:3000/*",
+        "http://127.0.0.1:5000/*"
+      ],
+      "js": [
+        "src/dashboard-bridge.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "src/options.html",
+  "action": {
+    "default_title": "CareerPilot Copilot",
+    "default_popup": "src/popup.html"
+  }
+}

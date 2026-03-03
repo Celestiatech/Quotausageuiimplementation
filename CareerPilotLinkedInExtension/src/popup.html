@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CareerPilot Copilot</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="head">
+        <div>
+          <h1>CareerPilot Copilot</h1>
+          <p class="sub">LinkedIn Auto Apply Operator</p>
+        </div>
+        <span id="statusBadge" class="status-badge idle">Idle</span>
+      </header>
+
+      <section class="now-card">
+        <p id="nowTitle" class="now-title">Loading run state...</p>
+        <p id="nowDetail" class="now-detail">Connecting to extension service worker.</p>
+      </section>
+
+      <div class="stats">
+        <article class="stat">
+          <span class="stat-k">Applied</span>
+          <span id="applied" class="stat-v">0</span>
+        </article>
+        <article class="stat">
+          <span class="stat-k">Skipped</span>
+          <span id="skipped" class="stat-v">0</span>
+        </article>
+        <article class="stat">
+          <span class="stat-k">Failed</span>
+          <span id="failed" class="stat-v">0</span>
+        </article>
+      </div>
+
+      <div class="actions primary">
+        <button id="start">Start</button>
+        <button id="pause">Pause</button>
+        <button id="stop">Stop</button>
+      </div>
+
+      <div class="actions secondary">
+        <button id="openLinkedIn">Open LinkedIn Jobs</button>
+        <button id="openOptions">Settings</button>
+      </div>
+
+      <div class="actions secondary">
+        <button id="copyLogs">Copy Debug Logs</button>
+        <button id="clearLogs">Clear Logs</button>
+      </div>
+
+      <section class="feed-wrap">
+        <div class="feed-title">Live Feed</div>
+        <ul id="feed" class="feed" aria-live="polite"></ul>
+      </section>
+
+      <p id="status" class="status"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
