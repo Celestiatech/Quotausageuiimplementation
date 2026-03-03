@@ -5,6 +5,10 @@ function sendMessage(message) {
 }
 
 const JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search/?f_AL=true";
+const PROD_BASE_URL = "https://careerpilot.ai";
+const DEV_BASE_URL = "http://localhost:3001";
+let accountConnected = false;
+let portalBaseUrl = PROD_BASE_URL;
 
 function normalizeText(value) {
   return String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -22,6 +26,137 @@ function setStatus(text, kind = "info") {
   const el = document.getElementById("status");
   el.textContent = String(text || "");
   el.dataset.kind = kind;
+}
+
+function buildPortalUrl(path) {
+  const safePath = String(path || "/").startsWith("/") ? String(path || "/") : `/${String(path || "")}`;
+  return `${portalBaseUrl.replace(/\/+$/, "")}${safePath}`;
+}
+
+async function resolvePortalBaseUrl() {
+  try {
+    const tabs = await chrome.tabs.query({
+      url: ["http://localhost:3001/*", "http://127.0.0.1:3001/*"],
+    });
+    if (Array.isArray(tabs) && tabs.length) {
+      portalBaseUrl = DEV_BASE_URL;
+      return;
+    }
+  } catch {
+    // ignore and use prod default
+  }
+  portalBaseUrl = PROD_BASE_URL;
+}
+
+function isAccountConnected(settings) {
+  if (!settings || typeof settings !== "object") return false;
+  const email = String(settings.contactEmail || "").trim();
+  const fullName = String(settings.fullName || settings.firstName || "").trim();
+  const screeningAnswers = settings.screeningAnswers && typeof settings.screeningAnswers === "object"
+    ? settings.screeningAnswers
+    : {};
+  const hasAnswers = Object.keys(screeningAnswers).length > 0;
+  return Boolean(email && (fullName || hasAnswers));
+}
+
+async function detectSignedInUserFromTabs() {
+  const patterns = [
+    "http://localhost:3001/*",
+    "http://127.0.0.1:3001/*",
+    "https://careerpilot.ai/*",
+    "https://www.careerpilot.ai/*",
+  ];
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: patterns });
+  } catch {
+    return null;
+  }
+  for (const tab of tabs) {
+    if (!tab?.id) continue;
+    try {
+      const result = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: async () => {
+          try {
+            const res = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
+            let data = null;
+            try {
+              data = await res.json();
+            } catch {
+              data = null;
+            }
+            const user = data?.data?.user || data?.user || null;
+            return {
+              ok: Boolean(res.ok && data?.success && user?.email),
+              email: String(user?.email || ""),
+              name: String(user?.name || ""),
+              origin: window.location.origin,
+            };
+          } catch (error) {
+            return { ok: false, error: String(error?.message || error) };
+          }
+        },
+      });
+      const payload = result?.[0]?.result;
+      if (payload?.ok) return payload;
+    } catch {
+      // continue scanning tabs
+    }
+  }
+  return null;
+}
+
+function renderAccountState(settings, sessionUser) {
+  const card = document.getElementById("accountCard");
+  const title = document.getElementById("accountTitle");
+  const badge = document.getElementById("accountBadge");
+  const text = document.getElementById("accountText");
+  const action = document.getElementById("accountAction");
+  const runArea = document.getElementById("runArea");
+
+  const connectedFromSettings = isAccountConnected(settings || {});
+  const connectedFromSession = Boolean(sessionUser?.ok && sessionUser?.email);
+  accountConnected = connectedFromSettings || connectedFromSession;
+  const contactEmail = String(sessionUser?.email || settings?.contactEmail || "").trim();
+  if (accountConnected) {
+    card.classList.remove("disconnected");
+    card.classList.add("connected");
+    badge.classList.remove("disconnected");
+    badge.classList.add("connected");
+    badge.textContent = "Connected";
+    title.textContent = "Account connected";
+    if (connectedFromSession) {
+      text.textContent = contactEmail
+        ? `Signed in on ${sessionUser.origin} as ${contactEmail}. You can run auto-apply now.`
+        : "Website session detected. You can run auto-apply now.";
+    } else {
+      text.textContent = contactEmail
+        ? `Signed in as ${contactEmail}. You can run auto-apply now.`
+        : "Your account is connected. You can run auto-apply now.";
+    }
+    action.textContent = "Open CareerPilot Dashboard";
+    action.dataset.action = "dashboard";
+    action.classList.add("btn-primary");
+    if (runArea) runArea.style.display = "block";
+  } else {
+    card.classList.remove("connected");
+    card.classList.add("disconnected");
+    badge.classList.remove("connected");
+    badge.classList.add("disconnected");
+    badge.textContent = "Disconnected";
+    title.textContent = "Sign in required";
+    text.textContent = "Sign in to CareerPilot to continue.";
+    action.textContent = "Sign in to CareerPilot";
+    action.dataset.action = "login";
+    action.classList.add("btn-primary");
+    if (runArea) runArea.style.display = "none";
+  }
+
+  for (const id of ["start", "pause", "stop"]) {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !accountConnected;
+  }
 }
 
 function updateStatusBadge(state) {
@@ -147,19 +282,33 @@ function setStats(state) {
   document.getElementById("nowTitle").textContent = now.title;
   document.getElementById("nowDetail").textContent = now.detail;
   renderFeed(state?.logs || []);
-  setStatus(state?.running ? "Run active." : state?.paused ? "Run paused." : "Ready.");
 }
 
 async function refresh() {
-  const boot = await sendMessage({ type: "CP_GET_BOOTSTRAP" });
+  await resolvePortalBaseUrl();
+  const [boot, loadedSettings, sessionUser] = await Promise.all([
+    sendMessage({ type: "CP_GET_BOOTSTRAP" }),
+    sendMessage({ type: "CP_LOAD_SETTINGS" }),
+    detectSignedInUserFromTabs(),
+  ]);
   if (!boot.ok) {
     setStatus("Extension service unavailable.", "error");
     return;
   }
+  renderAccountState(loadedSettings?.settings || {}, sessionUser);
+  if (!accountConnected) {
+    setStatus("Sign in to CareerPilot to enable run controls.", "warn");
+    return;
+  }
   setStats(boot.state || {});
+  setStatus(boot.state?.running ? "Run active." : boot.state?.paused ? "Run paused." : "Ready.");
 }
 
 document.getElementById("start").addEventListener("click", async () => {
+  if (!accountConnected) {
+    setStatus("Sign in to CareerPilot first.", "warn");
+    return;
+  }
   const tabs = await chrome.tabs.query({ url: "https://www.linkedin.com/*" });
   if (!tabs.length) {
     await chrome.tabs.create({ url: JOBS_SEARCH_URL });
@@ -174,12 +323,20 @@ document.getElementById("start").addEventListener("click", async () => {
 });
 
 document.getElementById("pause").addEventListener("click", async () => {
+  if (!accountConnected) {
+    setStatus("Sign in to CareerPilot first.", "warn");
+    return;
+  }
   await sendMessage({ type: "CP_PAUSE" });
   await refresh();
   setStatus("Run paused.");
 });
 
 document.getElementById("stop").addEventListener("click", async () => {
+  if (!accountConnected) {
+    setStatus("Sign in to CareerPilot first.", "warn");
+    return;
+  }
   await sendMessage({ type: "CP_STOP" });
   await refresh();
   setStatus("Run stopped.");
@@ -193,6 +350,13 @@ document.getElementById("openLinkedIn").addEventListener("click", async () => {
 document.getElementById("openOptions").addEventListener("click", async () => {
   await chrome.runtime.openOptionsPage();
   setStatus("Opened settings.");
+});
+
+document.getElementById("accountAction").addEventListener("click", async () => {
+  const action = document.getElementById("accountAction").dataset.action || "login";
+  const url = action === "dashboard" ? buildPortalUrl("/dashboard") : buildPortalUrl("/login");
+  await chrome.tabs.create({ url });
+  setStatus(action === "dashboard" ? "Opened dashboard." : "Opened login.");
 });
 
 document.getElementById("copyLogs").addEventListener("click", async () => {

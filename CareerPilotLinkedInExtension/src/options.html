@@ -12,23 +12,8 @@
       <p class="sub">Configure runtime behavior for the extension.</p>
 
       <form id="settings-form" class="card">
-        <h2>Backend</h2>
-
-        <label>
-          <span>Backend API Base URL</span>
-          <input id="apiBaseUrl" type="url" placeholder="http://localhost:5000/api" />
-        </label>
-
-        <label>
-          <span>Auth Token (optional)</span>
-          <input id="authToken" type="text" placeholder="Bearer token" />
-        </label>
-
-        <div class="row checks two-col">
-          <label class="check">
-            <input id="enableBackendSync" type="checkbox" />
-            <span>Enable backend sync</span>
-          </label>
+        <h2>Safety</h2>
+        <div class="row checks">
           <label class="check">
             <input id="liveModeAcknowledged" type="checkbox" />
             <span>I acknowledge live auto-submit risk</span>

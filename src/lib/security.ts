@@ -1,9 +1,11 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { getRequiredEnv } from "./env";
 
 const ALGO = "aes-256-gcm";
 
 function getKey() {
-  const secret = process.env.ENCRYPTION_KEY || "careerpilot-dev-encryption-key-change-me";
+  const secret = getRequiredEnv("ENCRYPTION_KEY", { minLength: 32 });
+  // Keep fixed-length derivation for backward compatibility with existing encrypted records.
   return Buffer.from(secret.padEnd(32, "0").slice(0, 32), "utf8");
 }
 

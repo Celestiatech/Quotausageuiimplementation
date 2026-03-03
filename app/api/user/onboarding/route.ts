@@ -25,9 +25,6 @@ export async function POST(req: NextRequest) {
     const userId = authResult.auth.user.id;
     const existing = await prisma.user.findUnique({ where: { id: userId } });
     if (!existing) return fail("User not found", 404, "USER_NOT_FOUND");
-    if (!existing.resumeFileName) {
-      return fail("Resume is required before completing onboarding", 400, "RESUME_REQUIRED");
-    }
 
     const user = await prisma.user.update({
       where: { id: userId },

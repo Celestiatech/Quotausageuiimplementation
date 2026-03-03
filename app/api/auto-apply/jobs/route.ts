@@ -4,7 +4,7 @@ import { createJobSchema } from "src/lib/schemas";
 import { fail, handleApiError, ok } from "src/lib/api";
 import { requireAuth } from "src/lib/guards";
 import { getWalletSummary } from "src/lib/hires";
-import { enqueueJob } from "src/lib/queue";
+import { enqueueJob, isQueueConfigured } from "src/lib/queue";
 import { writeAuditLog } from "src/lib/audit";
 import { processAutoApplyJob } from "src/lib/worker";
 
@@ -15,6 +15,10 @@ export async function POST(req: NextRequest) {
     const payload = createJobSchema.parse(await req.json());
 
     const userId = authResult.auth.user.id;
+    if (process.env.NODE_ENV === "production" && !isQueueConfigured()) {
+      return fail("Queue service is not configured", 503, "QUEUE_UNAVAILABLE");
+    }
+
     const wallet = await getWalletSummary(userId);
     if (wallet.spendable < 1) {
       return fail("Insufficient Hires or daily limit reached", 429, "HIRES_EXHAUSTED");

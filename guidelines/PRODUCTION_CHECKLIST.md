@@ -3,6 +3,7 @@
 ## Security
 - Rotate all local/test secrets before production deploy.
 - Set strong values for: `JWT_SECRET`, `ENCRYPTION_KEY`, `WORKER_SECRET`.
+- Set strong value for: `OTP_HASH_SECRET`.
 - Configure HTTPS-only deployment and secure cookies.
 - Confirm CSP/frame protections and API no-store headers in `middleware.ts`.
 
@@ -21,11 +22,13 @@
 
 ## Worker and Queue
 - Configure Upstash Redis for production queue.
+- Reuse the same Upstash Redis for distributed API rate limiting.
 - Run worker in isolated runtime (separate process from API).
 - Verify retries, dead-letter behavior, and timeout handling.
 
 ## Extension
 - Publish signed extension package for release channel.
+- Set `NEXT_PUBLIC_EXTENSION_STORE_URL` and install from Chrome Web Store in production.
 - Validate content script selectors against current LinkedIn UI.
 - Test stuck-field -> user-answer -> retry loop at least 20 real forms.
 
@@ -38,10 +41,14 @@
   - admin/system health degradation
 
 ## Pre-launch QA
+- Apply Prisma migrations to production DB (`npx prisma migrate deploy`).
+- If DB already existed before migrations, run one-time baseline:
+  - `npx prisma migrate resolve --applied 20260303173000_init`
 - Smoke test all critical APIs with real database:
   - auth, onboarding, auto-apply jobs, billing, admin APIs.
 - Test role switching in browser and route guards.
-- Test resume upload, onboarding completion, and quota enforcement.
+- Test onboarding completion and quota enforcement.
+- Validate LinkedIn-managed resume flow (latest attached LinkedIn Easy Apply resume is used by copilot).
 
 ## Post-launch
 - Daily review:
@@ -49,4 +56,3 @@
   - unresolved screening field issues
   - payment mismatch incidents
 - Weekly selector maintenance for extension stability.
-

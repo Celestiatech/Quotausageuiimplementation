@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import jwt from "jsonwebtoken";
 import { cookies, headers } from "next/headers";
 import { prisma } from "./prisma";
+import { getRequiredEnv } from "./env";
 
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.ACCESS_TOKEN_TTL_SECONDS || 15 * 60);
 const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.REFRESH_TOKEN_TTL_SECONDS || 30 * 24 * 60 * 60);
@@ -20,7 +21,7 @@ type AccessTokenPayload = AuthUser & {
 };
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || "careerpilot-dev-jwt-secret";
+  return getRequiredEnv("JWT_SECRET", { minLength: 24 });
 }
 
 export function hashToken(token: string) {

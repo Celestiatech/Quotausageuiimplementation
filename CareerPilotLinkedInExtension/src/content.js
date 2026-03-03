@@ -1788,7 +1788,7 @@ function ensurePanel() {
         <div class="cp-orb"></div>
         <div class="cp-title-wrap">
           <div class="cp-title">CareerPilot Copilot</div>
-          <div class="cp-sub">AI Operator</div>
+          <div class="cp-sub">LinkedIn job assistant</div>
         </div>
       </div>
       <div class="cp-head-right">
@@ -2947,6 +2947,9 @@ async function fillQuestionBlock(block, settings) {
   if (textInput && !answer) {
     answer = await requestAiAnswer(aiQuestionLabel, textInput.tagName.toLowerCase() === "textarea" ? "textarea" : "text", [], validationMessage);
   }
+  if (textInput && !answer && textInput.tagName.toLowerCase() === "textarea") {
+    answer = String(settings.coverLetter || "").trim();
+  }
   if (textInput && !answer && textInput.tagName.toLowerCase() !== "textarea") {
     answer = getYearsFallback(settings);
   }
@@ -3317,7 +3320,6 @@ async function processEasyApplyModal(settings) {
       );
       const shouldTryManualAnswerWait =
         unresolvedQuestions.length > 0 &&
-        !changedAny &&
         !unresolvedImproved &&
         stepState.preflightAttempts >= 2 &&
         stepState.manualAnswerWaits < 1;

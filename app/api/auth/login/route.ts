@@ -10,7 +10,7 @@ import { enforceRateLimit, rateLimitKey } from "src/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
-    const rl = enforceRateLimit({
+    const rl = await enforceRateLimit({
       key: rateLimitKey(req, "auth.login"),
       limit: 10,
       windowMs: 60_000,

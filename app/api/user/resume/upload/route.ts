@@ -1,16 +1,9 @@
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { NextRequest } from "next/server";
 import { prisma } from "src/lib/prisma";
 import { requireAuth } from "src/lib/guards";
 import { fail, handleApiError, ok } from "src/lib/api";
 import { parseResumeFile } from "src/lib/resume-parser";
 import { writeAuditLog } from "src/lib/audit";
-
-function safeFileName(original: string) {
-  const base = original.replace(/[^a-zA-Z0-9._-]/g, "_");
-  return `${Date.now()}_${base}`;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,17 +23,13 @@ export async function POST(req: NextRequest) {
 
     const bytes = Buffer.from(await file.arrayBuffer());
     const parsed = await parseResumeFile(file.name, bytes);
-    const fileName = safeFileName(file.name);
-    const relativePath = path.join("uploads", "resumes", fileName);
-    const fullPath = path.join(process.cwd(), "public", relativePath);
-    await mkdir(path.dirname(fullPath), { recursive: true });
-    await writeFile(fullPath, bytes);
-
     await prisma.user.update({
       where: { id: authResult.auth.user.id },
       data: {
         resumeFileName: file.name,
-        resumeFilePath: `/${relativePath.replace(/\\/g, "/")}`,
+        // Resume bytes are not persisted on app servers.
+        // Users should keep the source resume in LinkedIn Easy Apply profile.
+        resumeFilePath: null,
         resumeText: parsed.text.slice(0, 100000),
       },
     });
@@ -55,7 +44,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return ok("Resume uploaded and parsed", {
+    return ok("Resume parsed and profile text saved", {
       fileName: file.name,
       extracted: parsed.extracted,
     });

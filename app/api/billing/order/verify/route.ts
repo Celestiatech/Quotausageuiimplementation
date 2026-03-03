@@ -17,7 +17,7 @@ const verifyOrderSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const rl = enforceRateLimit({
+    const rl = await enforceRateLimit({
       key: rateLimitKey(req, "billing.order_verify"),
       limit: 15,
       windowMs: 60_000,

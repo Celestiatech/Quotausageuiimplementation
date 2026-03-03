@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "crypto";
 import { prisma } from "./prisma";
 import { sendMail } from "./mail";
+import { getRequiredEnv } from "./env";
 
 const OTP_TTL_MINUTES = 10;
 const OTP_VERIFY_MAX_AGE_MINUTES = 30;
@@ -9,7 +10,7 @@ const OTP_MIN_RESEND_SECONDS = 30;
 export type OtpPurpose = "signup" | "login" | "password_reset";
 
 const hashOtp = (email: string, otp: string) => {
-  const secret = process.env.OTP_HASH_SECRET || "careerpilot-otp-secret";
+  const secret = getRequiredEnv("OTP_HASH_SECRET", { minLength: 16 });
   return createHash("sha256")
     .update(`${email.toLowerCase().trim()}:${otp}:${secret}`)
     .digest("hex");

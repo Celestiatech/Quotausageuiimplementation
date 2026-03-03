@@ -31,8 +31,11 @@ export function handleApiError(error: unknown, fallbackMessage: string) {
   if (error instanceof ZodError) {
     return fail(parseZodError(error), 400, "VALIDATION_ERROR");
   }
+  const isProd = process.env.NODE_ENV === "production";
   if (error instanceof Error) {
-    return fail(error.message || fallbackMessage, 500, "INTERNAL_ERROR");
+    console.error("[api] internal error:", error);
+    return fail(isProd ? fallbackMessage : error.message || fallbackMessage, 500, "INTERNAL_ERROR");
   }
+  console.error("[api] unknown internal error:", error);
   return fail(fallbackMessage, 500, "INTERNAL_ERROR");
 }

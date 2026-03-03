@@ -14,7 +14,7 @@ const topupOrderSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const rl = enforceRateLimit({
+    const rl = await enforceRateLimit({
       key: rateLimitKey(req, "wallet.topup_order"),
       limit: 12,
       windowMs: 60_000,

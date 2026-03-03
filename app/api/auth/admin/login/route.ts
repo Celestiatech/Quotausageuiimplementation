@@ -9,7 +9,7 @@ import { enforceRateLimit, rateLimitKey } from "src/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
-    const rl = enforceRateLimit({
+    const rl = await enforceRateLimit({
       key: rateLimitKey(req, "auth.admin_login"),
       limit: 10,
       windowMs: 60_000,
@@ -19,8 +19,9 @@ export async function POST(req: NextRequest) {
     const body = adminLoginSchema.parse(await req.json());
     const { email, password } = body;
     let admin = await prisma.user.findUnique({ where: { email } });
+    const allowBootstrap = (process.env.ALLOW_ADMIN_BOOTSTRAP || "false").toLowerCase() === "true";
 
-    if (!admin) {
+    if (!admin && allowBootstrap) {
       const envAdminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase();
       const envAdminPassword = process.env.ADMIN_PASSWORD || "";
       const envAdminName = process.env.ADMIN_NAME || "CareerPilot Admin";

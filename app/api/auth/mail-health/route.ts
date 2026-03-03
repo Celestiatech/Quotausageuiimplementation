@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { verifyMailConnection } from "src/lib/mail";
+import { requireAdmin } from "src/lib/guards";
 
 export async function GET() {
+  const authResult = await requireAdmin();
+  if ("error" in authResult) return authResult.error;
+
   const otpBypass = (process.env.OTP_DEV_BYPASS_MAIL || "false").toLowerCase() === "true";
-  const allowBypass = (process.env.MAIL_HEALTH_ALLOW_BYPASS || "true").toLowerCase() === "true";
+  const allowBypass = (process.env.MAIL_HEALTH_ALLOW_BYPASS || "false").toLowerCase() === "true";
   try {
     await verifyMailConnection();
     return NextResponse.json({

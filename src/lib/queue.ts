@@ -4,6 +4,10 @@ const JOB_QUEUE_KEY = process.env.UPSTASH_JOB_QUEUE_KEY || "careerpilot:auto_app
 
 let redisClient: Redis | null = null;
 
+export function isQueueConfigured() {
+  return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
 function getRedisClient() {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;

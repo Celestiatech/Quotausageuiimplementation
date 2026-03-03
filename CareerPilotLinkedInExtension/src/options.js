@@ -34,11 +34,15 @@ function setChecked(id, value) {
 }
 
 function getValue(id) {
-  return String(document.getElementById(id).value || "").trim();
+  const el = document.getElementById(id);
+  if (!el) return "";
+  return String(el.value || "").trim();
 }
 
 function getChecked(id) {
-  return Boolean(document.getElementById(id).checked);
+  const el = document.getElementById(id);
+  if (!el) return false;
+  return Boolean(el.checked);
 }
 
 function setForm(settings) {
@@ -131,9 +135,9 @@ function setForm(settings) {
 
 function readForm() {
   const settings = {
-    apiBaseUrl: getValue("apiBaseUrl"),
-    authToken: getValue("authToken"),
-    enableBackendSync: getChecked("enableBackendSync"),
+    apiBaseUrl: "",
+    authToken: "",
+    enableBackendSync: false,
     liveModeAcknowledged: getChecked("liveModeAcknowledged"),
 
     maxApplicationsPerRun: Math.max(1, Number(getValue("maxApplicationsPerRun") || 3)),

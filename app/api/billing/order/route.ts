@@ -14,7 +14,7 @@ const PLAN_AMOUNT_PAISE: Record<"pro" | "coach", number> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const rl = enforceRateLimit({
+    const rl = await enforceRateLimit({
       key: rateLimitKey(req, "billing.order"),
       limit: 8,
       windowMs: 60_000,

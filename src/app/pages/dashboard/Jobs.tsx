@@ -277,14 +277,20 @@ export default function Jobs() {
           settled = true;
           window.clearTimeout(timeout);
           window.removeEventListener("message", onMessage);
+          const bridgeError = String(data.error || "").trim();
+          const runtimeBootstrapOk =
+            Boolean(data.state) &&
+            typeof data.state === "object" &&
+            !Array.isArray(data.state);
+          const installed = Boolean(data.installed) && !bridgeError && runtimeBootstrapOk;
           resolve({
-            installed: Boolean(data.installed),
+            installed,
             runtimeId: data.runtimeId || undefined,
             linkedIn: data.linkedIn || undefined,
             state: data.state || null,
             pendingQuestions: Array.isArray(data.pendingQuestions) ? data.pendingQuestions : [],
             screeningAnswers: data.screeningAnswers || {},
-            error: data.error || null,
+            error: bridgeError || null,
           });
         };
 
