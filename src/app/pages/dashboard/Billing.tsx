@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Coins, RefreshCw, Wallet, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
 
 type WalletSummary = {
   plan: "free" | "pro" | "coach";
@@ -64,15 +65,19 @@ async function ensureRazorpayScript() {
 
 export default function Billing() {
   const { user, refreshUser } = useAuth();
+  const extensionStats = useExtensionPipelineStats();
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [txns, setTxns] = useState<WalletTxn[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [rupees, setRupees] = useState(100);
+  const [usdAmount, setUsdAmount] = useState(1.0);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const minTopup = 50;
+  const INR_PER_USD = 92.5;
+  const minTopupRupees = 50;
+  const minTopupUsd = 0.54;
+  const minTopupUsdCents = Math.round(minTopupUsd * 100);
 
   const loadWallet = async () => {
     try {
@@ -104,10 +109,28 @@ export default function Billing() {
     return new Date(wallet.dailyResetTime).toLocaleString();
   }, [wallet?.dailyResetTime]);
 
+  const mergedDailyUsage = useMemo(() => {
+    const cap = Math.max(1, wallet?.dailyCap ?? 3);
+    const baseUsed = wallet?.dailyUsed ?? 0;
+    const extensionUsedToday = extensionStats.loaded ? extensionStats.appliedToday : 0;
+    const used = Math.min(cap, Math.max(baseUsed, extensionUsedToday));
+    const remaining = Math.max(0, cap - used);
+    const spendableBase = wallet?.spendable ?? 0;
+    const spendable = Math.max(0, Math.min(spendableBase, remaining));
+    return { used, cap, remaining, spendable };
+  }, [wallet?.dailyCap, wallet?.dailyUsed, wallet?.spendable, extensionStats.loaded, extensionStats.appliedToday]);
+
+  const usdAmountCents = Math.round((Number.isFinite(usdAmount) ? usdAmount : 0) * 100);
+  const belowMinUsd = !Number.isFinite(usdAmount) || usdAmountCents < minTopupUsdCents;
+  const effectiveUsdAmount = belowMinUsd ? minTopupUsd : usdAmount;
+  const computedRupees = Math.max(minTopupRupees, Math.round(effectiveUsdAmount * INR_PER_USD));
+  const computedHires = Math.max(0, computedRupees);
+
   const startTopup = async () => {
     try {
-      if (!Number.isInteger(rupees) || rupees < minTopup) {
-        throw new Error(`Minimum top-up is INR ${minTopup}`);
+      const cents = Math.round((Number.isFinite(usdAmount) ? usdAmount : 0) * 100);
+      if (!Number.isFinite(usdAmount) || cents < minTopupUsdCents) {
+        throw new Error(`Minimum top-up is $${minTopupUsd.toFixed(2)}`);
       }
       setProcessing(true);
       setMessage("");
@@ -118,9 +141,9 @@ export default function Billing() {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-idempotency-key": `wallet-${Date.now()}-${rupees}`,
+          "x-idempotency-key": `wallet-${Date.now()}-${usdAmount.toFixed(2)}`,
         },
-        body: JSON.stringify({ rupees }),
+        body: JSON.stringify({ rupees: computedRupees }),
       });
       const orderBody = await orderRes.json();
       if (!orderRes.ok || !orderBody?.success) {
@@ -195,7 +218,7 @@ export default function Billing() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Hires Wallet</h1>
-          <p className="text-gray-600 mt-1">1 INR = 1 Hire. 1 Auto-Apply = 1 Hire. Minimum top-up INR 50.</p>
+          <p className="text-gray-600 mt-1">Buy Hires in USD. 1 Hire = 1 Apply. Minimum top-up $0.54.</p>
         </div>
         <button
           onClick={() => void loadWallet()}
@@ -220,8 +243,8 @@ export default function Billing() {
         </div>
         <div className="bg-white rounded-2xl p-6 border-2 border-gray-200">
           <div className="text-xs uppercase text-gray-500">Daily Usage</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{wallet?.dailyUsed ?? 0}/{wallet?.dailyCap ?? 0}</div>
-          <div className="text-sm text-gray-500">Spendable: {wallet?.spendable ?? 0}</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{mergedDailyUsage.used}/{mergedDailyUsage.cap}</div>
+          <div className="text-sm text-gray-500">Spendable: {mergedDailyUsage.spendable}</div>
         </div>
         <div className="bg-white rounded-2xl p-6 border-2 border-gray-200">
           <div className="text-xs uppercase text-gray-500">Purchased</div>
@@ -242,24 +265,39 @@ export default function Billing() {
         </h2>
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Top-up Amount (INR)</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Top-up Amount (USD)
+              <span className="ml-2 text-xs font-semibold text-gray-500">(minimum ${minTopupUsd.toFixed(2)})</span>
+            </label>
             <input
               type="number"
-              min={minTopup}
-              step={10}
-              value={rupees}
-              onChange={(e) => setRupees(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
+              min={minTopupUsd}
+              step={0.01}
+              value={usdAmount}
+              onChange={(e) => setUsdAmount(Math.max(0, Number(e.target.value) || 0))}
+              className={`px-4 py-2 rounded-xl border-2 outline-none ${
+                belowMinUsd ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-purple-400"
+              }`}
             />
+            {belowMinUsd ? (
+              <div className="mt-2 text-xs font-semibold text-red-600">
+                Minimum top-up is ${minTopupUsd.toFixed(2)}. Amounts like $0.00 or $0.53 will not create an order.
+              </div>
+            ) : null}
           </div>
-          <div className="text-sm text-gray-600 pb-2">You will get <span className="font-semibold">{Math.max(0, rupees)} Hires</span>.</div>
+          <div className="text-sm text-gray-600 pb-2">
+            You will get <span className="font-semibold">{computedHires} Hires</span>. (1 Hire = 1 Apply)
+          </div>
           <button
             onClick={() => void startTopup()}
-            disabled={processing || rupees < minTopup}
+            disabled={processing || belowMinUsd}
             className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#6366F1] to-[#A855F7] text-white font-semibold disabled:opacity-60"
           >
             {processing ? "Processing..." : "Pay with Razorpay"}
           </button>
+        </div>
+        <div className="mt-2 text-xs text-gray-500">
+          Charged in INR at approximate rate: $1 = INR {INR_PER_USD.toFixed(1)}.
         </div>
       </div>
 

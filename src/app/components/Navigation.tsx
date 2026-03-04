@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Briefcase, Menu, X, Sparkles, LogOut, LayoutDashboard, Shield } from 'lucide-react';
+import { Menu, X, Sparkles, LogOut, LayoutDashboard, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export function Navigation() {
@@ -41,9 +41,13 @@ export function Navigation() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366F1] via-[#8B5CF6] to-[#A855F7] flex items-center justify-center shadow-lg">
-                <Briefcase className="w-6 h-6 text-white" />
-              </div>
+              <img
+                src="/logos/android-chrome-192x192.png"
+                alt="CareerPilot"
+                className="w-10 h-10 rounded-xl shadow-lg"
+                loading="eager"
+                decoding="async"
+              />
               <span className="text-xl font-bold bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">
                 CareerPilot
               </span>
@@ -65,6 +69,12 @@ export function Navigation() {
               </Link>
               <Link to="/faq" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
                 FAQ
+              </Link>
+              <Link to="/extension-design" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
+                Extension Design
+              </Link>
+              <Link to="/blog" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
+                Blog
               </Link>
             </div>
 
@@ -152,6 +162,20 @@ export function Navigation() {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   FAQ
+                </Link>
+                <Link 
+                  to="/blog" 
+                  className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Blog
+                </Link>
+                <Link
+                  to="/extension-design"
+                  className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Extension Design
                 </Link>
                 <div className="pt-4 border-t border-gray-200 flex flex-col gap-2">
                   {isAuthenticated ? (

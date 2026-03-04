@@ -16,10 +16,20 @@ export async function POST(req: NextRequest) {
     const body = otpSendSchema.parse(await req.json());
     const { email, purpose } = body as { email: string; purpose: OtpPurpose };
 
-    const { otp } = await createAndSendOtp(email, purpose);
+    const result = await createAndSendOtp(email, purpose);
     const showOtp = (process.env.OTP_DEV_SHOW_CODE || "false").toLowerCase() === "true";
+    const isDev = process.env.NODE_ENV !== "production";
+    const includeOtp = showOtp || (isDev && (!result.delivered || result.bypassed));
 
-    return ok("OTP sent successfully", showOtp ? { otp } : undefined);
+    if (!result.delivered && isDev) {
+      // Give a clearer message for local development environments.
+      return ok(
+        "OTP generated (email not delivered). Using dev fallback.",
+        includeOtp ? { otp: result.otp, deliveryError: result.deliveryError } : undefined,
+      );
+    }
+
+    return ok("OTP sent successfully", includeOtp ? { otp: result.otp } : undefined);
   } catch (error) {
     console.error("send-otp error:", error);
     return handleApiError(error, "Failed to send OTP");

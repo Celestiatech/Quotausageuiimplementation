@@ -43,7 +43,16 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#FAFBFC] relative overflow-hidden">
+      {/* Ambient background (shared across all admin pages) */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(80rem_60rem_at_10%_0%,rgba(99,102,241,0.18)_0,transparent_55%),radial-gradient(70rem_50rem_at_90%_10%,rgba(139,92,246,0.14)_0,transparent_55%),radial-gradient(60rem_50rem_at_50%_100%,rgba(6,182,212,0.10)_0,transparent_60%)]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,rgba(15,23,42,0.15)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.15)_1px,transparent_1px)] [background-size:48px_48px]"
+      />
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 lg:hidden"
@@ -59,9 +68,13 @@ export default function AdminLayout() {
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between px-6 py-5 border-b border-gray-700">
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
+              <img
+                src="/logos/android-chrome-192x192.png"
+                alt="CareerPilot"
+                className="w-8 h-8 rounded-lg shadow-sm"
+                loading="eager"
+                decoding="async"
+              />
               <div>
                 <div className="font-bold text-white">Admin Panel</div>
                 <div className="text-xs text-gray-400">CareerPilot</div>
@@ -118,8 +131,8 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 bg-white border-b border-gray-200 px-6 py-4">
+      <div className="lg:pl-64 relative z-10">
+        <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-white/60 px-6 py-4">
           <div className="flex items-center justify-between">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -134,7 +147,7 @@ export default function AdminLayout() {
                 <input
                   type="text"
                   placeholder="Search users, jobs, or analytics..."
-                  className="w-full pl-12 pr-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                  className="w-full pl-12 pr-4 py-2.5 rounded-xl border border-white/60 bg-white/70 backdrop-blur focus:bg-white focus:border-purple-300 focus:ring-4 focus:ring-purple-100 transition-all outline-none shadow-sm"
                 />
               </div>
             </div>
@@ -149,7 +162,9 @@ export default function AdminLayout() {
         </header>
 
         <main className="p-6">
-          <Outlet />
+          <div className="mx-auto w-full max-w-7xl">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

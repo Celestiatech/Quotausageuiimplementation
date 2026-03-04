@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "src/lib/prisma";
 import { createJobSchema } from "src/lib/schemas";
-import { fail, handleApiError, ok } from "src/lib/api";
+import { fail, handleApiError, ok, parsePagination } from "src/lib/api";
 import { requireAuth } from "src/lib/guards";
 import { getWalletSummary } from "src/lib/hires";
 import { enqueueJob, isQueueConfigured } from "src/lib/queue";
@@ -85,22 +85,37 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const authResult = await requireAuth();
     if ("error" in authResult) return authResult.error;
-    const jobs = await prisma.autoApplyJob.findMany({
-      where: { userId: authResult.auth.user.id },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-      include: {
-        logs: {
-          orderBy: { createdAt: "desc" },
-          take: 5,
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 25, maxLimit: 100 });
+    const [jobs, total] = await Promise.all([
+      prisma.autoApplyJob.findMany({
+        where: { userId: authResult.auth.user.id },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        include: {
+          logs: {
+            orderBy: { createdAt: "desc" },
+            take: 5,
+          },
         },
+      }),
+      prisma.autoApplyJob.count({
+        where: { userId: authResult.auth.user.id },
+      }),
+    ]);
+    return ok("Jobs fetched", {
+      jobs,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     });
-    return ok("Jobs fetched", { jobs });
   } catch (error) {
     return handleApiError(error, "Failed to fetch jobs");
   }

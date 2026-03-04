@@ -1,5 +1,5 @@
 import { requireAdmin } from "src/lib/guards";
-import { ok, handleApiError } from "src/lib/api";
+import { ok, handleApiError, parsePagination } from "src/lib/api";
 import { prisma } from "src/lib/prisma";
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -7,10 +7,16 @@ function asObject(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const authResult = await requireAdmin();
     if ("error" in authResult) return authResult.error;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
+    const url = new URL(req.url);
+    const scanLimitRaw = Number(url.searchParams.get("scanLimit") || 2000);
+    const scanLimit = Number.isFinite(scanLimitRaw)
+      ? Math.max(500, Math.min(5000, Math.floor(scanLimitRaw)))
+      : 2000;
 
     const logs = await prisma.auditLog.findMany({
       where: {
@@ -22,7 +28,7 @@ export async function GET() {
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 3000,
+      take: scanLimit,
     });
 
     const latestByUserAndKey = new Map<
@@ -63,14 +69,25 @@ export async function GET() {
     const all = Array.from(latestByUserAndKey.values());
     const pending = all.filter((r) => r.status === "pending");
     const resolved = all.filter((r) => r.status === "resolved");
+    const pendingPage = pending.slice(skip, skip + limit);
+    const resolvedPage = resolved.slice(skip, skip + limit);
 
     return ok("Admin screening issues fetched", {
-      pending,
-      resolved,
+      pending: pendingPage,
+      resolved: resolvedPage,
       counts: {
         pending: pending.length,
         resolved: resolved.length,
       },
+      pagination: {
+        page,
+        limit,
+        totalPages: {
+          pending: Math.ceil(pending.length / limit),
+          resolved: Math.ceil(resolved.length / limit),
+        },
+      },
+      scanLimit,
     });
   } catch (error) {
     return handleApiError(error, "Failed to fetch admin screening issues");

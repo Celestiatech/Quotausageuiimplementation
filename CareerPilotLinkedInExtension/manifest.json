@@ -19,6 +19,8 @@
     "https://www.linkedin.com/*",
     "https://careerpilot.ai/*",
     "https://www.careerpilot.ai/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
     "http://localhost:3001/*",
     "http://127.0.0.1:3001/*",
     "http://localhost/*",
@@ -29,6 +31,16 @@
   "background": {
     "service_worker": "src/background.js"
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/*.png"
+      ],
+      "matches": [
+        "https://www.linkedin.com/*"
+      ]
+    }
+  ],
   "content_scripts": [
     {
       "matches": [
@@ -44,6 +56,8 @@
     },
     {
       "matches": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*",
         "http://localhost:3001/*",
         "http://127.0.0.1:3001/*",
         "http://localhost/*",

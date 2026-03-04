@@ -29,7 +29,10 @@ const resolveMailConfig = () => {
   const secure =
     encryption === "ssl" || encryption === "smtps" || toBool(process.env.SMTP_SECURE, port === 465);
   const requireTLS = encryption === "tls" || (host.includes("gmail.com") && port === 587);
-  const rejectUnauthorized = toBool(process.env.SMTP_TLS_REJECT_UNAUTHORIZED, true);
+  const isProd = process.env.NODE_ENV === "production";
+  // In local/dev environments, corporate proxies or antivirus can inject self-signed certs.
+  // Keep strict verification in production by default.
+  const rejectUnauthorized = toBool(process.env.SMTP_TLS_REJECT_UNAUTHORIZED, isProd);
 
   return {
     host,

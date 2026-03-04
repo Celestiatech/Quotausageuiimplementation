@@ -15,6 +15,11 @@ import HowItWorks from './pages/HowItWorks';
 import Pricing from './pages/Pricing';
 import About from './pages/About';
 import FAQ from './pages/FAQ';
+import Blog from './pages/Blog';
+import ExtensionDesign from './pages/ExtensionDesign';
+import BlogLazyApplyAlternative from './pages/BlogLazyApplyAlternative';
+import BlogBestAiJobSearchTools from './pages/BlogBestAiJobSearchTools';
+import BlogLinkedInEasyApplyDoesItWork from './pages/BlogLinkedInEasyApplyDoesItWork';
 import ThankYou from './pages/ThankYou';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -90,6 +95,11 @@ export default function App() {
             <Route path="pricing" element={<Pricing />} />
             <Route path="about" element={<About />} />
             <Route path="faq" element={<FAQ />} />
+            <Route path="extension-design" element={<ExtensionDesign />} />
+            <Route path="blog" element={<Blog />} />
+            <Route path="blog/lazyapply-alternative" element={<BlogLazyApplyAlternative />} />
+            <Route path="blog/best-ai-job-search-tools" element={<BlogBestAiJobSearchTools />} />
+            <Route path="blog/linkedin-easy-apply-does-it-work" element={<BlogLinkedInEasyApplyDoesItWork />} />
             <Route path="thank-you" element={<ThankYou />} />
           </Route>
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { motion } from 'motion/react';
-import { Mail, Lock, Eye, EyeOff, Briefcase, Sparkles, Shield, Zap } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles, Shield, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -67,9 +67,13 @@ export default function Login() {
             transition={{ duration: 0.6 }}
           >
             <Link to="/" className="flex items-center gap-3 mb-8">
-              <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center shadow-premium">
-                <Briefcase className="w-7 h-7 text-white" />
-              </div>
+              <img
+                src="/logos/android-chrome-192x192.png"
+                alt="CareerPilot"
+                className="w-12 h-12 rounded-xl shadow-premium"
+                loading="eager"
+                decoding="async"
+              />
               <span className="text-2xl font-bold text-gradient">CareerPilot</span>
             </Link>
 

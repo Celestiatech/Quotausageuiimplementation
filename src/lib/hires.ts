@@ -11,7 +11,9 @@ function nextUtcMidnight(baseDate: Date) {
 }
 
 export function getDailyHireCap(plan: "free" | "pro" | "coach") {
-  if (plan === "pro") return Number(process.env.QUOTA_PRO_DAILY || 50);
+  // Pro is a subscription tier (e.g. $3/month) intended to be effectively unlimited.
+  // Keep it as a very large daily cap to avoid edge cases and keep counters numeric.
+  if (plan === "pro") return Number(process.env.QUOTA_PRO_DAILY || 1000000);
   if (plan === "coach") return Number(process.env.QUOTA_COACH_DAILY || 200);
   return Number(process.env.QUOTA_FREE_DAILY || 3);
 }
@@ -32,14 +34,24 @@ export async function ensureHireWindow(userId: string) {
   const now = new Date();
   const targetCap = getDailyHireCap(user.plan);
   const shouldReset = now >= user.dailyHireResetTime;
+  const clampedUsed = Math.max(0, Math.min(targetCap, user.dailyHireUsed));
   if (shouldReset || user.dailyHireCap !== targetCap) {
     return prisma.user.update({
       where: { id: user.id },
       data: {
-        dailyHireUsed: shouldReset ? 0 : user.dailyHireUsed,
+        // Clamp in case older versions over-incremented dailyHireUsed beyond the cap.
+        dailyHireUsed: shouldReset ? 0 : clampedUsed,
         dailyHireCap: targetCap,
         dailyHireResetTime: shouldReset ? nextUtcMidnight(now) : user.dailyHireResetTime,
       },
+    });
+  }
+
+  // If cap is unchanged but used drifted above cap due to older bugs, clamp it.
+  if (user.dailyHireUsed !== clampedUsed) {
+    return prisma.user.update({
+      where: { id: user.id },
+      data: { dailyHireUsed: clampedUsed },
     });
   }
 
@@ -64,8 +76,12 @@ function getFreeRemaining(user: {
 export async function getWalletSummary(userId: string) {
   const user = await ensureHireWindow(userId);
   const freeRemaining = getFreeRemaining(user);
+  // Daily cap applies only to free credits; paid Hires can be used beyond the free daily cap.
   const dailyRemaining = getRemainingDailyCap(user);
-  const spendable = Math.min(dailyRemaining, user.hireBalance + freeRemaining);
+  const spendable =
+    user.plan === "pro"
+      ? 1000000
+      : Math.max(0, user.hireBalance + freeRemaining);
   return {
     user,
     freeRemaining,
@@ -185,12 +201,18 @@ export async function consumeHiresForApplies(input: {
   if (input.count <= 0) return { ok: true as const, consumed: 0, sourceBreakdown: { free: 0, paid: 0 } };
 
   const user = await ensureHireWindow(input.userId);
-  const freeRemaining = getFreeRemaining(user);
-  const dailyRemaining = getRemainingDailyCap(user);
-  if (dailyRemaining < input.count) {
-    return { ok: false as const, reason: "DAILY_CAP_REACHED" as const };
+  if (user.plan === "pro") {
+    // Pro is subscription-unlimited: do not debit paid Hires.
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        hireSpent: { increment: input.count },
+        dailyHireUsed: { increment: input.count },
+      },
+    });
+    return { ok: true as const, consumed: input.count, sourceBreakdown: { free: input.count, paid: 0 } };
   }
-
+  const freeRemaining = getFreeRemaining(user);
   const paidNeeded = Math.max(0, input.count - freeRemaining);
   if (user.hireBalance < paidNeeded) {
     return { ok: false as const, reason: "INSUFFICIENT_HIRES" as const };
@@ -201,45 +223,45 @@ export async function consumeHiresForApplies(input: {
     if (!refreshed) throw new Error("User not found");
 
     const freeNow = Math.max(0, getDailyFreeHires(refreshed.plan) - refreshed.dailyHireUsed);
-    const dailyNow = Math.max(0, refreshed.dailyHireCap - refreshed.dailyHireUsed);
-    if (dailyNow < input.count) {
-      return { ok: false as const, reason: "DAILY_CAP_REACHED" as const };
-    }
     const paidNow = Math.max(0, input.count - freeNow);
     if (refreshed.hireBalance < paidNow) {
       return { ok: false as const, reason: "INSUFFICIENT_HIRES" as const };
     }
 
+    const freeConsumed = Math.min(freeNow, input.count);
     const nextBalance = refreshed.hireBalance - paidNow;
     const updated = await tx.user.update({
       where: { id: refreshed.id },
       data: {
         hireBalance: nextBalance,
         hireSpent: { increment: input.count },
-        dailyHireUsed: { increment: input.count },
+        // Track only free daily consumption against the daily cap.
+        dailyHireUsed: { increment: freeConsumed },
       },
     });
 
-    await createTxnInTx(tx, {
-      userId: updated.id,
-      type: "debit_apply",
-      amount: -input.count,
-      balanceAfter: updated.hireBalance,
-      referenceType: input.referenceType,
-      referenceId: input.referenceId,
-      metadataJson: {
-        ...(typeof input.metadataJson === "object" && input.metadataJson ? (input.metadataJson as object) : {}),
-        freeConsumed: Math.min(freeNow, input.count),
-        paidConsumed: paidNow,
-      } as Prisma.InputJsonValue,
-      idempotencyKey: `${input.idempotencyPrefix}:debit:${input.count}`,
-    });
+    if (paidNow > 0) {
+      await createTxnInTx(tx, {
+        userId: updated.id,
+        type: "debit_apply",
+        amount: -paidNow,
+        balanceAfter: updated.hireBalance,
+        referenceType: input.referenceType,
+        referenceId: input.referenceId,
+        metadataJson: {
+          ...(typeof input.metadataJson === "object" && input.metadataJson ? (input.metadataJson as object) : {}),
+          freeConsumed,
+          paidConsumed: paidNow,
+        } as Prisma.InputJsonValue,
+        idempotencyKey: `${input.idempotencyPrefix}:debit:${paidNow}`,
+      });
+    }
 
     return {
       ok: true as const,
       consumed: input.count,
       sourceBreakdown: {
-        free: Math.min(freeNow, input.count),
+        free: freeConsumed,
         paid: paidNow,
       },
     };

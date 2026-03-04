@@ -37,7 +37,15 @@ export default function FAQ() {
         },
         {
           q: 'How many applications can I send with the free plan?',
-          a: 'The free plan includes 3 Auto-Apply actions per day. For unlimited applications, upgrade to our Pro plan for just $29/month.'
+          a: 'Free includes 3 Auto-Apply actions per day ($0). For unlimited applications, upgrade to Pro for $3/month. You can also use Custom Hires top-up (1 Hire = 1 Apply, minimum top-up $0.54).'
+        },
+        {
+          q: 'Is CareerPilot a LinkedIn auto apply bot?',
+          a: 'CareerPilot includes LinkedIn easy apply automation to help you apply faster, plus safeguards and review controls so you can stay in charge of your job search.'
+        },
+        {
+          q: 'Do you include a job application tracker?',
+          a: 'Yes. Every plan includes a job application tracker so you can organize roles by stage, add notes, and monitor interview progress from one dashboard.'
         }
       ]
     },
@@ -93,6 +101,10 @@ export default function FAQ() {
         {
           q: 'What browsers are supported?',
           a: 'CareerPilot works on all modern browsers including Chrome, Firefox, Safari, and Edge. We recommend using the latest version for the best experience.'
+        },
+        {
+          q: 'Can I use CareerPilot as an AI resume builder?',
+          a: 'Yes. You can use the AI resume builder to tailor resume content for specific job descriptions and improve ATS keyword alignment before applying.'
         }
       ]
     }
@@ -115,7 +127,7 @@ export default function FAQ() {
           </h1>
           
           <p className="text-xl text-gray-600">
-            Everything you need to know about CareerPilot
+            Answers about LinkedIn auto apply, AI resume builder tools, pricing, and job search automation
           </p>
         </div>
       </section>
@@ -214,9 +226,9 @@ export default function FAQ() {
                 link: '/features'
               },
               {
-                title: 'Community Forum',
-                description: 'Connect with other job seekers',
-                link: '#'
+                title: 'SEO Blog Guides',
+                description: 'Learn practical auto-apply and resume tactics',
+                link: '/blog'
               }
             ].map((resource, index) => (
               <button

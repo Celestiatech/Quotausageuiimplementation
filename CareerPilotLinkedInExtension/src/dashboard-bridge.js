@@ -7,16 +7,30 @@ const BRIDGE_DEBUG = (() => {
   }
 })();
 
-function isAllowedDashboardOrigin(origin) {
-  const allowlist = new Set([
-    "http://localhost:3001",
-    "http://127.0.0.1:3001",
-    "http://localhost",
-    "https://localhost",
-    "http://127.0.0.1",
-    "https://127.0.0.1",
-  ]);
-  if (allowlist.has(String(origin || ""))) return true;
+const DEFAULT_ALLOWLIST = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
+  "http://localhost",
+  "https://localhost",
+  "http://127.0.0.1",
+  "https://127.0.0.1",
+];
+
+function normalizeOrigin(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).origin.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isAllowedDashboardOrigin(origin, allowlist) {
+  const set = new Set((Array.isArray(allowlist) ? allowlist : []).map((item) => normalizeOrigin(item)).filter(Boolean));
+  if (set.has(normalizeOrigin(origin))) return true;
   try {
     const hostname = new URL(String(origin || "")).hostname.toLowerCase();
     return hostname === "careerpilot.ai" || hostname.endsWith(".careerpilot.ai");
@@ -25,7 +39,8 @@ function isAllowedDashboardOrigin(origin) {
   }
 }
 
-const BRIDGE_ENABLED = isAllowedDashboardOrigin(window.location.origin);
+let dynamicAllowlist = [...DEFAULT_ALLOWLIST];
+let BRIDGE_ENABLED = isAllowedDashboardOrigin(window.location.origin, dynamicAllowlist);
 
 function nowIso() {
   return new Date().toISOString();
@@ -71,7 +86,8 @@ function markDomBridgeReady() {
   }
 }
 
-if (BRIDGE_ENABLED) {
+function announceBridgeReady() {
+  if (!BRIDGE_ENABLED) return;
   markDomBridgeReady();
   safePost({
     type: "CP_WEB_BRIDGE_READY",
@@ -83,7 +99,96 @@ if (BRIDGE_ENABLED) {
   logBridge("bridge ready", bridgeMeta(), "runtimeId=", chrome?.runtime?.id || "");
 }
 
-if (BRIDGE_ENABLED) window.addEventListener("message", async (event) => {
+async function hydrateDynamicAllowlist() {
+  try {
+    const res = await fetch(`${window.location.origin}/api/public/extension-config`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "omit",
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const incoming = Array.isArray(data?.data?.allowedDashboardOrigins)
+      ? data.data.allowedDashboardOrigins.map((item) => String(item || ""))
+      : [];
+    if (!incoming.length) return;
+    dynamicAllowlist = Array.from(new Set([...DEFAULT_ALLOWLIST, ...incoming.map((item) => normalizeOrigin(item)).filter(Boolean)]));
+    const wasEnabled = BRIDGE_ENABLED;
+    BRIDGE_ENABLED = isAllowedDashboardOrigin(window.location.origin, dynamicAllowlist);
+    if (!wasEnabled && BRIDGE_ENABLED) {
+      announceBridgeReady();
+    }
+  } catch (error) {
+    logBridge("failed to hydrate extension config", String(error?.message || error));
+  }
+}
+
+let lastQuotaFetchAt = 0;
+let cachedQuota = null;
+
+async function fetchPortalQuota() {
+  const now = Date.now();
+  if (now - lastQuotaFetchAt < 5000 && cachedQuota) return cachedQuota;
+  lastQuotaFetchAt = now;
+  try {
+    const res = await fetch(`${window.location.origin}/api/user/quota`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "include",
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body?.success) return cachedQuota;
+    cachedQuota = body.data || null;
+    return cachedQuota;
+  } catch {
+    return cachedQuota;
+  }
+}
+
+async function pushQuotaToExtension() {
+  if (!BRIDGE_ENABLED) return;
+  const quota = await fetchPortalQuota();
+  if (!quota) return;
+  try {
+    chrome.runtime.sendMessage(
+      { type: "CP_SET_PORTAL_QUOTA", data: { ...quota, _origin: window.location.origin } },
+      () => void 0,
+    );
+  } catch {
+    // ignore
+  }
+}
+
+if (BRIDGE_ENABLED) {
+  announceBridgeReady();
+  // Keep portal quota reasonably fresh for LinkedIn tabs.
+  window.setInterval(() => void pushQuotaToExtension(), 8000);
+}
+
+// Allow the extension service worker to notify the dashboard tab that it just synced/charged.
+try {
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message || message.type !== "CP_PORTAL_SYNCED") return;
+    try {
+      // Trigger React listeners (DashboardLayout listens for this to refresh the user wallet immediately).
+      window.dispatchEvent(new Event("cp:extensionImported"));
+    } catch {
+      // ignore
+    }
+    safePost({
+      type: "CP_WEB_PORTAL_SYNCED",
+      imported: Number(message.imported || 0),
+      ts: message.ts || nowIso(),
+      bridge: bridgeMeta(),
+    });
+  });
+} catch {
+  // ignore
+}
+
+void hydrateDynamicAllowlist();
+window.addEventListener("message", async (event) => {
+  if (!BRIDGE_ENABLED) return;
   if (event.source !== window) return;
   const data = event.data;
   if (!data || data.type !== "CP_WEB_PING") return;
@@ -96,6 +201,7 @@ if (BRIDGE_ENABLED) window.addEventListener("message", async (event) => {
     installed: false,
     runtimeId: chrome?.runtime?.id || "",
     state: null,
+    dailyCap: null,
     linkedIn: {
       hasLinkedInTab: false,
       hasJobsTab: false
@@ -128,6 +234,8 @@ if (BRIDGE_ENABLED) window.addEventListener("message", async (event) => {
     });
     if (bootstrap && bootstrap.ok) {
       response.state = bootstrap.state || null;
+      response.dailyCap = bootstrap.dailyCap || null;
+      response.portalQuota = bootstrap.portalQuota || null;
       response.installed = true;
       response.runtimeBootstrapOk = true;
     } else if (bootstrap && bootstrap.error) {
@@ -146,6 +254,8 @@ if (BRIDGE_ENABLED) window.addEventListener("message", async (event) => {
       logBridge("runtime unavailable for CP_WEB_PONG", { requestId, error: response.error || "" });
     }
     if (response.installed) {
+      // Best-effort update of portal quota cache inside the extension.
+      await pushQuotaToExtension();
       const pending = await new Promise((resolve) => {
         chrome.runtime.sendMessage({ type: "CP_GET_PENDING_QUESTIONS" }, (res) => {
           if (chrome.runtime.lastError) {
@@ -221,7 +331,8 @@ if (BRIDGE_ENABLED) window.addEventListener("message", async (event) => {
   safePost(response);
 });
 
-if (BRIDGE_ENABLED) window.addEventListener("message", async (event) => {
+window.addEventListener("message", async (event) => {
+  if (!BRIDGE_ENABLED) return;
   if (event.source !== window) return;
   const data = event.data;
   if (!data || data.type !== "CP_WEB_SAVE_ANSWER") return;
@@ -266,7 +377,8 @@ if (BRIDGE_ENABLED) window.addEventListener("message", async (event) => {
   }
 });
 
-if (BRIDGE_ENABLED) window.addEventListener("message", async (event) => {
+window.addEventListener("message", async (event) => {
+  if (!BRIDGE_ENABLED) return;
   if (event.source !== window) return;
   const data = event.data;
   if (!data || data.type !== "CP_WEB_SYNC_SETTINGS") return;

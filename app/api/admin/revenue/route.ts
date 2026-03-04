@@ -1,6 +1,6 @@
 import { prisma } from "src/lib/prisma";
 import { requireAdmin } from "src/lib/guards";
-import { ok, handleApiError } from "src/lib/api";
+import { ok, handleApiError, parsePagination } from "src/lib/api";
 
 const PLAN_PRICE_MONTHLY: Record<"free" | "pro" | "coach", number> = {
   free: 0,
@@ -8,12 +8,13 @@ const PLAN_PRICE_MONTHLY: Record<"free" | "pro" | "coach", number> = {
   coach: 2999,
 };
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const authResult = await requireAdmin();
     if ("error" in authResult) return authResult.error;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
-    const [subsByStatus, usersByPlan, activeSubs, hiresPurchased] = await Promise.all([
+    const [subsByStatus, usersByPlan, activeSubs, activeSubsTotal, hiresPurchased] = await Promise.all([
       prisma.subscription.groupBy({
         by: ["status"],
         _count: { _all: true },
@@ -26,8 +27,10 @@ export async function GET() {
         where: { status: "active" },
         select: { id: true, plan: true, userId: true, currentPeriodEnd: true, updatedAt: true },
         orderBy: { updatedAt: "desc" },
-        take: 200,
+        skip,
+        take: limit,
       }),
+      prisma.subscription.count({ where: { status: "active" } }),
       prisma.hireTransaction.aggregate({
         where: { type: "credit_purchase", status: "posted" },
         _sum: { amount: true },
@@ -66,6 +69,12 @@ export async function GET() {
       currency: "INR",
       hiresRevenueInr: hireRevenue,
       activeSubscriptions: activeSubs,
+      pagination: {
+        page,
+        limit,
+        total: activeSubsTotal,
+        totalPages: Math.ceil(activeSubsTotal / limit),
+      },
     });
   } catch (error) {
     return handleApiError(error, "Failed to fetch revenue data");

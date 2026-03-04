@@ -9,12 +9,16 @@ import {
   Calendar,
   Zap,
   Users,
+  ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { QuotaUsage } from "../../components/quota-usage";
 import { UpgradeModal } from "../../components/upgrade-modal";
+import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
 
 type AutoApplyJob = {
   id: string;
@@ -30,7 +34,26 @@ type RecentItem = {
   status: "Submitted" | "Running" | "Queued" | "Failed" | "Cancelled";
   date: string;
   match: number | null;
+  linkedInUrl: string;
+  externalJobId: string;
 };
+
+function parseLinkedInJobId(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const m = raw.match(/\/jobs\/view\/(\d+)/i);
+  if (m?.[1]) return String(m[1]);
+  return raw.match(/^\d+$/) ? raw : "";
+}
+
+function linkedInUrlFromCriteria(criteria: Record<string, unknown> | undefined) {
+  const c = criteria || {};
+  const direct = String(c.jobUrl || c.pageUrl || "").trim();
+  const id = parseLinkedInJobId(c.jobId) || parseLinkedInJobId(direct);
+  if (direct && direct.includes("linkedin.com/jobs/")) return direct;
+  if (id) return `https://www.linkedin.com/jobs/view/${id}/`;
+  return "";
+}
 
 export default function Overview() {
   const { user } = useAuth();
@@ -38,6 +61,8 @@ export default function Overview() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [jobs, setJobs] = useState<AutoApplyJob[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
+  const [copiedJobId, setCopiedJobId] = useState("");
+  const extensionStats = useExtensionPipelineStats();
 
   useEffect(() => {
     let active = true;
@@ -59,8 +84,11 @@ export default function Overview() {
 
   const computed = useMemo(() => {
     const active = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
-    const succeeded = jobs.filter((j) => j.status === "succeeded").length;
-    const failed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
+    const backendSucceeded = jobs.filter((j) => j.status === "succeeded").length;
+    const backendFailed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
+    const succeeded = Math.max(backendSucceeded, extensionStats.applied);
+    const failed = Math.max(backendFailed, extensionStats.failed);
+    const totalTracked = Math.max(jobs.length, succeeded + failed + extensionStats.skipped);
     const resolved = succeeded + failed;
     const responseRate = resolved > 0 ? Math.round((succeeded / resolved) * 100) : 0;
     const interviews = 0;
@@ -83,6 +111,8 @@ export default function Overview() {
         const company = String(j.criteriaJson?.company || "LinkedIn");
         const position = String(j.criteriaJson?.title || j.criteriaJson?.keywords || "Auto-Apply Job");
         const parsedMatch = Number(j.criteriaJson?.matchScore || 0);
+        const linkedInUrl = linkedInUrlFromCriteria(j.criteriaJson);
+        const externalJobId = parseLinkedInJobId(j.criteriaJson?.jobId) || parseLinkedInJobId(linkedInUrl);
         return {
           id: j.id,
           company,
@@ -90,23 +120,25 @@ export default function Overview() {
           status,
           date: new Date(j.createdAt).toLocaleDateString(),
           match: Number.isFinite(parsedMatch) && parsedMatch > 0 ? parsedMatch : null,
+          linkedInUrl,
+          externalJobId,
         };
       });
 
-    return { active, succeeded, failed, responseRate, interviews, recent };
-  }, [jobs]);
+    return { active, succeeded, failed, totalTracked, responseRate, interviews, recent };
+  }, [jobs, extensionStats]);
 
   const stats = [
     {
       name: "Active Applications",
-      value: String(computed.active),
+      value: String(computed.active > 0 ? computed.active : computed.succeeded),
       change: `${computed.succeeded} submitted`,
       icon: Briefcase,
       color: "from-blue-500 to-cyan-500",
     },
     {
       name: "Total Jobs",
-      value: String(jobs.length),
+      value: String(computed.totalTracked),
       change: `${computed.failed} failed`,
       icon: Target,
       color: "from-purple-500 to-pink-500",
@@ -200,6 +232,54 @@ export default function Overview() {
                       <div>
                         <div className="font-semibold text-gray-900">{app.position}</div>
                         <div className="text-sm text-gray-600">{app.company}</div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={!app.linkedInUrl}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!app.linkedInUrl) return;
+                              window.open(app.linkedInUrl, "_blank", "noopener,noreferrer");
+                            }}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                              app.linkedInUrl
+                                ? "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                                : "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed"
+                            }`}
+                            title={app.linkedInUrl ? "Open on LinkedIn" : "LinkedIn link not available for this item"}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            LinkedIn
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!app.externalJobId}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (!app.externalJobId) return;
+                              try {
+                                await navigator.clipboard.writeText(app.externalJobId);
+                                setCopiedJobId(app.externalJobId);
+                                window.setTimeout(() => setCopiedJobId(""), 1200);
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                              app.externalJobId
+                                ? "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                                : "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed"
+                            }`}
+                            title={app.externalJobId ? "Copy LinkedIn Job ID" : "Job ID not available for this item"}
+                          >
+                            {copiedJobId === app.externalJobId ? (
+                              <Check className="w-3.5 h-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            {copiedJobId === app.externalJobId ? "Copied" : "Copy ID"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-6">

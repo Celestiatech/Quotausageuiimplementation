@@ -39,6 +39,8 @@ export default function Support() {
   const [screening, setScreening] = useState<ScreeningIssuesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [savingKey, setSavingKey] = useState("");
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
 
   const load = async () => {
     try {
@@ -63,6 +65,33 @@ export default function Support() {
   useEffect(() => {
     void load();
   }, []);
+
+  const saveAnswer = async (issue: ScreeningIssuesData["pending"][number]) => {
+    const key = `${issue.userId}:${issue.questionKey}`;
+    const answer = String(answerDrafts[key] || "").trim();
+    if (!answer) return;
+    try {
+      setSavingKey(key);
+      const res = await fetch("/api/admin/screening/answers", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: issue.userId,
+          questionKey: issue.questionKey,
+          questionLabel: issue.questionLabel,
+          answer,
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) throw new Error(body?.message || "Failed to save answer");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save answer");
+    } finally {
+      setSavingKey("");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -130,6 +159,26 @@ export default function Support() {
               <div className="text-xs text-gray-700">{issue.userEmail}</div>
               {issue.validationMessage ? <div className="text-xs text-amber-700 mt-1">{issue.validationMessage}</div> : null}
               <div className="text-xs text-gray-500 mt-1">{new Date(issue.updatedAt).toLocaleString()}</div>
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  value={answerDrafts[`${issue.userId}:${issue.questionKey}`] || ""}
+                  onChange={(e) =>
+                    setAnswerDrafts((prev) => ({
+                      ...prev,
+                      [`${issue.userId}:${issue.questionKey}`]: e.target.value,
+                    }))
+                  }
+                  placeholder="Set answer (e.g., Yes)"
+                  className="flex-1 px-3 py-2 rounded-lg border border-amber-200 bg-white text-sm"
+                />
+                <button
+                  onClick={() => void saveAnswer(issue)}
+                  disabled={savingKey === `${issue.userId}:${issue.questionKey}`}
+                  className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white text-sm font-semibold"
+                >
+                  {savingKey === `${issue.userId}:${issue.questionKey}` ? "Saving..." : "Save"}
+                </button>
+              </div>
             </div>
           ))}
           {!loading && (screening?.pending || []).length === 0 ? (

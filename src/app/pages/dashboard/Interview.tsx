@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarCheck2, CircleCheckBig, AlertTriangle, MessagesSquare, RefreshCw } from "lucide-react";
+import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
 
 type Job = {
   id: string;
@@ -11,6 +12,7 @@ type Job = {
 export default function Interview() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const extensionStats = useExtensionPipelineStats();
 
   const load = async () => {
     try {
@@ -29,12 +31,14 @@ export default function Interview() {
   }, []);
 
   const summary = useMemo(() => {
-    const submitted = jobs.filter((j) => j.status === "succeeded").length;
-    const failed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
+    const backendSubmitted = jobs.filter((j) => j.status === "succeeded").length;
+    const backendFailed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
+    const submitted = Math.max(backendSubmitted, extensionStats.applied);
+    const failed = Math.max(backendFailed, extensionStats.failed);
     const inProgress = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
     const interviewReadiness = submitted > 0 ? Math.min(100, 40 + submitted * 10) : 20;
-    return { submitted, failed, inProgress, interviewReadiness };
-  }, [jobs]);
+    return { submitted, failed, inProgress, interviewReadiness, skipped: extensionStats.skipped };
+  }, [jobs, extensionStats]);
 
   const prepChecklist = [
     {
@@ -72,7 +76,7 @@ export default function Interview() {
 
       {loading ? <div className="text-sm text-gray-500">Loading interview readiness...</div> : null}
 
-      <div className="grid md:grid-cols-4 gap-4">
+      <div className="grid md:grid-cols-5 gap-4">
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
           <div className="text-sm text-gray-600">Submitted Jobs</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{summary.submitted}</div>
@@ -84,6 +88,10 @@ export default function Interview() {
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
           <div className="text-sm text-gray-600">Failed Jobs</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{summary.failed}</div>
+        </div>
+        <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
+          <div className="text-sm text-gray-600">Skipped Jobs</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.skipped}</div>
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
           <div className="text-sm text-gray-600">Readiness Score</div>

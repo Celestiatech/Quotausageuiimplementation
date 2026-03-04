@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CareerPilot Extension Panel Preview</title>
+    <link rel="stylesheet" href="../CareerPilotLinkedInExtension/src/panel.css" />
+    <style>
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        display: grid;
+        place-items: center;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+        background:
+          radial-gradient(900px 520px at 18% 18%, rgba(109, 123, 255, 0.28), rgba(109, 123, 255, 0.0) 68%),
+          radial-gradient(860px 520px at 86% 22%, rgba(192, 123, 255, 0.26), rgba(192, 123, 255, 0.0) 70%),
+          radial-gradient(900px 560px at 32% 92%, rgba(56, 215, 255, 0.20), rgba(56, 215, 255, 0.0) 72%),
+          radial-gradient(860px 520px at 82% 86%, rgba(46, 230, 201, 0.18), rgba(46, 230, 201, 0.0) 72%),
+          linear-gradient(180deg, #f9fbff, #ffffff);
+      }
+      /* In-preview: show panel centered rather than fixed bottom-right */
+      #cp-linkedin-copilot-panel {
+        position: relative !important;
+        right: auto !important;
+        bottom: auto !important;
+        max-height: 82vh !important;
+      }
+      #cp-linkedin-copilot-toggle { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="cp-linkedin-copilot-panel">
+      <div class="cp-head">
+        <div class="cp-brand">
+          <div class="cp-orb"></div>
+          <div class="cp-title-wrap">
+            <div class="cp-title">CareerPilot Copilot</div>
+            <div class="cp-sub">LinkedIn job assistant</div>
+          </div>
+        </div>
+        <div class="cp-head-right">
+          <div class="cp-badge cp-run" id="cp-status-badge">Running</div>
+          <div class="cp-window-actions">
+            <button id="cp-minimize" title="Minimize">-</button>
+            <button id="cp-maximize" title="Maximize">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cp-stats">
+        <div class="cp-stat"><span class="cp-stat-k">Applied</span><span id="cp-applied">2</span></div>
+        <div class="cp-stat"><span class="cp-stat-k">Skipped</span><span id="cp-skipped">5</span></div>
+        <div class="cp-stat"><span class="cp-stat-k">Failed</span><span id="cp-failed">0</span></div>
+      </div>
+
+      <div class="cp-quick">
+        <button id="cp-start">Start</button>
+        <button id="cp-pause">Pause</button>
+        <button id="cp-stop">Stop</button>
+        <button id="cp-copy-logs">Copy</button>
+        <button id="cp-clear-logs">Clear</button>
+      </div>
+
+      <div class="cp-now" id="cp-now-card">
+        <div class="cp-now-title" id="cp-now-title">Filling Easy Apply steps.</div>
+        <div class="cp-now-detail" id="cp-now-detail">Opening selected job and checking for Easy Apply.</div>
+        <div class="cp-now-meta" id="cp-now-meta">Applied: 2 | Skipped: 5 | Failed: 0</div>
+      </div>
+
+      <div class="cp-log" id="cp-log" aria-live="polite">
+        <div class="cp-line cp-bot cp-info">
+          <div class="cp-bubble">
+            <div class="cp-msg-head">
+              <span class="cp-sender">Copilot</span>
+              <span class="cp-kind">Update</span>
+              <span class="cp-time">11:39:01</span>
+            </div>
+            <div class="cp-msg-text">Found 7 job cards.</div>
+            <div class="cp-msg-meta">cards: 7 | url: /jobs/search/</div>
+          </div>
+        </div>
+        <div class="cp-line cp-user cp-user">
+          <div class="cp-bubble">
+            <div class="cp-msg-head">
+              <span class="cp-sender">You</span>
+              <span class="cp-kind">Command</span>
+              <span class="cp-time">11:39:05</span>
+            </div>
+            <div class="cp-msg-text">start</div>
+          </div>
+        </div>
+        <div class="cp-line cp-bot cp-warn">
+          <div class="cp-bubble">
+            <div class="cp-msg-head">
+              <span class="cp-sender">Copilot</span>
+              <span class="cp-kind">Warning</span>
+              <span class="cp-time">11:39:12</span>
+            </div>
+            <div class="cp-msg-text">No Apply button on current job view. Moving on.</div>
+          </div>
+        </div>
+        <div class="cp-line cp-bot cp-typing">
+          <div class="cp-bubble">
+            <div class="cp-msg-head">
+              <span class="cp-sender">Copilot</span>
+              <span class="cp-kind">Live</span>
+              <span class="cp-time">11:39:19</span>
+            </div>
+            <div class="cp-msg-text">
+              <span class="cp-dot"></span><span class="cp-dot"></span><span class="cp-dot"></span>
+              Working on next step...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cp-composer">
+        <input id="cp-chat-input" type="text" placeholder="Chat command: start, pause, stop, set city Delhi" />
+        <button id="cp-chat-send">Send</button>
+      </div>
+    </div>
+
+    <script>
+      // Minimal preview interactions
+      const panel = document.getElementById("cp-linkedin-copilot-panel");
+      document.getElementById("cp-minimize").addEventListener("click", () => panel.classList.toggle("cp-minimized"));
+      document.getElementById("cp-maximize").addEventListener("click", () => panel.classList.toggle("cp-maximized"));
+    </script>
+  </body>
+</html>
+

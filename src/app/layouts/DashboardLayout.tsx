@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import {
   LayoutDashboard,
@@ -20,14 +20,33 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
+import { useExtensionPipelineStats } from '../hooks/useExtensionPipelineStats';
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  const extensionStats = useExtensionPipelineStats();
   const onboardingComplete = hasCompletedRequiredOnboarding(user) && Boolean(user?.onboardingCompleted);
+  const dailyCap = Math.max(1, user?.dailyHireCap ?? 3);
+  const mergedDailyUsed = Math.min(
+    dailyCap,
+    Math.max(user?.dailyHireUsed ?? 0, extensionStats.loaded ? extensionStats.appliedToday : 0)
+  );
+  const hireBalance = user?.hireBalance ?? 0;
+  const freeLeft = user?.plan === 'free' ? Math.max(0, 3 - mergedDailyUsed) : 0;
+  const spendableNow = user?.plan === 'pro' ? Number.MAX_SAFE_INTEGER : Math.max(0, hireBalance + freeLeft);
+  const needsHires = spendableNow <= 0;
+
+  useEffect(() => {
+    const handler = () => {
+      refreshUser().catch(() => {});
+    };
+    window.addEventListener('cp:extensionImported', handler);
+    return () => window.removeEventListener('cp:extensionImported', handler);
+  }, [refreshUser]);
 
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
@@ -48,7 +67,16 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#FAFBFC] relative overflow-hidden">
+      {/* Ambient background (shared across all dashboard pages) */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(80rem_60rem_at_20%_10%,rgba(99,102,241,0.18)_0,transparent_55%),radial-gradient(70rem_50rem_at_80%_0%,rgba(139,92,246,0.18)_0,transparent_55%),radial-gradient(60rem_50rem_at_50%_100%,rgba(6,182,212,0.12)_0,transparent_60%)]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,rgba(15,23,42,0.15)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.15)_1px,transparent_1px)] [background-size:48px_48px]"
+      />
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
@@ -59,7 +87,7 @@ export default function DashboardLayout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 ${
+        className={`fixed top-0 left-0 h-full w-64 bg-white/70 backdrop-blur-xl border-r border-white/50 shadow-[0_16px_40px_rgba(15,23,42,0.10)] z-50 transform transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
@@ -67,9 +95,13 @@ export default function DashboardLayout() {
           {/* Logo */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200">
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-                <Briefcase className="w-5 h-5 text-white" />
-              </div>
+              <img
+                src="/logos/android-chrome-192x192.png"
+                alt="CareerPilot"
+                className="w-8 h-8 rounded-lg shadow-sm"
+                loading="eager"
+                decoding="async"
+              />
               <span className="font-bold text-gradient">CareerPilot</span>
             </Link>
             <button
@@ -106,12 +138,12 @@ export default function DashboardLayout() {
             <div className="relative">
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/60 transition-colors"
               >
                 <img
                   src={user?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400'}
                   alt={user?.name}
-                  className="w-10 h-10 rounded-full border-2 border-purple-200"
+                  className="w-10 h-10 rounded-full border border-white/60 shadow-sm"
                 />
                 <div className="flex-1 text-left">
                   <div className="text-sm font-semibold text-gray-900">{user?.name}</div>
@@ -122,7 +154,7 @@ export default function DashboardLayout() {
 
               {/* Profile Dropdown */}
               {profileOpen && (
-                <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div className="absolute bottom-full left-0 right-0 mb-2 bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl shadow-[0_20px_40px_rgba(15,23,42,0.12)] overflow-hidden">
                   <Link
                     to="/dashboard/profile"
                     className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
@@ -154,9 +186,9 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Main Content */}
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 relative z-10">
         {/* Top Bar */}
-        <header className="sticky top-0 z-30 bg-white border-b border-gray-200 px-6 py-4">
+        <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-white/60 px-6 py-4">
           <div className="flex items-center justify-between">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -171,7 +203,7 @@ export default function DashboardLayout() {
                 <input
                   type="text"
                   placeholder="Search jobs, companies, or skills..."
-                  className="w-full pl-12 pr-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                  className="w-full pl-12 pr-4 py-2.5 rounded-xl border border-white/60 bg-white/70 backdrop-blur focus:bg-white focus:border-purple-300 focus:ring-4 focus:ring-purple-100 transition-all outline-none shadow-sm"
                 />
               </div>
             </div>
@@ -183,11 +215,16 @@ export default function DashboardLayout() {
               >
                 <Zap className="w-4 h-4 text-purple-600" />
                 <span className="text-sm font-semibold text-purple-700">
-                  {user?.hireBalance ?? 0} Hires
+                  {user?.plan === 'pro' ? 'Unlimited' : `${hireBalance} Hires`}
                 </span>
                 <span className="text-xs text-purple-600">
-                  {user?.dailyHireUsed ?? 0}/{user?.dailyHireCap ?? 0} today
+                  {user?.plan === 'pro' ? '$3/mo' : `${mergedDailyUsed}/${dailyCap} free today`}
                 </span>
+                {needsHires ? (
+                  <span className="ml-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                    Buy Hires
+                  </span>
+                ) : null}
               </Link>
               <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 <Bell className="w-6 h-6 text-gray-600" />
@@ -199,7 +236,9 @@ export default function DashboardLayout() {
 
         {/* Page Content */}
         <main className="p-6">
-          <Outlet />
+          <div className="mx-auto w-full max-w-7xl">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

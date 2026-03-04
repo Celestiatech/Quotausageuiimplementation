@@ -23,8 +23,8 @@ export default function Home() {
   const features = [
     {
       icon: FileText,
-      title: 'AI Resume Tailor',
-      description: 'Automatically customize resumes for each job with AI optimization',
+      title: 'AI Resume Builder & Tailor',
+      description: 'Build and customize ATS-friendly resumes for each role with AI optimization',
       gradient: 'from-blue-500 to-cyan-500'
     },
     {
@@ -35,8 +35,8 @@ export default function Home() {
     },
     {
       icon: BarChart3,
-      title: 'Application Tracker',
-      description: 'Manage your entire pipeline with our Kanban-style CRM',
+      title: 'Job Application Tracker',
+      description: 'Track every application stage with our Kanban-style job tracker',
       gradient: 'from-green-500 to-emerald-500'
     },
     {
@@ -115,7 +115,9 @@ export default function Home() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.3 }}
               >
-                Land Your Dream{' '}
+                LinkedIn Auto Apply Bot
+                <br />
+                for Your{' '}
                 <span className="text-gradient-animated">
                   Tech Job
                 </span>{' '}
@@ -128,7 +130,7 @@ export default function Home() {
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
               >
-                AI-powered job search platform built for software engineers. Increase your interview callbacks by 3x and land offers 60% faster.
+                Use AI-powered job search automation to apply to LinkedIn jobs automatically, optimize your ATS resume, and manage everything in one job application tracker.
               </motion.p>
 
               <motion.div 
@@ -141,14 +143,14 @@ export default function Home() {
                   onClick={() => navigate('/pricing')}
                   className="group btn-premium px-8 py-4 gradient-primary text-white rounded-xl font-semibold text-lg shadow-premium hover:shadow-premium-lg hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
                 >
-                  Start Free Trial
+                  Start Free (Start Free Trial)
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button 
                   onClick={() => navigate('/how-it-works')}
                   className="px-8 py-4 glass hover:bg-white border-2 border-purple-200 text-gray-700 rounded-xl font-semibold text-lg hover:border-purple-400 hover:shadow-premium transition-all duration-300"
                 >
-                  Watch Demo
+                  See Auto Apply Demo
                 </button>
               </motion.div>
 
@@ -251,7 +253,7 @@ export default function Home() {
                 </span>
               </h2>
               <p className="text-xl text-gray-600 leading-relaxed mb-8">
-                We've helped over 50,000 engineers land their dream roles at top tech companies. Our AI-powered platform automates the tedious parts of job searching so you can focus on what matters.
+                We help software engineers run smarter job search automation with a LinkedIn easy apply workflow, AI resume builder, and interview prep tools.
               </p>
               <div className="space-y-4">
                 {[
@@ -297,10 +299,10 @@ export default function Home() {
               Features
             </div>
             <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
-              Everything you need to succeed
+              Job search automation tools that convert
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Powerful tools designed specifically for software engineers
+              From LinkedIn auto apply to resume optimization and application tracking, built specifically for software engineers
             </p>
           </div>
 
@@ -316,6 +318,43 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
                 <p className="text-gray-600 leading-relaxed">{feature.description}</p>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SEO Content Hub */}
+      <section className="py-20 bg-gradient-to-br from-gray-50 to-purple-50">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-block px-4 py-2 bg-purple-100 rounded-full text-purple-700 font-semibold text-sm mb-5">
+              Popular Guides
+            </div>
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Learn what users search before choosing an auto apply tool
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Read practical guides on LinkedIn Easy Apply, AI job search tools, and finding a better LazyApply alternative.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              { title: 'LazyApply Alternative', to: '/blog/lazyapply-alternative' },
+              { title: 'Best AI Job Search Tools', to: '/blog/best-ai-job-search-tools' },
+              { title: 'LinkedIn Easy Apply: Does It Work?', to: '/blog/linkedin-easy-apply-does-it-work' }
+            ].map((guide) => (
+              <Link
+                key={guide.to}
+                to={guide.to}
+                className="bg-white rounded-2xl p-6 border-2 border-gray-200 hover:border-purple-300 hover:shadow-lg transition-all duration-200"
+              >
+                <h3 className="text-lg font-bold text-gray-900 mb-3">{guide.title}</h3>
+                <p className="text-purple-700 font-semibold inline-flex items-center gap-2">
+                  Read now
+                  <ArrowRight className="w-4 h-4" />
+                </p>
+              </Link>
             ))}
           </div>
         </div>
@@ -377,11 +416,11 @@ export default function Home() {
           </div>
           
           <h2 className="text-4xl lg:text-6xl font-bold text-gray-900 mb-6">
-            Ready to land your dream job?
+            Ready to automate your job search?
           </h2>
           
           <p className="text-xl text-gray-600 mb-12">
-            Join 50,000+ engineers who've transformed their career with CareerPilot. Start your free trial today!
+            Join 50,000+ engineers using CareerPilot as their AI job search tool to auto apply, tailor resumes, and land interviews faster.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -389,7 +428,7 @@ export default function Home() {
               onClick={() => navigate('/pricing')}
               className="px-10 py-5 bg-gradient-to-r from-[#6366F1] via-[#8B5CF6] to-[#A855F7] text-white rounded-xl font-bold text-lg hover:shadow-2xl hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
             >
-              Start Free Trial
+              Start Free (Start Free Trial)
               <ArrowRight className="w-5 h-5" />
             </button>
             <button 

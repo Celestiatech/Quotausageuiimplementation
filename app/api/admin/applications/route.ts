@@ -1,16 +1,18 @@
 import { prisma } from "src/lib/prisma";
 import { requireAdmin } from "src/lib/guards";
-import { ok, handleApiError } from "src/lib/api";
+import { ok, handleApiError, parsePagination } from "src/lib/api";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const authResult = await requireAdmin();
     if ("error" in authResult) return authResult.error;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
-    const [applications, summary] = await Promise.all([
+    const [applications, summary, total] = await Promise.all([
       prisma.application.findMany({
         orderBy: { submittedAt: "desc" },
-        take: 200,
+        skip,
+        take: limit,
         include: {
           user: {
             select: { id: true, name: true, email: true, plan: true },
@@ -24,13 +26,14 @@ export async function GET() {
         by: ["status"],
         _count: { _all: true },
       }),
+      prisma.application.count(),
     ]);
 
     const counts = {
       submitted: 0,
       skipped: 0,
       failed: 0,
-      total: applications.length,
+      total,
     };
 
     for (const row of summary) {
@@ -39,7 +42,16 @@ export async function GET() {
       if (row.status === "failed") counts.failed = row._count._all;
     }
 
-    return ok("Applications fetched", { applications, counts });
+    return ok("Applications fetched", {
+      applications,
+      counts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     return handleApiError(error, "Failed to fetch applications");
   }

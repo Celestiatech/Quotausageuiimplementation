@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
+import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
 
 type Job = {
   id: string;
@@ -11,6 +12,7 @@ type Job = {
 export default function Analytics() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const extensionStats = useExtensionPipelineStats();
 
   const load = async () => {
     try {
@@ -29,9 +31,12 @@ export default function Analytics() {
   }, []);
 
   const stats = useMemo(() => {
-    const total = jobs.length;
-    const submitted = jobs.filter((j) => j.status === "succeeded").length;
-    const failed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
+    const backendTotal = jobs.length;
+    const backendSubmitted = jobs.filter((j) => j.status === "succeeded").length;
+    const backendFailed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
+    const submitted = Math.max(backendSubmitted, extensionStats.applied);
+    const failed = Math.max(backendFailed, extensionStats.failed);
+    const total = Math.max(backendTotal, submitted + failed + extensionStats.skipped);
     const cancelled = jobs.filter((j) => j.status === "cancelled").length;
     const inProgress = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
     const completion = total > 0 ? Math.round(((submitted + failed + cancelled) / total) * 100) : 0;
@@ -49,12 +54,13 @@ export default function Analytics() {
     const byStatus = [
       { label: "Submitted", value: submitted, color: "bg-green-500" },
       { label: "Failed", value: failed, color: "bg-red-500" },
+      { label: "Skipped", value: extensionStats.skipped, color: "bg-amber-500" },
       { label: "Cancelled", value: cancelled, color: "bg-gray-500" },
       { label: "In Progress", value: inProgress, color: "bg-blue-500" },
     ];
 
     return { total, submitted, failed, cancelled, inProgress, completion, successRate, byDay, byStatus };
-  }, [jobs]);
+  }, [jobs, extensionStats]);
 
   const maxDay = Math.max(1, ...stats.byDay.map(([, v]) => v));
 

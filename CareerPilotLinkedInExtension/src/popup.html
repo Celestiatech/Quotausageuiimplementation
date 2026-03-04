@@ -9,9 +9,12 @@
   <body>
     <main class="wrap">
       <header class="head">
-        <div>
-          <h1>CareerPilot Copilot</h1>
-          <p class="sub">LinkedIn job assistant</p>
+        <div class="brand">
+          <img class="brand-logo" src="../icons/icon32.png" alt="CareerPilot" />
+          <div>
+            <h1>CareerPilot Copilot</h1>
+            <p class="sub">LinkedIn job assistant</p>
+          </div>
         </div>
         <span id="statusBadge" class="status-badge idle">Idle</span>
       </header>
@@ -55,23 +58,6 @@
           <button id="pause">Pause</button>
           <button id="stop">Stop</button>
         </div>
-
-        <div class="actions secondary">
-          <button id="openLinkedIn">Open LinkedIn Jobs</button>
-          <button id="openOptions">Settings</button>
-        </div>
-
-        <details id="diagnosticsArea" class="diag-wrap">
-          <summary class="diag-summary">Activity & Logs</summary>
-          <div class="actions secondary">
-            <button id="copyLogs">Copy Debug Logs</button>
-            <button id="clearLogs">Clear Logs</button>
-          </div>
-          <section class="feed-wrap">
-            <div class="feed-title">Live Feed</div>
-            <ul id="feed" class="feed" aria-live="polite"></ul>
-          </section>
-        </details>
       </section>
 
       <p id="status" class="status"></p>

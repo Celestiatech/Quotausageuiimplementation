@@ -1,13 +1,14 @@
 import { prisma } from "src/lib/prisma";
 import { requireAdmin } from "src/lib/guards";
-import { ok, handleApiError } from "src/lib/api";
+import { ok, handleApiError, parsePagination } from "src/lib/api";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const authResult = await requireAdmin();
     if ("error" in authResult) return authResult.error;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 20, maxLimit: 100 });
 
-    const [totals, txnsByType, topBalances, topSpent] = await Promise.all([
+    const [totals, txnsByType, topBalances, topSpent, usersTotal] = await Promise.all([
       prisma.user.aggregate({
         _sum: {
           hireBalance: true,
@@ -23,7 +24,8 @@ export async function GET() {
       prisma.user.findMany({
         where: { role: "user" },
         orderBy: { hireBalance: "desc" },
-        take: 20,
+        skip,
+        take: limit,
         select: {
           id: true,
           name: true,
@@ -37,7 +39,8 @@ export async function GET() {
       prisma.user.findMany({
         where: { role: "user" },
         orderBy: { hireSpent: "desc" },
-        take: 20,
+        skip,
+        take: limit,
         select: {
           id: true,
           name: true,
@@ -48,6 +51,7 @@ export async function GET() {
           hirePurchased: true,
         },
       }),
+      prisma.user.count({ where: { role: "user" } }),
     ]);
 
     const estimatedRevenueInr = Math.max(0, totals._sum.hirePurchased || 0);
@@ -62,6 +66,12 @@ export async function GET() {
       estimatedRevenueInr,
       topBalances,
       topSpent,
+      pagination: {
+        page,
+        limit,
+        total: usersTotal,
+        totalPages: Math.ceil(usersTotal / limit),
+      },
     });
   } catch (error) {
     return handleApiError(error, "Failed to fetch wallet metrics");

@@ -273,15 +273,22 @@ function renderFeed(logs) {
   feed.scrollTop = feed.scrollHeight;
 }
 
-function setStats(state) {
+function modeLine(settings) {
+  const s = settings || {};
+  if (s.dryRun) return "Mode: Dry Run (no submit).";
+  if (s.autoSubmit) return "Mode: Auto Submit (will click Submit).";
+  return "Mode: Manual Submit (fills forms; submit manually).";
+}
+
+function setStats(state, settings) {
   document.getElementById("applied").textContent = String(state?.applied || 0);
   document.getElementById("skipped").textContent = String(state?.skipped || 0);
   document.getElementById("failed").textContent = String(state?.failed || 0);
   updateStatusBadge(state || {});
   const now = deriveNowCard(state || {});
   document.getElementById("nowTitle").textContent = now.title;
-  document.getElementById("nowDetail").textContent = now.detail;
-  renderFeed(state?.logs || []);
+  document.getElementById("nowDetail").textContent = `${modeLine(settings)} ${now.detail}`;
+  // Popup is intentionally minimal; live feed is available in the floating panel.
 }
 
 async function refresh() {
@@ -300,8 +307,90 @@ async function refresh() {
     setStatus("Sign in to CareerPilot to enable run controls.", "warn");
     return;
   }
-  setStats(boot.state || {});
+  setStats(boot.state || {}, loadedSettings?.settings || {});
   setStatus(boot.state?.running ? "Run active." : boot.state?.paused ? "Run paused." : "Ready.");
+}
+
+function isLinkedInUrl(url) {
+  try {
+    const u = new URL(String(url || ""));
+    return u.hostname === "www.linkedin.com" || u.hostname.endsWith(".linkedin.com");
+  } catch {
+    return false;
+  }
+}
+
+function isLinkedInJobsUrl(url) {
+  try {
+    const u = new URL(String(url || ""));
+    return isLinkedInUrl(url) && u.pathname.startsWith("/jobs/");
+  } catch {
+    return false;
+  }
+}
+
+function waitForTabComplete(tabId, timeoutMs = 20000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(false);
+    }, timeoutMs);
+
+    const onUpdated = (id, info) => {
+      if (done) return;
+      if (id !== tabId) return;
+      if (info.status === "complete") {
+        done = true;
+        cleanup();
+        resolve(true);
+      }
+    };
+
+    function cleanup() {
+      clearTimeout(timer);
+      try {
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      chrome.tabs.onUpdated.addListener(onUpdated);
+    } catch {
+      clearTimeout(timer);
+      resolve(false);
+    }
+  });
+}
+
+async function focusOrOpenLinkedInJobs() {
+  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  // Prefer reusing the active tab if it's already on LinkedIn.
+  if (active?.id && isLinkedInUrl(active.url)) {
+    if (!isLinkedInJobsUrl(active.url)) {
+      await chrome.tabs.update(active.id, { url: JOBS_SEARCH_URL, active: true });
+      await waitForTabComplete(active.id);
+    }
+    return active.id;
+  }
+
+  // Otherwise, activate an existing LinkedIn Jobs tab if present.
+  const tabs = await chrome.tabs.query({ url: "https://www.linkedin.com/*" });
+  const jobsTab = tabs.find((t) => t?.id && isLinkedInJobsUrl(t.url)) || null;
+  if (jobsTab?.id) {
+    await chrome.tabs.update(jobsTab.id, { active: true });
+    return jobsTab.id;
+  }
+
+  // Fallback: create a new Jobs tab.
+  const created = await chrome.tabs.create({ url: JOBS_SEARCH_URL, active: true });
+  if (created?.id) await waitForTabComplete(created.id);
+  return created?.id || null;
 }
 
 document.getElementById("start").addEventListener("click", async () => {
@@ -309,13 +398,14 @@ document.getElementById("start").addEventListener("click", async () => {
     setStatus("Sign in to CareerPilot first.", "warn");
     return;
   }
-  const tabs = await chrome.tabs.query({ url: "https://www.linkedin.com/*" });
-  if (!tabs.length) {
-    await chrome.tabs.create({ url: JOBS_SEARCH_URL });
-  }
+  await focusOrOpenLinkedInJobs();
   const started = await sendMessage({ type: "CP_START", forceRestart: true });
   if (!started.ok) {
-    setStatus(started.error || "Failed to start run", "error");
+    if (started.errorCode === "LIVE_ACK_REQUIRED") {
+      setStatus("Auto-submit needs acknowledgement. Open the LinkedIn Copilot panel and type: ack live", "warn");
+    } else {
+      setStatus(started.error || "Failed to start run", "error");
+    }
     return;
   }
   await refresh();
@@ -342,41 +432,11 @@ document.getElementById("stop").addEventListener("click", async () => {
   setStatus("Run stopped.");
 });
 
-document.getElementById("openLinkedIn").addEventListener("click", async () => {
-  await chrome.tabs.create({ url: JOBS_SEARCH_URL });
-  setStatus("Opened LinkedIn Jobs.");
-});
-
-document.getElementById("openOptions").addEventListener("click", async () => {
-  await chrome.runtime.openOptionsPage();
-  setStatus("Opened settings.");
-});
-
 document.getElementById("accountAction").addEventListener("click", async () => {
   const action = document.getElementById("accountAction").dataset.action || "login";
   const url = action === "dashboard" ? buildPortalUrl("/dashboard") : buildPortalUrl("/login");
   await chrome.tabs.create({ url });
   setStatus(action === "dashboard" ? "Opened dashboard." : "Opened login.");
-});
-
-document.getElementById("copyLogs").addEventListener("click", async () => {
-  const res = await sendMessage({ type: "CP_GET_LOG_EXPORT" });
-  if (!res.ok || !res.logsJson) {
-    setStatus("Failed to export logs", "error");
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(res.logsJson);
-    setStatus("Debug logs copied.");
-  } catch {
-    setStatus("Clipboard failed", "error");
-  }
-});
-
-document.getElementById("clearLogs").addEventListener("click", async () => {
-  await sendMessage({ type: "CP_CLEAR_LOGS" });
-  await refresh();
-  setStatus("Logs cleared.");
 });
 
 refresh().catch(() => setStatus("Unavailable", "error"));

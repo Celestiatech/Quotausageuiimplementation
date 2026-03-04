@@ -106,6 +106,27 @@ function labelFromQuestionKey(questionKey: string) {
     .join(" ");
 }
 
+function pickFirstNonEmpty(answers: Record<string, string>, keys: string[]) {
+  for (const key of keys) {
+    const direct = String(answers[key] || "").trim();
+    if (direct) return direct;
+
+    // Back-compat: some saved keys end up in a label-like form.
+    const normalized = normalizeLabel(key);
+    const viaNormalized = String((answers as any)[normalized] || "").trim();
+    if (viaNormalized) return viaNormalized;
+  }
+  return "";
+}
+
+function parseSearchTermsInput(value: string) {
+  return String(value || "")
+    .split(/[,\n;|]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 25);
+}
+
 export default function Jobs() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -369,6 +390,31 @@ export default function Jobs() {
     try {
       setSyncingSettings(true);
       setError("");
+
+      // These preferences are stored as screening answers on the site, but the extension expects them as settings.
+      const preferredSearchLocation = pickFirstNonEmpty(siteScreeningAnswers, [
+        "cp_pref_search_location",
+        "careerpilot_preference_search_location",
+      ]);
+      const preferredSearchTermsRaw = pickFirstNonEmpty(siteScreeningAnswers, [
+        "cp_pref_search_terms",
+        "careerpilot_preference_search_terms",
+      ]);
+      const preferredSearchTerms = parseSearchTermsInput(preferredSearchTermsRaw);
+      const preferredYearsOfExperience = pickFirstNonEmpty(siteScreeningAnswers, [
+        "cp_pref_years_of_experience",
+        "careerpilot_preference_years_of_experience",
+      ]);
+      const preferredRequireVisa = pickFirstNonEmpty(siteScreeningAnswers, [
+        "cp_pref_require_visa",
+        "careerpilot_preference_need_visa_sponsorship",
+        "careerpilot_preference_require_visa",
+      ]);
+      const preferredUsCitizenship = pickFirstNonEmpty(siteScreeningAnswers, [
+        "cp_pref_us_citizenship",
+        "careerpilot_preference_us_work_authorization",
+      ]);
+
       const screeningAnswersForSync: Record<string, string> = {};
       for (const [rawKey, rawValue] of Object.entries(siteScreeningAnswers)) {
         const answer = String(rawValue || "").trim();
@@ -379,18 +425,21 @@ export default function Jobs() {
       }
       const settingsPayload = {
         currentCity: user?.currentCity || "",
-        searchLocation: user?.currentCity || "",
+        searchLocation: preferredSearchLocation || user?.currentCity || "",
+        searchTerms: preferredSearchTerms,
         contactEmail: user?.email || "",
         phoneNumber: derivePhoneNumber(user?.phone),
         phoneCountryCode: derivePhoneCountryCode(user?.phone),
         marketingConsent: "No",
-        requireVisa: "No",
+        requireVisa: preferredRequireVisa || "No",
+        usCitizenship: preferredUsCitizenship || "",
+        yearsOfExperienceAnswer: preferredYearsOfExperience || "",
         easyApplyOnly: true,
-        debugMode: true,
+        debugMode: false,
         dryRun: false,
         autoSubmit: true,
         autoResumeOnAnswer: true,
-        maxApplicationsPerRun: 3,
+        maxApplicationsPerRun: 200,
         maxSkipsPerRun: 50,
         blacklistedCompanies: [],
         badWords: [],

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Zap, Clock, Lock, TrendingUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useExtensionPipelineStats } from '../hooks/useExtensionPipelineStats';
+import { useNavigate } from "react-router";
 
 interface QuotaUsageProps {
   quotaResetTime: Date;
@@ -9,17 +11,31 @@ interface QuotaUsageProps {
 
 export function QuotaUsage({ quotaResetTime, onUpgradeClick }: QuotaUsageProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [timeLeft, setTimeLeft] = useState('');
+  const extensionStats = useExtensionPipelineStats();
 
-  const used = user?.dailyHireUsed ?? 0;
+  const baseUsed = user?.dailyHireUsed ?? 0;
   const total = Math.max(1, user?.dailyHireCap ?? 3);
+  const extensionUsedToday = extensionStats.loaded ? extensionStats.appliedToday : 0;
+  const used = Math.min(total, Math.max(baseUsed, extensionUsedToday));
   const balance = user?.hireBalance ?? 0;
   const dailyRemaining = Math.max(0, total - used);
   const freeLeft = user?.plan === 'free' ? Math.max(0, 3 - used) : 0;
-  const spendableNow = Math.min(dailyRemaining, balance + freeLeft);
+  const spendableNow = user?.plan === 'pro' ? Number.MAX_SAFE_INTEGER : Math.max(0, balance + freeLeft);
   const isLocked = spendableNow <= 0;
-  const lockReason = dailyRemaining <= 0 ? 'daily_cap' : 'wallet_empty';
-  const percentage = Math.min(100, (used / total) * 100);
+  const lockReason =
+    user?.plan === 'free' && freeLeft <= 0
+      ? 'daily_cap'
+      : 'wallet_empty';
+  const percentage = user?.plan === 'pro' ? 0 : Math.min(100, (used / total) * 100);
+  const totalLabel = user?.plan === 'pro' ? 'Unlimited' : String(total);
+  const planLabel =
+    user?.plan === 'pro'
+      ? 'Pro ($3/mo)'
+      : balance > 0
+      ? 'Custom (Top-up)'
+      : 'Free';
 
   useEffect(() => {
     const updateTimer = () => {
@@ -61,7 +77,7 @@ export function QuotaUsage({ quotaResetTime, onUpgradeClick }: QuotaUsageProps) 
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-[#030213]">Hires Budget</h3>
-                <p className="text-sm text-gray-600">1 Hire = 1 Auto-Apply</p>
+                <p className="text-sm text-gray-600">{planLabel} · 1 Hire = 1 Auto-Apply</p>
               </div>
             </div>
           </div>
@@ -72,9 +88,9 @@ export function QuotaUsage({ quotaResetTime, onUpgradeClick }: QuotaUsageProps) 
                 <div className="flex items-baseline gap-1">
                   <span className="text-4xl font-bold text-[#030213]">{used}</span>
                   <span className="text-2xl text-gray-400">/</span>
-                  <span className="text-2xl font-semibold text-gray-600">{total}</span>
+                  <span className="text-2xl font-semibold text-gray-600">{totalLabel}</span>
                 </div>
-                <p className="text-sm text-gray-600 mt-1">hires used today</p>
+                <p className="text-sm text-gray-600 mt-1">{user?.plan === 'pro' ? 'applies today' : 'free used today'}</p>
               </div>
 
               {isLocked && (
@@ -125,10 +141,16 @@ export function QuotaUsage({ quotaResetTime, onUpgradeClick }: QuotaUsageProps) 
                 </p>
               </div>
               <button
-                onClick={onUpgradeClick}
+                onClick={() => navigate("/dashboard/billing")}
                 className="w-full px-4 py-3 bg-gradient-to-r from-[#0EA5E9] to-[#06B6D4] text-white rounded-lg font-semibold hover:shadow-lg transition-all"
               >
-                Add Hires
+                Buy Hires
+              </button>
+              <button
+                onClick={onUpgradeClick}
+                className="w-full px-4 py-3 bg-white border border-gray-200 text-gray-900 rounded-lg font-semibold hover:shadow-lg transition-all"
+              >
+                Upgrade Plan
               </button>
             </div>
           ) : (
@@ -139,16 +161,16 @@ export function QuotaUsage({ quotaResetTime, onUpgradeClick }: QuotaUsageProps) 
                   <div>
                     <p className="text-sm text-gray-700">
                       <span className="font-medium text-[#030213]">{spendableNow} spendable now</span>.
-                      Daily remaining: {dailyRemaining}. Wallet balance: {balance} Hires.
+                      Free left today: {freeLeft}. Wallet balance: {user?.plan === 'pro' ? 'Unlimited' : `${balance} Hires`}.
                     </p>
                   </div>
                 </div>
               </div>
               <button
-                onClick={onUpgradeClick}
+                onClick={() => navigate("/dashboard/billing")}
                 className="w-full px-4 py-3 bg-gradient-to-r from-[#0EA5E9] to-[#06B6D4] text-white rounded-lg font-semibold hover:shadow-lg transition-all"
               >
-                Add Hires
+                Buy Hires
               </button>
             </div>
           )}

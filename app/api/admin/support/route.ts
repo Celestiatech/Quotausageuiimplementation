@@ -1,17 +1,20 @@
 import { prisma } from "src/lib/prisma";
 import { requireAdmin } from "src/lib/guards";
-import { ok, handleApiError } from "src/lib/api";
+import { ok, handleApiError, parsePagination } from "src/lib/api";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const authResult = await requireAdmin();
     if ("error" in authResult) return authResult.error;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
-    const [failedEmails, failedJobs, recentAudit] = await Promise.all([
+    const [failedEmails, failedJobs, recentAudit, failedEmailsTotal, failedJobsTotal, auditLogsTotal] =
+      await Promise.all([
       prisma.emailLog.findMany({
         where: { status: "failed" },
         orderBy: { createdAt: "desc" },
-        take: 100,
+        skip,
+        take: limit,
       }),
       prisma.autoApplyJob.findMany({
         where: { status: { in: ["failed", "dead_letter"] } },
@@ -19,12 +22,17 @@ export async function GET() {
           user: { select: { id: true, name: true, email: true } },
         },
         orderBy: { updatedAt: "desc" },
-        take: 100,
+        skip,
+        take: limit,
       }),
       prisma.auditLog.findMany({
         orderBy: { createdAt: "desc" },
-        take: 100,
+        skip,
+        take: limit,
       }),
+      prisma.emailLog.count({ where: { status: "failed" } }),
+      prisma.autoApplyJob.count({ where: { status: { in: ["failed", "dead_letter"] } } }),
+      prisma.auditLog.count(),
     ]);
 
     return ok("Support incidents fetched", {
@@ -33,6 +41,20 @@ export async function GET() {
         failedJobs,
       },
       auditLogs: recentAudit,
+      pagination: {
+        page,
+        limit,
+        totals: {
+          failedEmails: failedEmailsTotal,
+          failedJobs: failedJobsTotal,
+          auditLogs: auditLogsTotal,
+        },
+        totalPages: {
+          failedEmails: Math.ceil(failedEmailsTotal / limit),
+          failedJobs: Math.ceil(failedJobsTotal / limit),
+          auditLogs: Math.ceil(auditLogsTotal / limit),
+        },
+      },
     });
   } catch (error) {
     return handleApiError(error, "Failed to fetch support incidents");

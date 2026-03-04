@@ -100,9 +100,6 @@ export async function processAutoApplyJob(jobId: string) {
       },
     });
     if (!reserved.ok) {
-      if (reserved.reason === "DAILY_CAP_REACHED") {
-        throw new Error("Daily Hires cap reached");
-      }
       throw new Error("Insufficient Hires balance");
     }
     reservedCount = plannedMaxApplies;

@@ -51,12 +51,12 @@ function setForm(settings) {
   setChecked("enableBackendSync", settings.enableBackendSync);
   setChecked("liveModeAcknowledged", settings.liveModeAcknowledged);
 
-  setValue("maxApplicationsPerRun", String(settings.maxApplicationsPerRun || 3));
+  setValue("maxApplicationsPerRun", String(settings.maxApplicationsPerRun ?? 200));
   setValue("maxSkipsPerRun", String(settings.maxSkipsPerRun || 50));
   setValue("switchNumber", String(settings.switchNumber || 30));
 
   setChecked("easyApplyOnly", settings.easyApplyOnly ?? true);
-  setChecked("debugMode", settings.debugMode ?? true);
+  setChecked("debugMode", settings.debugMode ?? false);
   setChecked("dryRun", settings.dryRun ?? true);
   setChecked("autoSubmit", settings.autoSubmit ?? false);
   setChecked("autoResumeOnAnswer", settings.autoResumeOnAnswer ?? true);
@@ -140,7 +140,7 @@ function readForm() {
     enableBackendSync: false,
     liveModeAcknowledged: getChecked("liveModeAcknowledged"),
 
-    maxApplicationsPerRun: Math.max(1, Number(getValue("maxApplicationsPerRun") || 3)),
+    maxApplicationsPerRun: Math.max(1, Number(getValue("maxApplicationsPerRun") || 200)),
     maxSkipsPerRun: Math.max(1, Number(getValue("maxSkipsPerRun") || 50)),
     switchNumber: Math.max(1, Number(getValue("switchNumber") || 30)),
 

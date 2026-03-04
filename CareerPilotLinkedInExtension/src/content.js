@@ -9,6 +9,12 @@ const MANUAL_ANSWER_POLL_MS = 1200;
 const JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search/?f_AL=true";
 const PANEL_PREFS_KEY = "cpPanelPrefs";
 const RUN_SEEN_STORAGE_KEY = "cpRunSeenSnapshot";
+const JOB_OUTCOME_CACHE_KEY = "cpSeenJobOutcomeCache";
+const APPLIED_JOB_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const ALREADY_APPLIED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const NO_APPLY_TTL_MS = 12 * 60 * 60 * 1000;
+const GENERIC_SKIP_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_JOB_OUTCOME_CACHE_ITEMS = 8000;
 
 let panelEl = null;
 let runningLoop = false;
@@ -16,11 +22,15 @@ let runStats = { applied: 0, skipped: 0, failed: 0 };
 let preparedRun = false;
 let extensionContextAlive = true;
 let debugBadgeEl = null;
+let debugUiEnabled = false;
 let runSeenJobKeys = new Set();
 let runSearchTermCursor = 0;
 let runSearchTermSuccessCount = 0;
 let lastRunStartedAt = null;
 let resumeChoiceCache = new Map();
+let lastBootstrapSettings = {};
+let pendingLiveAckStart = false;
+let lastPortalQuota = null;
 let currentJobContext = {
   title: "",
   company: "",
@@ -39,7 +49,41 @@ let panelPrefs = {
   maximized: false
 };
 
+function wantsDebugUiFromUrl() {
+  try {
+    const v = new URLSearchParams(window.location.search || "").get("cpDebug");
+    return v === "1" || v === "true";
+  } catch {
+    return false;
+  }
+}
+
+function wantsDebugUiFromLocalStorage() {
+  try {
+    return localStorage.getItem("cpDebugUi") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function removeDebugBadge() {
+  try {
+    if (debugBadgeEl && debugBadgeEl.parentNode) debugBadgeEl.remove();
+  } catch {
+    // ignore
+  } finally {
+    debugBadgeEl = null;
+  }
+}
+
+function setDebugUiEnabled(enabled) {
+  debugUiEnabled = Boolean(enabled);
+  if (panelEl) panelEl.classList.toggle("cp-debug-ui", debugUiEnabled);
+  if (!debugUiEnabled) removeDebugBadge();
+}
+
 function ensureDebugBadge() {
+  if (!debugUiEnabled) return null;
   if (debugBadgeEl && document.body.contains(debugBadgeEl)) return debugBadgeEl;
   const el = document.createElement("div");
   el.id = "cp-panel-debug-badge";
@@ -74,8 +118,10 @@ function ensureDebugBadge() {
 }
 
 function logPanelDebug(reason = "state") {
+  if (!debugUiEnabled) return;
   try {
     const badge = ensureDebugBadge();
+    if (!badge) return;
     if (!panelEl) {
       badge.textContent = `CP: panel missing (${reason})`;
       console.debug("[CP]", reason, "panel missing");
@@ -156,6 +202,89 @@ function markJobSeen(jobKey) {
   persistRunSeenJobKeys(lastRunStartedAt);
 }
 
+function normalizeJobOutcomeCacheEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const jobKey = String(entry.jobKey || "").trim();
+  if (!jobKey) return null;
+  return {
+    jobKey,
+    status: String(entry.status || "SEEN").trim().toUpperCase(),
+    reasonCode: String(entry.reasonCode || "").trim().toUpperCase(),
+    ts: Number(entry.ts || Date.now()),
+    expiresAt: Number(entry.expiresAt || Date.now()),
+  };
+}
+
+function loadJobOutcomeCache() {
+  try {
+    const raw = localStorage.getItem(JOB_OUTCOME_CACHE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw);
+    const items = Array.isArray(parsed) ? parsed : [];
+    const now = Date.now();
+    const map = new Map();
+    for (const item of items) {
+      const normalized = normalizeJobOutcomeCacheEntry(item);
+      if (!normalized) continue;
+      if (normalized.expiresAt <= now) continue;
+      map.set(normalized.jobKey, normalized);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function persistJobOutcomeCache(cacheMap) {
+  try {
+    const items = Array.from(cacheMap.values())
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, MAX_JOB_OUTCOME_CACHE_ITEMS);
+    localStorage.setItem(JOB_OUTCOME_CACHE_KEY, JSON.stringify(items));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function getJobOutcomeTtlMs(status, reasonCode = "") {
+  const s = String(status || "").toUpperCase();
+  const reason = String(reasonCode || "").toUpperCase();
+  if (s === "APPLIED") return APPLIED_JOB_TTL_MS;
+  if (reason === "ALREADY_APPLIED") return ALREADY_APPLIED_TTL_MS;
+  if (reason === "NO_APPLY_BUTTON" || reason === "EXTERNAL_APPLY_ONLY") return NO_APPLY_TTL_MS;
+  return GENERIC_SKIP_TTL_MS;
+}
+
+function recordJobOutcomeCache(jobKey, status, reasonCode = "") {
+  const key = String(jobKey || "").trim();
+  if (!key) return;
+  const now = Date.now();
+  const ttlMs = getJobOutcomeTtlMs(status, reasonCode);
+  const cache = loadJobOutcomeCache();
+  cache.set(key, {
+    jobKey: key,
+    status: String(status || "SEEN").toUpperCase(),
+    reasonCode: String(reasonCode || "").toUpperCase(),
+    ts: now,
+    expiresAt: now + ttlMs,
+  });
+  persistJobOutcomeCache(cache);
+}
+
+function getCachedJobOutcome(jobKey) {
+  const key = String(jobKey || "").trim();
+  if (!key) return null;
+  const cache = loadJobOutcomeCache();
+  const found = cache.get(key);
+  if (!found) return null;
+  if (found.expiresAt <= Date.now()) {
+    cache.delete(key);
+    persistJobOutcomeCache(cache);
+    return null;
+  }
+  return found;
+}
+
 function clearSeenJobsForRun(runStartedAt = "") {
   runSeenJobKeys = new Set();
   persistRunSeenJobKeys(runStartedAt);
@@ -222,7 +351,8 @@ function applyPanelLayout() {
   } else {
     panelEl.style.width = "min(420px, calc(100vw - 22px))";
   }
-  panelEl.style.height = "";
+  // Give the flex column a definite height so the log can shrink and the composer stays visible.
+  panelEl.style.height = "78vh";
   panelEl.style.maxHeight = "78vh";
   logPanelDebug("apply-layout");
 }
@@ -323,6 +453,18 @@ function sendMessage(message) {
       resolve({ ok: false, error: msg });
     }
   });
+}
+
+async function reportProgress() {
+  const response = await sendMessage({ type: "CP_PROGRESS", ...runStats });
+  if (response?.ok) return true;
+  const code = String(response?.errorCode || "").toUpperCase();
+  if (code === "DAILY_CAP_REACHED") {
+    await logLine("Daily cap reached (3/day). Stopping run.", "warn");
+    await sendMessage({ type: "CP_STOP" });
+    return false;
+  }
+  return true;
 }
 
 window.addEventListener("unhandledrejection", (event) => {
@@ -727,16 +869,58 @@ function isAlreadyAppliedCard(card) {
   return footerText.includes("applied");
 }
 
+function extractLinkedInJobIdFromUrl(url) {
+  const raw = String(url || "");
+  if (!raw) return "";
+  const viewMatch = raw.match(/\/jobs\/view\/(\d+)/);
+  if (viewMatch?.[1]) return viewMatch[1];
+  const currentJobIdMatch = raw.match(/[?&]currentJobId=(\d+)/);
+  if (currentJobIdMatch?.[1]) return currentJobIdMatch[1];
+  const jobIdMatch = raw.match(/[?&]jobId=(\d+)/);
+  if (jobIdMatch?.[1]) return jobIdMatch[1];
+  return "";
+}
+
+function extractLinkedInJobIdFromEntityUrn(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  // Examples:
+  // urn:li:jobPosting:4375945722
+  // urn:li:fsd_jobPosting:4375945722
+  const m = raw.match(/jobPosting:(\d+)/i);
+  if (m?.[1]) return String(m[1]);
+  return "";
+}
+
 function getJobKeyFromCard(card) {
-  const idHolder = card?.closest?.("[data-occludable-job-id]") || card;
-  const explicit = idHolder?.getAttribute?.("data-occludable-job-id");
-  if (explicit) return explicit;
+  // Prefer stable LinkedIn job IDs; do not fall back to title (causes duplicate opens).
   const anchor = getCardAnchor(card);
   const href = String(anchor?.href || "");
-  const match = href.match(/\/jobs\/view\/(\d+)/);
-  if (match?.[1]) return match[1];
-  const title = normalizeLabel(anchor?.textContent || card?.textContent || "");
-  return title.slice(0, 140);
+  const fromHref = extractLinkedInJobIdFromUrl(href);
+  if (fromHref) return fromHref;
+
+  const anyViewAnchor = card?.querySelector?.("a[href*='/jobs/view/']");
+  const anyHref = String(anyViewAnchor?.href || "");
+  const fromAnyHref = extractLinkedInJobIdFromUrl(anyHref);
+  if (fromAnyHref) return fromAnyHref;
+
+  const urnCandidates = [
+    anchor?.getAttribute?.("data-entity-urn"),
+    card?.getAttribute?.("data-entity-urn"),
+    card?.querySelector?.("[data-entity-urn]")?.getAttribute?.("data-entity-urn"),
+    card?.getAttribute?.("data-job-id"),
+    card?.querySelector?.("[data-job-id]")?.getAttribute?.("data-job-id"),
+  ].filter(Boolean);
+  for (const urn of urnCandidates) {
+    const id = extractLinkedInJobIdFromEntityUrn(urn) || extractLinkedInJobIdFromUrl(urn);
+    if (id) return id;
+  }
+
+  const idHolder = card?.closest?.("[data-occludable-job-id]") || card;
+  const explicit = String(idHolder?.getAttribute?.("data-occludable-job-id") || "").trim();
+  if (explicit && /^\d+$/.test(explicit)) return explicit;
+
+  return "";
 }
 
 function parseListSetting(value) {
@@ -1282,6 +1466,13 @@ async function rotateSearchTerm(settings) {
 }
 
 async function gotoNextResultsPage(settings) {
+  // Pagination is often not clickable until scrolled into view.
+  try {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    await sleep(900);
+  } catch {
+    // ignore
+  }
   const currentPageButton = getBySelectorList([
     ".artdeco-pagination__indicator--number.active button",
     ".artdeco-pagination__indicator--number.selected button",
@@ -1303,7 +1494,14 @@ async function gotoNextResultsPage(settings) {
       "button.artdeco-pagination__button--next"
     ]);
   }
-  if (!nextButton || nextButton.disabled) return false;
+  if (!nextButton || nextButton.disabled) {
+    await debugLog(settings, "Next page button not available", {
+      currentPage: Number.isFinite(currentPage) ? currentPage : null,
+      disabled: Boolean(nextButton?.disabled),
+      url: window.location.href
+    });
+    return false;
+  }
 
   const clicked = await resilientClick(nextButton, "Next page");
   if (!clicked) return false;
@@ -1653,17 +1851,39 @@ async function handleChatCommand(input) {
   await userChat(raw);
   const cmd = normalizeLabel(raw);
 
-  if (cmd === "start live" || cmd === "live start" || cmd === "/live") {
+  if (cmd === "ack live" || cmd === "i acknowledge" || cmd === "acknowledge") {
+    pendingLiveAckStart = false;
     await sendMessage({
       type: "CP_SAVE_SETTINGS",
-      settings: { dryRun: false, autoSubmit: true, liveModeAcknowledged: true }
+      settings: { liveModeAcknowledged: true, dryRun: false, autoSubmit: true }
     });
     const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
     if (!startRes?.ok) {
-      await botChat(startRes?.error || "Live run start failed. Check settings.", "error");
+      await botChat(startRes?.error || "Could not start auto-submit run.", "error");
       return;
     }
-    await botChat("Live run started. Auto-submit is ON.");
+    await botChat("Acknowledged. Auto-submit is ON.", "warn");
+    return;
+  }
+
+  if (cmd === "start live" || cmd === "live start" || cmd === "/live") {
+    const boot = await getBootstrap();
+    if (!boot?.settings?.liveModeAcknowledged) {
+      pendingLiveAckStart = true;
+      await botChat(
+        "Auto-submit needs one-time acknowledgement. Type: ack live",
+        "warn"
+      );
+      return;
+    }
+
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { dryRun: false, autoSubmit: true } });
+    const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
+    if (!startRes?.ok) {
+      await botChat(startRes?.error || "Auto-submit run start failed.", "error");
+      return;
+    }
+    await botChat("Auto-submit run started. Auto-submit is ON.", "warn");
     return;
   }
 
@@ -1673,6 +1893,10 @@ async function handleChatCommand(input) {
       await botChat("Dry-run is ON: I will not click Submit. Use: start live", "warn");
     } else if (!boot?.settings?.autoSubmit) {
       await botChat("Auto-submit is OFF. I will fill forms, but submit may need manual click.", "warn");
+    } else if (!boot?.settings?.liveModeAcknowledged) {
+      pendingLiveAckStart = true;
+      await botChat("Auto-submit is ON but acknowledgement is missing. Type: ack live", "warn");
+      return;
     }
     const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
     if (!startRes?.ok) {
@@ -1732,12 +1956,19 @@ async function handleChatCommand(input) {
     await botChat("Dry run enabled.");
     return;
   }
-  if (cmd === "dry run off" || cmd === "live mode") {
-    await sendMessage({
-      type: "CP_SAVE_SETTINGS",
-      settings: { dryRun: false, autoSubmit: true, liveModeAcknowledged: true }
-    });
-    await botChat("Live mode enabled. Auto-submit is ON.");
+  if (cmd === "dry run off" || cmd === "manual mode" || cmd === "manual submit") {
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { dryRun: false, autoSubmit: false } });
+    await botChat("Dry run disabled. Auto-submit is OFF (manual submit).");
+    return;
+  }
+  if (cmd === "auto submit on" || cmd === "autosubmit on") {
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { dryRun: false, autoSubmit: true } });
+    await botChat("Auto-submit ON. If blocked, enable live mode acknowledgement in extension settings.", "warn");
+    return;
+  }
+  if (cmd === "auto submit off" || cmd === "autosubmit off") {
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { autoSubmit: false } });
+    await botChat("Auto-submit OFF (manual submit).");
     return;
   }
   if (cmd === "export logs") {
@@ -1760,17 +1991,34 @@ function ensurePanel() {
   if (existing) {
     existing.classList.remove("cp-hidden");
     panelEl = existing;
+    panelEl.classList.toggle("cp-debug-ui", debugUiEnabled);
     applyPanelLayout();
     logPanelDebug("ensure-existing");
     return;
   }
   loadPanelPrefs();
+  // Debug UI should be off by default; allow opt-in via URL (?cpDebug=1) or localStorage (cpDebugUi=1).
+  setDebugUiEnabled(wantsDebugUiFromUrl() || wantsDebugUiFromLocalStorage());
   ensureDebugBadge();
 
   const toggle = document.createElement("button");
   toggle.id = TOGGLE_ID;
-  toggle.textContent = "CP";
+  toggle.textContent = "";
   toggle.title = "CareerPilot Copilot";
+  toggle.setAttribute("aria-label", "CareerPilot Copilot");
+  try {
+    const img = document.createElement("img");
+    img.src = chrome.runtime.getURL("icons/icon32.png");
+    img.alt = "";
+    img.width = 26;
+    img.height = 26;
+    img.style.display = "block";
+    img.style.margin = "0 auto";
+    img.style.borderRadius = "10px";
+    toggle.appendChild(img);
+  } catch {
+    toggle.textContent = "CP";
+  }
   toggle.addEventListener("click", () => {
     const panel = document.getElementById(PANEL_ID);
     if (!panel) return;
@@ -1785,7 +2033,7 @@ function ensurePanel() {
   panel.innerHTML = `
     <div class="cp-head">
       <div class="cp-brand">
-        <div class="cp-orb"></div>
+        <div class="cp-orb"><img class="cp-orb-img" alt="" /></div>
         <div class="cp-title-wrap">
           <div class="cp-title">CareerPilot Copilot</div>
           <div class="cp-sub">LinkedIn job assistant</div>
@@ -1804,12 +2052,11 @@ function ensurePanel() {
       <div class="cp-stat"><span class="cp-stat-k">Skipped</span><span id="cp-skipped">0</span></div>
       <div class="cp-stat"><span class="cp-stat-k">Failed</span><span id="cp-failed">0</span></div>
     </div>
+    <div class="cp-wallet" id="cp-wallet">Plan: - | Hires: - | Free today: -/-</div>
     <div class="cp-quick">
       <button id="cp-start">Start</button>
       <button id="cp-pause">Pause</button>
       <button id="cp-stop">Stop</button>
-      <button id="cp-copy-logs">Copy</button>
-      <button id="cp-clear-logs">Clear</button>
     </div>
     <div class="cp-now" id="cp-now-card">
       <div class="cp-now-title" id="cp-now-title">Idle. Waiting for command.</div>
@@ -1826,10 +2073,22 @@ function ensurePanel() {
   panelEl = panel;
   panelEl.classList.remove("cp-hidden");
 
+  try {
+    const orbImg = panel.querySelector(".cp-orb-img");
+    if (orbImg) orbImg.src = chrome.runtime.getURL("icons/icon48.png");
+  } catch {
+    // ignore
+  }
+
   panel.querySelector("#cp-start").addEventListener("click", async () => handleChatCommand("start"));
   panel.querySelector("#cp-pause").addEventListener("click", async () => handleChatCommand("pause"));
   panel.querySelector("#cp-stop").addEventListener("click", async () => handleChatCommand("stop"));
-  panel.querySelector("#cp-copy-logs").addEventListener("click", async () => {
+  // Copy logs without surfacing debug UI controls in the panel.
+  panel.querySelector(".cp-head-right").insertAdjacentHTML(
+    "beforeend",
+    `<button id="cp-copy-logs-mini" class="cp-icon-btn" title="Copy logs">\u29c9</button>`
+  );
+  panel.querySelector("#cp-copy-logs-mini").addEventListener("click", async () => {
     const res = await sendMessage({ type: "CP_GET_LOG_EXPORT" });
     if (!res?.ok || !res.logsJson) {
       await botChat("Failed to export logs.", "error");
@@ -1841,10 +2100,6 @@ function ensurePanel() {
     } catch {
       await botChat("Clipboard write failed.", "warn");
     }
-  });
-  panel.querySelector("#cp-clear-logs").addEventListener("click", async () => {
-    await sendMessage({ type: "CP_CLEAR_LOGS" });
-    await botChat("Log history cleared.");
   });
   panel.querySelector("#cp-minimize").addEventListener("click", () => {
     setPanelMinimized(!panelPrefs.minimized);
@@ -1939,6 +2194,13 @@ function deriveNowCard(state, logs) {
   const latestMessage = trimLogPrefix(latestNonDebug?.message || "");
   const norm = normalizeLabel(latestMessage);
 
+  const s = lastBootstrapSettings || {};
+  const modeLine = s?.dryRun
+    ? "Mode: Dry Run (no submit)."
+    : s?.autoSubmit
+    ? "Mode: Auto Submit (will click Submit)."
+    : "Mode: Manual Submit (fills forms; submit manually).";
+
   let title = "Idle. Waiting for command.";
   if (state.paused) {
     title = "Paused. Waiting for your input.";
@@ -1964,7 +2226,8 @@ function deriveNowCard(state, logs) {
     }
   }
 
-  const detail = latestMessage || (state.running ? "Working on next action..." : "Press Start to begin.");
+  const baseDetail = latestMessage || (state.running ? "Working on next action..." : "Press Start to begin.");
+  const detail = `${modeLine} ${baseDetail}`;
   const meta = `Applied: ${Number(state.applied || 0)} | Skipped: ${Number(state.skipped || 0)} | Failed: ${Number(state.failed || 0)}`;
   return { title, detail, meta };
 }
@@ -1975,12 +2238,41 @@ function renderState(state) {
   if (state.running && panelPrefs.minimized) {
     setPanelMinimized(false);
   }
+
+  const s = lastBootstrapSettings || {};
+  const modeLabel = s?.dryRun ? "Dry Run" : s?.autoSubmit ? "Auto Submit" : "Manual Submit";
   const status = panelEl.querySelector("#cp-status-badge");
-  status.textContent = state.running ? "Running" : state.paused ? "Paused" : "Idle";
+  const base = state.running ? "Running" : state.paused ? "Paused" : "Idle";
+  status.textContent = `${base} \u00b7 ${modeLabel}`;
   status.className = `cp-badge ${state.running ? "cp-run" : state.paused ? "cp-pause" : ""}`;
   panelEl.querySelector("#cp-applied").textContent = String(state.applied || 0);
   panelEl.querySelector("#cp-skipped").textContent = String(state.skipped || 0);
   panelEl.querySelector("#cp-failed").textContent = String(state.failed || 0);
+
+  const walletEl = panelEl.querySelector("#cp-wallet");
+  if (walletEl) {
+    const q = lastPortalQuota || {};
+    const plan = String(q.plan || "").toLowerCase();
+    const hireBalance = Number(q.hireBalance ?? NaN);
+    const freeRemaining = Number(q.freeRemaining ?? NaN);
+    const quotaUsed = Number(q.quotaUsed ?? NaN);
+    const quotaTotal = Number(q.quotaTotal ?? NaN);
+    const inferredCustom = Number.isFinite(hireBalance) && hireBalance > 0;
+    const planLabel =
+      plan === "pro" ? "Pro ($3/mo)" : inferredCustom ? "Custom (Top-up)" : "Free";
+    const hiresLabel = plan === "pro" ? "Unlimited" : Number.isFinite(hireBalance) ? String(hireBalance) : "-";
+    const usedClamped =
+      Number.isFinite(quotaUsed) && Number.isFinite(quotaTotal) && quotaTotal > 0
+        ? Math.min(Math.max(0, quotaUsed), Math.max(0, quotaTotal))
+        : Number.isFinite(quotaUsed)
+        ? Math.max(0, quotaUsed)
+        : NaN;
+    const freeUsedLabel = Number.isFinite(usedClamped) && Number.isFinite(quotaTotal)
+      ? `${Math.max(0, usedClamped)}/${Math.max(0, quotaTotal)}`
+      : "-/-";
+    const freeLeftLabel = Number.isFinite(freeRemaining) ? String(Math.max(0, freeRemaining)) : "-";
+    walletEl.textContent = `Plan: ${planLabel} | ${plan === "pro" ? "Applies" : "Hires"}: ${hiresLabel} | Free today: ${freeUsedLabel} (left ${freeLeftLabel})`;
+  }
 
   const logEl = panelEl.querySelector("#cp-log");
   const logs = state.logs || [];
@@ -1992,8 +2284,9 @@ function renderState(state) {
   if (nowDetail) nowDetail.textContent = nowCard.detail;
   if (nowMeta) nowMeta.textContent = nowCard.meta;
 
+  const typingKind = s?.dryRun ? "Dry Run" : s?.autoSubmit ? "Auto" : "Manual";
   const typingLine = state.running
-    ? `<div class="cp-line cp-bot cp-typing"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">Copilot</span><span class="cp-kind">Live</span></div><div class="cp-msg-text"><span class="cp-dot"></span><span class="cp-dot"></span><span class="cp-dot"></span> Working on next step...</div></div></div>`
+    ? `<div class="cp-line cp-bot cp-typing"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">Copilot</span><span class="cp-kind">${typingKind}</span></div><div class="cp-msg-text"><span class="cp-dot"></span><span class="cp-dot"></span><span class="cp-dot"></span> Working on next step...</div></div></div>`
     : "";
   logEl.innerHTML = logs
     .slice(-80)
@@ -2016,7 +2309,11 @@ function renderState(state) {
 
 async function getBootstrap() {
   const boot = await sendMessage({ type: "CP_GET_BOOTSTRAP" });
-  return boot.ok ? boot : { state: {}, settings: {} };
+  const normalized = boot.ok ? boot : { state: {}, settings: {} };
+  lastBootstrapSettings = normalized?.settings || {};
+  lastPortalQuota = normalized?.portalQuota?.data || null;
+  setDebugUiEnabled(Boolean(normalized?.settings?.debugMode) || wantsDebugUiFromUrl() || wantsDebugUiFromLocalStorage());
+  return normalized;
 }
 
 function getEasyApplyButton() {
@@ -3581,6 +3878,34 @@ async function runCycle(settings) {
       window.location.href = getActiveRunSearchUrl(settings);
       return false;
     }
+    const cachedViewOutcome = getCachedJobOutcome(viewJobKey);
+    const viewAlreadyAppliedCacheHit =
+      cachedViewOutcome &&
+      (cachedViewOutcome.status === "APPLIED" || cachedViewOutcome.reasonCode === "ALREADY_APPLIED");
+    if (viewAlreadyAppliedCacheHit) {
+      runStats.skipped += 1;
+      await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
+      await reportProgress();
+      markJobSeen(viewJobKey);
+      window.location.href = getActiveRunSearchUrl(settings);
+      return true;
+    }
+    if (
+      cachedViewOutcome &&
+      cachedViewOutcome.reasonCode &&
+      ["NO_APPLY_BUTTON", "MODAL_NOT_FOUND", "EXTERNAL_APPLY_ONLY"].includes(cachedViewOutcome.reasonCode)
+    ) {
+      await debugLog(settings, "Skipping jobs view from temporary cooldown cache", {
+        jobKey: viewJobKey,
+        reasonCode: cachedViewOutcome.reasonCode,
+      });
+      runStats.skipped += 1;
+      await logOutcome("info", "Skipped (recently retried)", "RECENTLY_RETRIED");
+      await reportProgress();
+      markJobSeen(viewJobKey);
+      window.location.href = getActiveRunSearchUrl(settings);
+      return true;
+    }
     const viewAboutCompanyDecision = shouldSkipByAboutCompany(currentJobContext.aboutCompany, settings);
     if (viewAboutCompanyDecision.skip) {
       runStats.skipped += 1;
@@ -3590,7 +3915,8 @@ async function runCycle(settings) {
         reason: viewAboutCompanyDecision.reason,
         ...currentJobContext
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(viewJobKey, "SKIPPED", viewAboutCompanyDecision.reasonCode);
+      await reportProgress();
       markJobSeen(viewJobKey);
       window.location.href = getActiveRunSearchUrl(settings);
       return true;
@@ -3604,7 +3930,8 @@ async function runCycle(settings) {
         reason: viewDescriptionDecision.reason,
         ...currentJobContext
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(viewJobKey, "SKIPPED", viewDescriptionDecision.reasonCode);
+      await reportProgress();
       markJobSeen(viewJobKey);
       window.location.href = getActiveRunSearchUrl(settings);
       return true;
@@ -3628,7 +3955,8 @@ async function runCycle(settings) {
         reason: "No apply button on jobs view",
         ...currentJobContext
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(viewJobKey, "SKIPPED", "NO_APPLY_BUTTON");
+      await reportProgress();
       markJobSeen(viewJobKey);
       await debugLog(settings, "Recovering from jobs view without apply button", {
         jobKey: viewJobKey || undefined,
@@ -3646,6 +3974,7 @@ async function runCycle(settings) {
           reason: "External apply blocked because easyApplyOnly is enabled",
           ...currentJobContext
         });
+        recordJobOutcomeCache(viewJobKey, "SKIPPED", "EXTERNAL_APPLY_ONLY");
       } else {
         await resilientClick(applyAction.button, "External Apply");
         runStats.skipped += 1;
@@ -3656,8 +3985,9 @@ async function runCycle(settings) {
           reason: "External apply opened",
           ...currentJobContext
         });
+        recordJobOutcomeCache(viewJobKey, "EXTERNAL", "EXTERNAL_APPLY_OPENED");
       }
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      await reportProgress();
       markJobSeen(viewJobKey);
       return true;
     }
@@ -3681,7 +4011,8 @@ async function runCycle(settings) {
         reason: "Easy Apply modal not found",
         ...currentJobContext
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(viewJobKey, "SKIPPED", "MODAL_NOT_FOUND");
+      await reportProgress();
       markJobSeen(viewJobKey);
       window.location.href = getActiveRunSearchUrl(settings);
       return true;
@@ -3697,6 +4028,7 @@ async function runCycle(settings) {
         reason: settings.dryRun ? "Dry-run reached submit stage" : "Application submitted",
         ...currentJobContext
       });
+      recordJobOutcomeCache(viewJobKey, "APPLIED", "SUBMITTED");
     } else if (resultFromView.skipped) {
       runStats.skipped += 1;
       if (resultFromView.reason) await logLine(`Skipped: ${resultFromView.reason}`, "warn");
@@ -3705,6 +4037,7 @@ async function runCycle(settings) {
         reason: resultFromView.reason || "Modal flow skipped",
         ...currentJobContext
       });
+      recordJobOutcomeCache(viewJobKey, "SKIPPED", "VIEW_MODAL_SKIPPED");
     } else {
       runStats.failed += 1;
       await recordOutcome("FAILED", {
@@ -3712,8 +4045,9 @@ async function runCycle(settings) {
         reason: resultFromView.reason || "Modal flow failed",
         ...currentJobContext
       });
+      recordJobOutcomeCache(viewJobKey, "FAILED", "VIEW_MODAL_FAILED");
     }
-    await sendMessage({ type: "CP_PROGRESS", ...runStats });
+    await reportProgress();
     markJobSeen(viewJobKey);
     if (runSearchTermSuccessCount >= getSwitchNumber(settings)) {
       runSearchTermSuccessCount = 0;
@@ -3774,36 +4108,77 @@ async function runCycle(settings) {
       return false;
     }
 
-    const jobKey = getJobKeyFromCard(card);
+    let jobKey = getJobKeyFromCard(card);
+    if (!jobKey) {
+      await debugLog(settings, "Skipping card without stable job id", {
+        title: String(getCardAnchor(card)?.textContent || "").trim(),
+      });
+      continue;
+    }
     if (jobKey && runSeenJobKeys.has(jobKey)) {
       await debugLog(settings, "Skipping already-seen card in this run", { jobKey });
       continue;
     }
+    const cachedOutcome = getCachedJobOutcome(jobKey);
+    const alreadyAppliedCacheHit =
+      cachedOutcome &&
+      (cachedOutcome.status === "APPLIED" || cachedOutcome.reasonCode === "ALREADY_APPLIED");
+    if (alreadyAppliedCacheHit) {
+      await debugLog(settings, "Skipping job from applied cache", { jobKey, reasonCode: cachedOutcome.reasonCode });
+      runStats.skipped += 1;
+      await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
+      await reportProgress();
+      markJobSeen(jobKey);
+      continue;
+    }
+    if (
+      cachedOutcome &&
+      cachedOutcome.reasonCode &&
+      ["NO_APPLY_BUTTON", "MODAL_NOT_FOUND", "EXTERNAL_APPLY_ONLY"].includes(cachedOutcome.reasonCode)
+    ) {
+      await debugLog(settings, "Skipping job from temporary cooldown cache", {
+        jobKey,
+        reasonCode: cachedOutcome.reasonCode,
+      });
+      runStats.skipped += 1;
+      await logOutcome("info", "Skipped (recently retried)", "RECENTLY_RETRIED");
+      await reportProgress();
+      markJobSeen(jobKey);
+      continue;
+    }
     if (isAlreadyAppliedCard(card)) {
+      const stableJobId = extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || jobKey || "";
       runStats.skipped += 1;
       await logOutcome("info", "Skipped (already applied)", "ALREADY_APPLIED");
       await recordOutcome("SKIPPED", {
         reasonCode: "ALREADY_APPLIED",
         reason: "LinkedIn card marked as already applied",
-        jobId: jobKey || "",
+        jobId: stableJobId,
         ...extractCardMeta(card)
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(jobKey, "SKIPPED", "ALREADY_APPLIED");
+      if (stableJobId && stableJobId !== jobKey) recordJobOutcomeCache(stableJobId, "SKIPPED", "ALREADY_APPLIED");
+      await reportProgress();
       markJobSeen(jobKey);
+      if (stableJobId && stableJobId !== jobKey) markJobSeen(stableJobId);
       continue;
     }
     const ruleDecision = shouldSkipByRules(card, settings);
     if (ruleDecision.skip) {
+      const stableJobId = extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || jobKey || "";
       runStats.skipped += 1;
       await logOutcome("warn", `Skipped: ${ruleDecision.reason}`, ruleDecision.reasonCode);
       await recordOutcome("SKIPPED", {
         reasonCode: ruleDecision.reasonCode,
         reason: ruleDecision.reason,
-        jobId: jobKey || "",
+        jobId: stableJobId,
         ...extractCardMeta(card)
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(jobKey, "SKIPPED", ruleDecision.reasonCode);
+      if (stableJobId && stableJobId !== jobKey) recordJobOutcomeCache(stableJobId, "SKIPPED", ruleDecision.reasonCode);
+      await reportProgress();
       markJobSeen(jobKey);
+      if (stableJobId && stableJobId !== jobKey) markJobSeen(stableJobId);
       continue;
     }
 
@@ -3814,6 +4189,15 @@ async function runCycle(settings) {
     await logLine(`Opening: ${title}`);
     await resilientClick(card, "Job card");
     await sleep(1200);
+
+    // After navigation/selection, re-derive a stable LinkedIn job id from the current URL.
+    const resolvedJobId = extractLinkedInJobIdFromUrl(window.location.href);
+    if (resolvedJobId && resolvedJobId !== jobKey) {
+      await debugLog(settings, "Resolved job id differs from card key", { from: jobKey, to: resolvedJobId });
+      // Mark both keys as seen to avoid repeated reopening.
+      if (jobKey) markJobSeen(jobKey);
+      jobKey = resolvedJobId;
+    }
 
     const description = getJobDescriptionText();
     const aboutCompany = getAboutCompanyText();
@@ -3836,7 +4220,8 @@ async function runCycle(settings) {
         reason: aboutCompanyDecision.reason,
         ...currentJobContext
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(jobKey, "SKIPPED", aboutCompanyDecision.reasonCode);
+      await reportProgress();
       markJobSeen(jobKey);
       continue;
     }
@@ -3850,7 +4235,8 @@ async function runCycle(settings) {
         reason: descriptionDecision.reason,
         ...currentJobContext
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(jobKey, "SKIPPED", descriptionDecision.reasonCode);
+      await reportProgress();
       markJobSeen(jobKey);
       continue;
     }
@@ -3895,7 +4281,8 @@ async function runCycle(settings) {
         reason: "No apply button found in job detail pane",
         ...currentJobContext
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(jobKey, "SKIPPED", "NO_APPLY_BUTTON");
+      await reportProgress();
       markJobSeen(jobKey);
       continue;
     }
@@ -3908,6 +4295,7 @@ async function runCycle(settings) {
           reason: "External apply blocked because easyApplyOnly is enabled",
           ...currentJobContext
         });
+        recordJobOutcomeCache(jobKey, "SKIPPED", "EXTERNAL_APPLY_ONLY");
       } else {
         await resilientClick(applyAction.button, "External Apply");
         runStats.skipped += 1;
@@ -3918,8 +4306,9 @@ async function runCycle(settings) {
           reason: "External apply opened",
           ...currentJobContext
         });
+        recordJobOutcomeCache(jobKey, "EXTERNAL", "EXTERNAL_APPLY_OPENED");
       }
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      await reportProgress();
       markJobSeen(jobKey);
       continue;
     }
@@ -3944,7 +4333,8 @@ async function runCycle(settings) {
         reason: "Easy Apply modal not found",
         ...currentJobContext
       });
-      await sendMessage({ type: "CP_PROGRESS", ...runStats });
+      recordJobOutcomeCache(jobKey, "SKIPPED", "MODAL_NOT_FOUND");
+      await reportProgress();
       markJobSeen(jobKey);
       continue;
     }
@@ -3959,6 +4349,7 @@ async function runCycle(settings) {
         reason: settings.dryRun ? "Dry-run reached submit stage" : "Application submitted",
         ...currentJobContext
       });
+      recordJobOutcomeCache(jobKey, "APPLIED", "SUBMITTED");
     } else if (result.skipped) {
       runStats.skipped += 1;
       if (result.reason) {
@@ -3976,12 +4367,14 @@ async function runCycle(settings) {
           reason: result.reason,
           ...currentJobContext
         });
+        recordJobOutcomeCache(jobKey, "SKIPPED", reasonCode);
       } else {
         await recordOutcome("SKIPPED", {
           reasonCode: "SUBMIT_NOT_REACHED",
           reason: "Submit step not reached",
           ...currentJobContext
         });
+        recordJobOutcomeCache(jobKey, "SKIPPED", "SUBMIT_NOT_REACHED");
       }
     } else {
       runStats.failed += 1;
@@ -3991,8 +4384,9 @@ async function runCycle(settings) {
         reason: "Failed to process easy apply modal",
         ...currentJobContext
       });
+      recordJobOutcomeCache(jobKey, "FAILED", "MODAL_FLOW_ERROR");
     }
-    await sendMessage({ type: "CP_PROGRESS", ...runStats });
+    await reportProgress();
     markJobSeen(jobKey);
     if (runSearchTermSuccessCount >= getSwitchNumber(settings)) {
       runSearchTermSuccessCount = 0;
@@ -4020,6 +4414,7 @@ async function runAutomationLoop() {
     };
     let lastProgressAt = Date.now();
     let noProgressCycles = 0;
+    let noProgressRecoveries = 0;
     let lastProgressMarker = `${runStats.applied}|${runStats.skipped}|${runStats.failed}`;
     await logLine("Automation engine initialized");
 
@@ -4080,7 +4475,7 @@ async function runAutomationLoop() {
           resumeChoiceCache.clear();
           runSearchTermSuccessCount = 0;
           preparedRun = false;
-          await sendMessage({ type: "CP_PROGRESS", ...runStats });
+          await reportProgress();
           continue;
         }
         await logLine("Max applications reached. Stopping run.");
@@ -4111,12 +4506,48 @@ async function runAutomationLoop() {
 
       const noProgressElapsedMs = Date.now() - lastProgressAt;
       if (noProgressCycles >= NO_PROGRESS_MAX_CYCLES || noProgressElapsedMs >= NO_PROGRESS_TIMEOUT_MS) {
+        noProgressRecoveries += 1;
         await logLine(
-          `No progress detected for ${Math.round(noProgressElapsedMs / 1000)}s. Stopping run to avoid stuck loop.`,
+          `No progress for ${Math.round(noProgressElapsedMs / 1000)}s. Trying recovery (${noProgressRecoveries}/3)...`,
           "warn"
         );
-        await sendMessage({ type: "CP_STOP" });
-        break;
+
+        // Recovery strategy:
+        // 1) If on a job view/post-apply page, force back to search.
+        // 2) Try to move to the next results page (scroll-to-pagination + click Next).
+        // 3) Rotate search term.
+        // 4) As a last resort, reload the current page.
+        try {
+          const terms = getConfiguredSearchTerms(settings);
+          const term = terms[runSearchTermCursor] || "";
+          if (!isJobsSearchPage()) {
+            window.location.href = buildJobsSearchUrl(term);
+            return;
+          }
+          // Ensure pagination is in view.
+          window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+          await sleep(1200);
+          const moved = (await gotoNextResultsPage(settings)) || (await rotateSearchTerm(settings));
+          if (!moved) {
+            window.location.reload();
+            return;
+          }
+        } catch {
+          window.location.reload();
+          return;
+        }
+
+        lastProgressAt = Date.now();
+        noProgressCycles = 0;
+        lastProgressMarker = `${runStats.applied}|${runStats.skipped}|${runStats.failed}`;
+        preparedRun = false;
+
+        if (noProgressRecoveries >= 3) {
+          await logLine("Recovery attempts exhausted. Stopping run.", "warn");
+          await sendMessage({ type: "CP_STOP" });
+          break;
+        }
+        continue;
       }
       if (!cycled && runStats.applied >= maxPerRun) {
         await sendMessage({ type: "CP_STOP" });

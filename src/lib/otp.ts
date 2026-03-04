@@ -47,17 +47,29 @@ export async function createAndSendOtp(emailRaw: string, purpose: OtpPurpose) {
   });
 
   const devBypassMail = (process.env.OTP_DEV_BYPASS_MAIL || "false").toLowerCase() === "true";
+  let delivered = false;
+  let deliveryError: string | null = null;
+
   if (!devBypassMail) {
-    await sendMail({
-      to: email,
-      subject: "CareerPilot verification code",
-      template: "otp_verification",
-      text: `Your CareerPilot verification code is ${otp}. It expires in ${OTP_TTL_MINUTES} minutes.`,
-      html: `<div style="font-family:Arial,sans-serif;line-height:1.5;"><h2>CareerPilot Verification</h2><p>Your one-time code:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px;">${otp}</p><p>Expires in ${OTP_TTL_MINUTES} minutes.</p></div>`,
-    });
+    try {
+      await sendMail({
+        to: email,
+        subject: "CareerPilot verification code",
+        template: "otp_verification",
+        text: `Your CareerPilot verification code is ${otp}. It expires in ${OTP_TTL_MINUTES} minutes.`,
+        html: `<div style="font-family:Arial,sans-serif;line-height:1.5;"><h2>CareerPilot Verification</h2><p>Your one-time code:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px;">${otp}</p><p>Expires in ${OTP_TTL_MINUTES} minutes.</p></div>`,
+      });
+      delivered = true;
+    } catch (error) {
+      delivered = false;
+      deliveryError = error instanceof Error ? error.message : String(error);
+      // In local/dev, email providers (e.g. Resend testing) can block sending to unverified recipients.
+      // Don't break signup UX: allow returning the OTP via API when the caller opts-in (send-otp route decides).
+      if (process.env.NODE_ENV === "production") throw error;
+    }
   }
 
-  return { otp };
+  return { otp, delivered, deliveryError, bypassed: devBypassMail };
 }
 
 export async function verifyOtp(emailRaw: string, otp: string, purpose: OtpPurpose) {

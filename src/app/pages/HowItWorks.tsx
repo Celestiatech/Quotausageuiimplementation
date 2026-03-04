@@ -34,10 +34,10 @@ export default function HowItWorks() {
     {
       number: '03',
       icon: Rocket,
-      title: 'Apply & Track',
-      description: 'Auto-apply to jobs and manage your entire pipeline. Prepare for interviews and track your progress with analytics.',
+      title: 'Auto Apply & Track',
+      description: 'Apply to LinkedIn jobs automatically, then manage your full pipeline with a built-in job application tracker and analytics.',
       details: [
-        'Automated applications',
+        'LinkedIn easy apply automation',
         'Pipeline management',
         'Interview prep tools',
         'Progress analytics'
@@ -56,14 +56,14 @@ export default function HowItWorks() {
           </div>
           
           <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
-            From upload to offer in{' '}
+            From AI resume builder to{' '}
             <span className="bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">
-              3 simple steps
+              LinkedIn auto apply
             </span>
           </h1>
           
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
-            Get started in minutes, land offers in weeks. No technical knowledge required.
+            Get started in minutes with job search automation, ATS resume optimization, and application tracking. No technical knowledge required.
           </p>
 
           <button className="px-8 py-4 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 rounded-xl font-semibold hover:shadow-lg transition-all duration-200 inline-flex items-center gap-2">

@@ -1,5 +1,5 @@
-import { Link } from 'react-router';
-import { Briefcase, Twitter, Linkedin, Github, Mail } from 'lucide-react';
+﻿import { Link } from 'react-router';
+import { Twitter, Linkedin, Github, Mail } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -9,9 +9,13 @@ export function Footer() {
           {/* Company Info */}
           <div className="lg:col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366F1] via-[#8B5CF6] to-[#A855F7] flex items-center justify-center shadow-lg">
-                <Briefcase className="w-6 h-6 text-white" />
-              </div>
+              <img
+                src="/logos/android-chrome-192x192.png"
+                alt="CareerPilot"
+                className="w-10 h-10 rounded-xl shadow-lg"
+                loading="lazy"
+                decoding="async"
+              />
               <span className="text-xl font-bold bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">
                 CareerPilot
               </span>
@@ -104,9 +108,9 @@ export function Footer() {
             <h4 className="font-semibold text-gray-900 mb-4">Resources</h4>
             <ul className="space-y-3">
               <li>
-                <a href="#" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                <Link to="/blog" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Blog
-                </a>
+                </Link>
               </li>
               <li>
                 <Link to="/faq" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
@@ -130,7 +134,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-gray-600 text-sm">
-            © 2026 CareerPilot. All rights reserved.
+            (c) 2026 CareerPilot. All rights reserved.
           </p>
           <div className="flex gap-6">
             <a href="#" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">
@@ -148,3 +152,5 @@ export function Footer() {
     </footer>
   );
 }
+
+

@@ -39,3 +39,25 @@ export function handleApiError(error: unknown, fallbackMessage: string) {
   console.error("[api] unknown internal error:", error);
   return fail(fallbackMessage, 500, "INTERNAL_ERROR");
 }
+
+type PaginationOptions = {
+  defaultLimit?: number;
+  maxLimit?: number;
+};
+
+export function parsePagination(req: Request, options?: PaginationOptions) {
+  const defaultLimit = Math.max(1, Math.floor(options?.defaultLimit ?? 50));
+  const maxLimit = Math.max(defaultLimit, Math.floor(options?.maxLimit ?? 200));
+  const url = new URL(req.url);
+
+  const rawPage = Number(url.searchParams.get("page") || "1");
+  const rawLimit = Number(url.searchParams.get("limit") || String(defaultLimit));
+
+  const page = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1;
+  const limit = Number.isFinite(rawLimit)
+    ? Math.max(1, Math.min(maxLimit, Math.floor(rawLimit)))
+    : defaultLimit;
+  const skip = (page - 1) * limit;
+
+  return { page, limit, skip };
+}

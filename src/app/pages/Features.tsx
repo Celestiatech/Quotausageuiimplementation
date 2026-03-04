@@ -21,8 +21,8 @@ export default function Features() {
   const mainFeatures = [
     {
       icon: FileText,
-      title: 'AI Resume Tailor',
-      description: 'Automatically customize your resume for each job posting',
+      title: 'AI Resume Builder & Tailor',
+      description: 'Build and tailor your resume for each job posting with ATS optimization',
       details: [
         'AI-powered keyword optimization',
         'ATS-friendly formatting',
@@ -50,7 +50,7 @@ export default function Features() {
     {
       icon: BarChart3,
       title: 'Application Tracker CRM',
-      description: 'Manage your entire job search pipeline',
+      description: 'Manage your complete job application tracker and search pipeline',
       details: [
         'Kanban-style board',
         'Application status tracking',
@@ -63,7 +63,7 @@ export default function Features() {
     },
     {
       icon: MessageSquare,
-      title: 'Interview Preparation',
+      title: 'Interview Preparation AI',
       description: 'Practice and ace your technical interviews',
       details: [
         'AI-generated questions',
@@ -121,7 +121,7 @@ export default function Features() {
     {
       icon: Brain,
       title: 'AI-Powered',
-      description: 'Leverage cutting-edge AI technology',
+      description: 'Leverage an AI job search tool built for faster outcomes',
       stat: '95% accuracy'
     },
     {
@@ -142,14 +142,14 @@ export default function Features() {
           </div>
           
           <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
-            Powerful tools for your{' '}
+            Powerful LinkedIn auto apply and{' '}
             <span className="bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">
               job search
             </span>
           </h1>
           
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Everything you need to streamline your job search and land your dream role faster
+            Everything you need to apply to jobs automatically, optimize resumes for ATS, and track applications in one workflow
           </p>
         </div>
       </section>
@@ -234,7 +234,7 @@ export default function Features() {
           </h2>
           
           <p className="text-xl text-purple-100 mb-12">
-            Join 50,000+ engineers who've accelerated their careers with CareerPilot
+            Join 50,000+ engineers using CareerPilot for job search automation, AI resume building, and interview preparation
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -242,7 +242,7 @@ export default function Features() {
               onClick={() => navigate('/pricing')}
               className="px-10 py-5 bg-white text-purple-700 rounded-xl font-bold text-lg hover:bg-gray-100 shadow-2xl hover:scale-105 transition-all duration-200"
             >
-              Start Free Trial
+              Start Free (Start Free Trial)
             </button>
             <button 
               onClick={() => navigate('/how-it-works')}

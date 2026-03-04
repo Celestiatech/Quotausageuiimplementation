@@ -8,6 +8,30 @@ type ScreeningAnswerApiItem = {
   answer: string;
 };
 
+type OnboardingProgressApi = {
+  currentStep?: number;
+  profileQuestionIndex?: number;
+  preferences?: Partial<ExtensionPreferences>;
+  screeningRows?: Array<{
+    questionKey?: string;
+    questionLabel?: string;
+    answer?: string;
+  }>;
+  savedAt?: string;
+};
+
+type OnboardingProfileApi = {
+  user?: {
+    name?: string;
+    phone?: string;
+    currentCity?: string;
+    addressLine?: string;
+    linkedinUrl?: string;
+    portfolioUrl?: string;
+  };
+  progress?: OnboardingProgressApi | null;
+};
+
 type ScreeningFieldRow = {
   id: string;
   questionKey: string;
@@ -53,7 +77,11 @@ type ProfileQuestionKey =
   | "currentCity"
   | "addressLine"
   | "linkedinUrl"
-  | "portfolioUrl";
+  | "portfolioUrl"
+  | "bachelorsDegreeCompleted"
+  | "englishProficiency"
+  | "comfortableOnsite"
+  | "comfortableCommuting";
 
 type ProfileQuestion = {
   key: ProfileQuestionKey;
@@ -92,6 +120,12 @@ const WIZARD_STEPS = [
   "Auto-fill Fields",
   "Review",
 ] as const;
+
+const DEFAULT_SEARCH_TERMS = "Software Engineer, Full Stack Developer";
+const EDU_BACHELORS_LABEL = "Have you completed the following level of education: Bachelor's Degree?";
+const ENGLISH_PROFICIENCY_LABEL = "What is your level of proficiency in English?";
+const ONSITE_COMFORTABLE_LABEL = "Are you comfortable working in an onsite setting?";
+const COMMUTE_COMFORTABLE_LABEL = "Are you comfortable commuting to this job's location?";
 
 const PROFILE_QUESTIONS: ProfileQuestion[] = [
   {
@@ -155,9 +189,50 @@ const PROFILE_QUESTIONS: ProfileQuestion[] = [
     inputType: "url",
     placeholder: "https://github.com/yourname",
   },
+  {
+    key: "bachelorsDegreeCompleted",
+    // Match LinkedIn label as closely as possible so the extension can auto-fill without fallback guesses.
+    label: "Have you completed the following level of education: Bachelor's Degree?",
+    description: "This is asked on some LinkedIn Easy Apply forms.",
+    type: "select",
+    options: [
+      { label: "Yes", value: "Yes" },
+      { label: "No", value: "No" },
+    ],
+  },
+  {
+    key: "englishProficiency",
+    label: ENGLISH_PROFICIENCY_LABEL,
+    description: "This is asked on some Easy Apply forms.",
+    type: "select",
+    options: [
+      { label: "Professional", value: "Professional" },
+      { label: "Native or bilingual", value: "Native or bilingual" },
+      { label: "Limited", value: "Limited" },
+      { label: "Basic", value: "Basic" },
+    ],
+  },
+  {
+    key: "comfortableOnsite",
+    label: ONSITE_COMFORTABLE_LABEL,
+    description: "This is asked on some Easy Apply forms.",
+    type: "select",
+    options: [
+      { label: "Yes", value: "Yes" },
+      { label: "No", value: "No" },
+    ],
+  },
+  {
+    key: "comfortableCommuting",
+    label: COMMUTE_COMFORTABLE_LABEL,
+    description: "This is asked on some Easy Apply forms.",
+    type: "select",
+    options: [
+      { label: "Yes", value: "Yes" },
+      { label: "No", value: "No" },
+    ],
+  },
 ];
-
-const DEFAULT_SEARCH_TERMS = "Software Engineer, Full Stack Developer";
 
 const PREFERENCE_FIELDS: PreferenceField[] = [
   {
@@ -295,6 +370,10 @@ function buildDefaultScreeningRows(form: {
   currentCity: string;
   linkedinUrl: string;
   portfolioUrl: string;
+  bachelorsDegreeCompleted: string;
+  englishProficiency: string;
+  comfortableOnsite: string;
+  comfortableCommuting: string;
 }, email?: string): ScreeningFieldRow[] {
   const fullName = String(form.name || "").trim();
   const nameParts = fullName.split(/\s+/).filter(Boolean);
@@ -311,6 +390,11 @@ function buildDefaultScreeningRows(form: {
     { questionLabel: "Your location (City, State)", answer: String(form.currentCity || "").trim() },
     { questionLabel: "LinkedIn profile", answer: String(form.linkedinUrl || "").trim() },
     { questionLabel: "Portfolio URL", answer: String(form.portfolioUrl || "").trim() },
+    // Education (common LinkedIn screening question)
+    { questionLabel: EDU_BACHELORS_LABEL, answer: String(form.bachelorsDegreeCompleted || "").trim() },
+    { questionLabel: ENGLISH_PROFICIENCY_LABEL, answer: String(form.englishProficiency || "").trim() },
+    { questionLabel: ONSITE_COMFORTABLE_LABEL, answer: String(form.comfortableOnsite || "").trim() },
+    { questionLabel: COMMUTE_COMFORTABLE_LABEL, answer: String(form.comfortableCommuting || "").trim() },
   ];
 
   return templates
@@ -324,6 +408,30 @@ function buildDefaultScreeningRows(form: {
     .filter((item): item is ScreeningFieldRow => Boolean(item));
 }
 
+function normalizeDraftScreeningRows(
+  value: OnboardingProgressApi["screeningRows"],
+): ScreeningFieldRow[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const rows: ScreeningFieldRow[] = [];
+  for (const item of value) {
+    const questionLabel = String(item?.questionLabel || "").trim();
+    const candidateKey = String(item?.questionKey || "").trim();
+    const questionKey = toQuestionKey(candidateKey || questionLabel);
+    const answer = String(item?.answer || "").trim();
+    if (!questionKey || !questionLabel || !answer) continue;
+    if (seen.has(questionKey)) continue;
+    seen.add(questionKey);
+    rows.push({
+      id: makeRowId(),
+      questionKey,
+      questionLabel,
+      answer,
+    });
+  }
+  return rows;
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
@@ -332,6 +440,8 @@ export default function Onboarding() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [draftSavedAt, setDraftSavedAt] = useState("");
   const [checkingExtension, setCheckingExtension] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({ installed: false });
   const [extensionDebug, setExtensionDebug] = useState<ExtensionDebugState>({
@@ -361,6 +471,10 @@ export default function Onboarding() {
     addressLine: user?.addressLine || "",
     linkedinUrl: user?.linkedinUrl || "",
     portfolioUrl: user?.portfolioUrl || "",
+    bachelorsDegreeCompleted: "Yes",
+    englishProficiency: "Professional",
+    comfortableOnsite: "No",
+    comfortableCommuting: "No",
   });
   const [preferences, setPreferences] = useState<ExtensionPreferences>({
     searchTerms: DEFAULT_SEARCH_TERMS,
@@ -376,6 +490,8 @@ export default function Onboarding() {
   });
   const latestExtensionCheckRef = useRef(0);
   const activeExtensionChecksRef = useRef(0);
+  const onboardingHydratedRef = useRef(false);
+  const autosaveTimerRef = useRef<number | null>(null);
 
   const extensionZipUrl = "/downloads/CareerPilotLinkedInExtension.zip";
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
@@ -414,6 +530,10 @@ export default function Onboarding() {
     if (key === "addressLine") return value.length >= 5 ? "" : "Enter a complete address line.";
     if (key === "linkedinUrl") return isValidUrl(value) ? "" : "Enter a valid LinkedIn URL.";
     if (key === "portfolioUrl") return isValidUrl(value) ? "" : "Enter a valid portfolio URL.";
+    if (key === "bachelorsDegreeCompleted") return value === "Yes" || value === "No" ? "" : "Select Yes or No.";
+    if (key === "comfortableOnsite") return value === "Yes" || value === "No" ? "" : "Select Yes or No.";
+    if (key === "comfortableCommuting") return value === "Yes" || value === "No" ? "" : "Select Yes or No.";
+    if (key === "englishProficiency") return value.length ? "" : "Select an option.";
     return "";
   };
 
@@ -568,16 +688,65 @@ export default function Onboarding() {
 
   useEffect(() => {
     let cancelled = false;
-    const loadScreeningAnswers = async () => {
+    const loadOnboardingState = async () => {
       setLoadingScreening(true);
       try {
-        const res = await fetch("/api/user/screening/answers", { credentials: "include" });
-        const data = await res.json();
+        const [profileRes, answersRes] = await Promise.all([
+          fetch("/api/user/onboarding", { credentials: "include" }),
+          fetch("/api/user/screening/answers?limit=500", { credentials: "include" }),
+        ]);
+        const [profileData, answersData] = await Promise.all([profileRes.json(), answersRes.json()]);
         if (cancelled) return;
 
-        const apiAnswers = Array.isArray(data?.data?.answers)
-          ? (data.data.answers as ScreeningAnswerApiItem[])
+        const onboardingData = (profileData?.data || null) as OnboardingProfileApi | null;
+        const savedUser = onboardingData?.user;
+        const savedProgress = onboardingData?.progress || null;
+
+        const loadedPhone = splitPhone(savedUser?.phone || user?.phone || "");
+        // Pull commonly asked screening answers from saved screening answers (if present) so onboarding stays consistent.
+        const bachelorsKey = toQuestionKey(EDU_BACHELORS_LABEL);
+        const englishKey = toQuestionKey(ENGLISH_PROFICIENCY_LABEL);
+        const onsiteKey = toQuestionKey(ONSITE_COMFORTABLE_LABEL);
+        const commuteKey = toQuestionKey(COMMUTE_COMFORTABLE_LABEL);
+        const apiAnswers = Array.isArray(answersData?.data?.answers)
+          ? (answersData.data.answers as ScreeningAnswerApiItem[])
           : [];
+        const answerByKey = (key: string) =>
+          apiAnswers.find((item) => toQuestionKey(String(item?.questionKey || item?.questionLabel || "")) === key)?.answer || "";
+
+        const bachelorsAnswerFromApi = answerByKey(bachelorsKey);
+        const englishAnswerFromApi = answerByKey(englishKey);
+        const onsiteAnswerFromApi = answerByKey(onsiteKey);
+        const commuteAnswerFromApi = answerByKey(commuteKey);
+
+        const loadedForm = {
+          name: String(savedUser?.name || user?.name || ""),
+          phone: loadedPhone.number || "",
+          currentCity: String(savedUser?.currentCity || user?.currentCity || ""),
+          addressLine: String(savedUser?.addressLine || user?.addressLine || ""),
+          linkedinUrl: String(savedUser?.linkedinUrl || user?.linkedinUrl || ""),
+          portfolioUrl: String(savedUser?.portfolioUrl || user?.portfolioUrl || ""),
+          bachelorsDegreeCompleted: String(bachelorsAnswerFromApi || "Yes").trim() || "Yes",
+          englishProficiency: String(englishAnswerFromApi || "Professional").trim() || "Professional",
+          comfortableOnsite: String(onsiteAnswerFromApi || "No").trim() || "No",
+          comfortableCommuting: String(commuteAnswerFromApi || "No").trim() || "No",
+        };
+        const loadedCountryCode = loadedPhone.countryCode || "+91";
+
+        setForm(loadedForm);
+        setPhoneCountryCode(loadedCountryCode);
+        setCurrentStep(
+          typeof savedProgress?.currentStep === "number"
+            ? Math.max(0, Math.min(WIZARD_STEPS.length - 1, Math.floor(savedProgress.currentStep)))
+            : 0,
+        );
+        setProfileQuestionIndex(
+          typeof savedProgress?.profileQuestionIndex === "number"
+            ? Math.max(0, Math.min(PROFILE_QUESTIONS.length - 1, Math.floor(savedProgress.profileQuestionIndex)))
+            : 0,
+        );
+        setDraftSavedAt(String(savedProgress?.savedAt || ""));
+
         const byKey = new Map<string, ScreeningFieldRow>();
         const prefByKey = new Map<string, string>();
 
@@ -600,19 +769,31 @@ export default function Onboarding() {
           });
         }
 
-        if (prefByKey.size) {
-          setPreferences((prev) => {
-            const next = { ...prev };
-            for (const field of PREFERENCE_FIELDS) {
-              const saved = prefByKey.get(field.questionKey);
-              if (saved) next[field.key] = saved;
-            }
-            return next;
-          });
+        const draftPreferences = savedProgress?.preferences || {};
+        const nextPreferences: ExtensionPreferences = {
+          searchTerms: String(draftPreferences.searchTerms || DEFAULT_SEARCH_TERMS),
+          searchLocation: String(draftPreferences.searchLocation || loadedForm.currentCity || "United States"),
+          yearsOfExperienceAnswer: String(draftPreferences.yearsOfExperienceAnswer || ""),
+          requireVisa: String(draftPreferences.requireVisa || "No"),
+          usCitizenship: String(draftPreferences.usCitizenship || "U.S. Citizen/Permanent Resident"),
+          desiredSalary: String(draftPreferences.desiredSalary || ""),
+          noticePeriodDays: String(draftPreferences.noticePeriodDays || ""),
+          recentEmployer: String(draftPreferences.recentEmployer || ""),
+          confidenceLevel: String(draftPreferences.confidenceLevel || "8"),
+          coverLetter: String(draftPreferences.coverLetter || ""),
+        };
+        for (const field of PREFERENCE_FIELDS) {
+          const saved = prefByKey.get(field.questionKey);
+          if (saved) nextPreferences[field.key] = saved;
+        }
+        setPreferences(nextPreferences);
+
+        for (const row of normalizeDraftScreeningRows(savedProgress?.screeningRows)) {
+          if (!byKey.has(row.questionKey)) byKey.set(row.questionKey, row);
         }
 
-        const fullPhone = composePhone(form.phone, phoneCountryCode);
-        for (const defaultRow of buildDefaultScreeningRows({ ...form, phone: fullPhone }, user?.email)) {
+        const fullPhone = composePhone(loadedForm.phone, loadedCountryCode);
+        for (const defaultRow of buildDefaultScreeningRows({ ...loadedForm, phone: fullPhone }, user?.email)) {
           if (!byKey.has(defaultRow.questionKey)) byKey.set(defaultRow.questionKey, defaultRow);
         }
 
@@ -623,17 +804,88 @@ export default function Onboarding() {
           setScreeningRows(buildDefaultScreeningRows({ ...form, phone: fullPhone }, user?.email));
         }
       } finally {
-        if (!cancelled) setLoadingScreening(false);
+        if (!cancelled) {
+          onboardingHydratedRef.current = true;
+          setLoadingScreening(false);
+        }
       }
     };
 
-    loadScreeningAnswers();
+    loadOnboardingState();
     return () => {
       cancelled = true;
     };
     // Keep one-time initial load based on current state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const buildDraftPayload = () => {
+    const normalizedRows = screeningRows
+      .map((row) => ({
+        questionKey: toQuestionKey(row.questionKey || row.questionLabel),
+        questionLabel: String(row.questionLabel || "").trim(),
+        answer: compactAnswer(row.answer),
+      }))
+      .filter((row) => Boolean(row.questionKey && row.questionLabel && row.answer))
+      .slice(0, 250);
+
+    return {
+      ...form,
+      phone: composePhone(form.phone, phoneCountryCode),
+      currentStep,
+      profileQuestionIndex,
+      preferences: {
+        ...preferences,
+      },
+      screeningRows: normalizedRows,
+    };
+  };
+
+  const saveOnboardingDraft = async () => {
+    const res = await fetch("/api/user/onboarding", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildDraftPayload()),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.message || "Failed to save onboarding draft");
+    }
+    return data;
+  };
+
+  useEffect(() => {
+    if (!onboardingHydratedRef.current) return;
+    if (isSaving) return;
+
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+
+    setDraftStatus("saving");
+    autosaveTimerRef.current = window.setTimeout(() => {
+      void saveOnboardingDraft()
+        .then(() => {
+          setDraftStatus("saved");
+          setDraftSavedAt(new Date().toISOString());
+        })
+        .catch((draftError) => {
+          setDraftStatus("error");
+          setError((prev) =>
+            prev || (draftError instanceof Error ? draftError.message : "Failed to save onboarding draft"),
+          );
+        });
+    }, 900);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+    // Debounced autosave for all onboarding inputs and progress.
+  }, [form, phoneCountryCode, currentStep, profileQuestionIndex, preferences, screeningRows, isSaving]);
 
   useEffect(() => {
     void checkExtensionStatus({ silent: true });
@@ -725,9 +977,9 @@ export default function Onboarding() {
       debugMode: false,
       dryRun: false,
       autoSubmit: true,
-      liveModeAcknowledged: true,
+      liveModeAcknowledged: false,
       autoResumeOnAnswer: true,
-      maxApplicationsPerRun: 3,
+      maxApplicationsPerRun: 200,
       maxSkipsPerRun: 50,
       switchNumber: 30,
       blacklistedCompanies: [],
@@ -972,6 +1224,15 @@ export default function Onboarding() {
 
       {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
       {message && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{message}</div>}
+      {draftStatus !== "idle" ? (
+        <div className="text-xs text-gray-500">
+          {draftStatus === "saving" ? "Saving draft..." : null}
+          {draftStatus === "saved"
+            ? `Draft saved${draftSavedAt ? ` at ${new Date(draftSavedAt).toLocaleTimeString()}` : ""}`
+            : null}
+          {draftStatus === "error" ? "Draft autosave failed. Keep this tab open and retry." : null}
+        </div>
+      ) : null}
 
       {currentStep === 0 ? (
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
