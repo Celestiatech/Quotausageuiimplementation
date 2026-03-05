@@ -493,7 +493,7 @@ export default function Onboarding() {
   const onboardingHydratedRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
 
-  const extensionZipUrl = "/downloads/CareerPilotLinkedInExtension.zip";
+  const extensionZipUrl = "/downloads/AutoApplyCVLinkedInExtension.zip";
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
   const canDownloadExtensionZip = process.env.NODE_ENV !== "production";
   const showExtensionDebug =
@@ -1066,7 +1066,7 @@ export default function Onboarding() {
     }
     const anchor = document.createElement("a");
     anchor.href = extensionZipUrl;
-    anchor.download = "CareerPilotLinkedInExtension.zip";
+    anchor.download = "AutoApplyCVLinkedInExtension.zip";
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
@@ -1353,7 +1353,7 @@ export default function Onboarding() {
 
           <ol className="text-sm text-gray-700 list-decimal pl-5 space-y-1">
             {canDownloadExtensionZip ? (
-              <li>Download and unzip `CareerPilotLinkedInExtension.zip`.</li>
+              <li>Download and unzip `AutoApplyCVLinkedInExtension.zip`.</li>
             ) : (
               <li>Open the Chrome Web Store listing and install AutoApply CV extension.</li>
             )}

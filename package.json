@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "postinstall": "prisma generate",
-    "build": "prisma migrate deploy && next build",
+    "build": "next build",
+    "build:with-migrate": "prisma migrate deploy && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "check": "npm run prisma:generate && npm run typecheck",
