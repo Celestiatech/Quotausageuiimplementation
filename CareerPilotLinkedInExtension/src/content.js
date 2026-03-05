@@ -1565,6 +1565,19 @@ async function rotateSearchTerm(settings) {
   return true;
 }
 
+function buildNextPageUrlByStart(currentUrl, step = 25) {
+  try {
+    const url = new URL(String(currentUrl || window.location.href));
+    const currentStartRaw = String(url.searchParams.get("start") || "0").trim();
+    const currentStart = Number.isFinite(Number(currentStartRaw)) ? Number(currentStartRaw) : 0;
+    const nextStart = Math.max(0, currentStart + Math.max(1, Number(step || 25)));
+    url.searchParams.set("start", String(nextStart));
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
 async function gotoNextResultsPage(settings) {
   // Pagination is often not clickable until scrolled into view.
   try {
@@ -1600,6 +1613,12 @@ async function gotoNextResultsPage(settings) {
       disabled: Boolean(nextButton?.disabled),
       url: window.location.href
     });
+    const fallbackNextUrl = buildNextPageUrlByStart(window.location.href, 25);
+    if (fallbackNextUrl && fallbackNextUrl !== window.location.href) {
+      await logLine("Next page button missing. Moving using URL offset.", "info");
+      window.location.href = fallbackNextUrl;
+      return true;
+    }
     return false;
   }
 
@@ -2452,6 +2471,29 @@ function collectJobCards() {
     if (card) cardSet.add(card);
   }
   return Array.from(cardSet);
+}
+
+function hasEasyApplySignalOnCard(card) {
+  if (!card) return false;
+  const quickText = normalizeLabel(card.textContent || "");
+  if (quickText.includes("easy apply")) return true;
+
+  const explicitSignal = getBySelectorList(
+    [
+      ".job-card-container__apply-method",
+      ".job-card-list__apply-method",
+      "[data-test-job-card-easy-apply]",
+      "[aria-label*='Easy Apply']",
+      "[aria-label*='easy apply']",
+    ],
+    card,
+  );
+  if (explicitSignal) return true;
+
+  const buttonSignal = Array.from(card.querySelectorAll("button, a, span"))
+    .slice(0, 40)
+    .some((el) => normalizeLabel(`${el.getAttribute?.("aria-label") || ""} ${el.textContent || ""}`).includes("easy apply"));
+  return buttonSignal;
 }
 
 function getCardAnchor(card) {
@@ -4300,7 +4342,20 @@ async function runCycle(settings) {
   }
 
   await logLine(`Found ${cards.length} job cards`);
-  for (const card of cards) {
+  let cardsToProcess = cards;
+  if (settings.easyApplyOnly) {
+    const easyApplyCards = cards.filter((card) => hasEasyApplySignalOnCard(card));
+    if (easyApplyCards.length > 0 && easyApplyCards.length < cards.length) {
+      cardsToProcess = easyApplyCards;
+      await logLine(`Easy Apply candidates: ${easyApplyCards.length}/${cards.length}`);
+    } else if (easyApplyCards.length === 0) {
+      await debugLog(settings, "No explicit Easy Apply badge on cards; processing all cards as fallback", {
+        cards: cards.length,
+      });
+    }
+  }
+
+  for (const card of cardsToProcess) {
     const state = (await sendMessage({ type: "CP_GET_BOOTSTRAP" })).state;
     if (!state.running || state.paused) return false;
     if (runSearchTermSuccessCount >= getSwitchNumber(settings) && getConfiguredSearchTerms(settings).length > 1) {
