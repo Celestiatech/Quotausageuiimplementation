@@ -222,11 +222,6 @@ function readForm() {
     coverLetter: getValue("coverLetter")
   };
 
-  if (!settings.dryRun && settings.autoSubmit && !settings.liveModeAcknowledged) {
-    setStatus("Enable live mode acknowledgement before starting live auto-submit.", false);
-    return null;
-  }
-
   return settings;
 }
 

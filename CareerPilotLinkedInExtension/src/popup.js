@@ -498,11 +498,7 @@ document.getElementById("start").addEventListener("click", async () => {
   await focusOrOpenLinkedInJobs();
   const started = await sendMessage({ type: "CP_START", forceRestart: true });
   if (!started.ok) {
-    if (started.errorCode === "LIVE_ACK_REQUIRED") {
-      setStatus("Auto-submit needs acknowledgement. Open the LinkedIn Copilot panel and type: ack live", "warn");
-    } else {
-      setStatus(started.error || "Failed to start run", "error");
-    }
+    setStatus(started.error || "Failed to start run", "error");
     return;
   }
   await refresh();

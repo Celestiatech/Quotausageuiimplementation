@@ -32,7 +32,6 @@ let runSearchTermSuccessCount = 0;
 let lastRunStartedAt = null;
 let resumeChoiceCache = new Map();
 let lastBootstrapSettings = {};
-let pendingLiveAckStart = false;
 let lastPortalQuota = null;
 let knownAppliedJobIds = new Set();
 let knownAppliedLoadedAt = 0;
@@ -1971,7 +1970,6 @@ async function handleChatCommand(input) {
   const cmd = normalizeLabel(raw);
 
   if (cmd === "ack live" || cmd === "i acknowledge" || cmd === "acknowledge") {
-    pendingLiveAckStart = false;
     await sendMessage({
       type: "CP_SAVE_SETTINGS",
       settings: { liveModeAcknowledged: true, dryRun: false, autoSubmit: true }
@@ -1986,16 +1984,6 @@ async function handleChatCommand(input) {
   }
 
   if (cmd === "start live" || cmd === "live start" || cmd === "/live") {
-    const boot = await getBootstrap();
-    if (!boot?.settings?.liveModeAcknowledged) {
-      pendingLiveAckStart = true;
-      await botChat(
-        "Auto-submit needs one-time acknowledgement. Type: ack live",
-        "warn"
-      );
-      return;
-    }
-
     await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { dryRun: false, autoSubmit: true } });
     const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
     if (!startRes?.ok) {
@@ -2012,10 +2000,6 @@ async function handleChatCommand(input) {
       await botChat("Dry-run is ON: I will not click Submit. Use: start live", "warn");
     } else if (!boot?.settings?.autoSubmit) {
       await botChat("Auto-submit is OFF. I will fill forms, but submit may need manual click.", "warn");
-    } else if (!boot?.settings?.liveModeAcknowledged) {
-      pendingLiveAckStart = true;
-      await botChat("Auto-submit is ON but acknowledgement is missing. Type: ack live", "warn");
-      return;
     }
     const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
     if (!startRes?.ok) {
@@ -2082,7 +2066,7 @@ async function handleChatCommand(input) {
   }
   if (cmd === "auto submit on" || cmd === "autosubmit on") {
     await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { dryRun: false, autoSubmit: true } });
-    await botChat("Auto-submit ON. If blocked, enable live mode acknowledgement in extension settings.", "warn");
+    await botChat("Auto-submit ON.", "warn");
     return;
   }
   if (cmd === "auto submit off" || cmd === "autosubmit off") {

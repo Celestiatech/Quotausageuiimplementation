@@ -585,7 +585,7 @@ const DEFAULT_SETTINGS = {
   aiAnswerPath: "/ai/answer",
   dryRun: true,
   autoSubmit: false,
-  liveModeAcknowledged: false,
+  liveModeAcknowledged: true,
   autoResumeOnAnswer: true,
   runNonStop: false,
   alternateSortBy: false,
@@ -1197,16 +1197,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         return;
       }
-      if (!settings.dryRun && settings.autoSubmit && !settings.liveModeAcknowledged) {
-        await pushLog("Blocked start: Live mode requires explicit acknowledgement in settings", "error");
-        sendResponse({
-          ok: false,
-          errorCode: "LIVE_ACK_REQUIRED",
-          error: "Live mode is not acknowledged. Type 'ack live' in the Copilot panel chat (recommended) or enable live mode acknowledgement in extension settings."
-        });
-        return;
-      }
-
       // If the user has spendable Hires/free credits, lift the per-run apply limit automatically
       // so runs don't stop after 3. User can still override in settings.
       if (spendable > 3) {
