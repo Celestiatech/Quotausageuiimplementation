@@ -15,6 +15,7 @@ import {
   Download,
   ExternalLink,
   Link2,
+  Copy,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -79,6 +80,42 @@ function statusBadge(status: JobStatus) {
   return "bg-red-100 text-red-700";
 }
 
+const JOB_REASON_CODE_LABELS: Record<string, string> = {
+  NO_APPLY_BUTTON: "No Easy Apply button",
+  APPLIED_CACHE_HIT: "Already applied earlier",
+  RECENTLY_RETRIED: "Skipped: recently retried",
+  EASY_APPLY_MODAL_MISSING: "Easy Apply modal not found",
+  MAX_SKIPS_REACHED: "Skipped: max skip limit reached",
+};
+const EXT_BRIDGE_PING_TIMEOUT_MS = 4500;
+const EXT_BRIDGE_ACK_TIMEOUT_MS = 5000;
+
+function formatReasonCode(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (JOB_REASON_CODE_LABELS[upper]) return JOB_REASON_CODE_LABELS[upper];
+  return raw
+    .toLowerCase()
+    .split(/[_\s]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getJobReason(job: AutoApplyJob | null) {
+  if (!job) return "";
+  const reasonCode = String(job.criteriaJson?.reasonCode || "").trim();
+  if (reasonCode) return formatReasonCode(reasonCode);
+  return String(job.criteriaJson?.reason || "").trim();
+}
+
+function displayJobStatus(job: AutoApplyJob | null) {
+  if (!job) return "";
+  if (job.status === "cancelled" && getJobReason(job)) return "skipped";
+  return job.status;
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
@@ -129,12 +166,15 @@ function parseSearchTermsInput(value: string) {
 
 export default function Jobs() {
   const { user } = useAuth();
+  const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/downloads/AutoApplyCVLinkedInExtension.zip").trim();
+  const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [jobs, setJobs] = useState<AutoApplyJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [installMessage, setInstallMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [checkingExtension, setCheckingExtension] = useState(false);
@@ -281,43 +321,49 @@ export default function Jobs() {
     if (typeof window === "undefined") return;
     setCheckingExtension(true);
     try {
-      const result = await new Promise<ExtensionStatus>((resolve) => {
-        const requestId = `cp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        let settled = false;
-        const timeout = window.setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          window.removeEventListener("message", onMessage);
-          resolve({ installed: false });
-        }, 1600);
+      const probeOnce = (timeoutMs: number) =>
+        new Promise<ExtensionStatus>((resolve) => {
+          const requestId = `cp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          let settled = false;
+          const timeout = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            window.removeEventListener("message", onMessage);
+            resolve({ installed: false });
+          }, timeoutMs);
 
-        const onMessage = (event: MessageEvent) => {
-          const data = event.data as any;
-          if (!data || data.type !== "CP_WEB_PONG" || data.requestId !== requestId) return;
-          if (settled) return;
-          settled = true;
-          window.clearTimeout(timeout);
-          window.removeEventListener("message", onMessage);
-          const bridgeError = String(data.error || "").trim();
-          const runtimeBootstrapOk =
-            Boolean(data.state) &&
-            typeof data.state === "object" &&
-            !Array.isArray(data.state);
-          const installed = Boolean(data.installed) && !bridgeError && runtimeBootstrapOk;
-          resolve({
-            installed,
-            runtimeId: data.runtimeId || undefined,
-            linkedIn: data.linkedIn || undefined,
-            state: data.state || null,
-            pendingQuestions: Array.isArray(data.pendingQuestions) ? data.pendingQuestions : [],
-            screeningAnswers: data.screeningAnswers || {},
-            error: bridgeError || null,
-          });
-        };
+          const onMessage = (event: MessageEvent) => {
+            const data = event.data as any;
+            if (!data || data.type !== "CP_WEB_PONG" || data.requestId !== requestId) return;
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
+            window.removeEventListener("message", onMessage);
+            const bridgeError = String(data.error || "").trim();
+            const runtimeBootstrapOk =
+              Boolean(data.state) &&
+              typeof data.state === "object" &&
+              !Array.isArray(data.state);
+            const installed = Boolean(data.installed) && !bridgeError && runtimeBootstrapOk;
+            resolve({
+              installed,
+              runtimeId: data.runtimeId || undefined,
+              linkedIn: data.linkedIn || undefined,
+              state: data.state || null,
+              pendingQuestions: Array.isArray(data.pendingQuestions) ? data.pendingQuestions : [],
+              screeningAnswers: data.screeningAnswers || {},
+              error: bridgeError || null,
+            });
+          };
 
-        window.addEventListener("message", onMessage);
-        window.postMessage({ type: "CP_WEB_PING", requestId }, window.location.origin);
-      });
+          window.addEventListener("message", onMessage);
+          window.postMessage({ type: "CP_WEB_PING", requestId }, window.location.origin);
+        });
+
+      let result = await probeOnce(EXT_BRIDGE_PING_TIMEOUT_MS);
+      if (!result.installed) {
+        result = await probeOnce(EXT_BRIDGE_PING_TIMEOUT_MS);
+      }
       setExtensionStatus(result);
       await syncExtensionAnswersToSite(result);
 
@@ -454,7 +500,7 @@ export default function Jobs() {
           done = true;
           window.removeEventListener("message", onMessage);
           resolve({ ok: false, error: "Extension did not acknowledge settings sync" });
-        }, 2500);
+        }, EXT_BRIDGE_ACK_TIMEOUT_MS);
         const onMessage = (event: MessageEvent) => {
           const data = event.data as any;
           if (!data || data.type !== "CP_WEB_SYNC_SETTINGS_ACK" || data.requestId !== requestId) return;
@@ -513,7 +559,7 @@ export default function Jobs() {
           done = true;
           window.removeEventListener("message", onMessage);
           resolve({ ok: false, error: "Extension did not acknowledge answer save. Reload extension and retry." });
-        }, 2000);
+        }, EXT_BRIDGE_ACK_TIMEOUT_MS);
         const onMessage = (event: MessageEvent) => {
           const data = event.data as any;
           if (!data || data.type !== "CP_WEB_SAVE_ANSWER_ACK" || data.requestId !== requestId) return;
@@ -718,6 +764,65 @@ export default function Jobs() {
     }
   };
 
+  const onInstallOrReloadExtension = async () => {
+    if (typeof window === "undefined") return;
+    setError("");
+    setInstallMessage("");
+    try {
+      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = "AutoApplyCVLinkedInExtension.zip";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch {
+      const anchor = document.createElement("a");
+      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
+      anchor.download = "AutoApplyCVLinkedInExtension.zip";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }
+    setInstallMessage(
+      "ZIP downloaded. Next: unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, then pick the unzipped folder that contains manifest.json.",
+    );
+    window.setTimeout(() => {
+      window.open("chrome://extensions/", "_blank");
+    }, 160);
+  };
+
+  const copyLoadUnpackedSteps = async () => {
+    if (typeof window === "undefined" || !window.navigator?.clipboard) {
+      setError("Clipboard is not available in this browser.");
+      return;
+    }
+    try {
+      await window.navigator.clipboard.writeText(
+        [
+          "AutoApply CV Extension Setup (Load Unpacked)",
+          "1) Download AutoApplyCVLinkedInExtension.zip from dashboard and unzip it.",
+          "2) Open chrome://extensions/",
+          "3) Turn ON Developer mode (top-right).",
+          "4) Click Load unpacked.",
+          "5) Select the unzipped folder that contains manifest.json.",
+          "6) Refresh dashboard and click Check Extension.",
+          "7) Open https://www.linkedin.com/jobs/ and click Start in extension popup.",
+        ].join("\n"),
+      );
+      setInstallMessage("Install steps copied. Share them with users directly.");
+    } catch (copyError) {
+      setError(copyError instanceof Error ? copyError.message : "Failed to copy install steps");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
@@ -809,13 +914,41 @@ export default function Jobs() {
             <ExternalLink className="w-4 h-4" />
             Open LinkedIn Jobs
           </a>
-          <a
-            href="chrome://extensions/"
+          <button
+            type="button"
+            onClick={onInstallOrReloadExtension}
             className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
-            Install / Reload Extension
+            Download + Open Extensions
+          </button>
+          <a
+            href={extensionZipUrl}
+            download
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Download ZIP
           </a>
+          {extensionStoreUrl ? (
+            <a
+              href={extensionStoreUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Chrome Web Store
+            </a>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void copyLoadUnpackedSteps()}
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
+          >
+            <Copy className="w-4 h-4" />
+            Copy Setup Steps
+          </button>
           <button
             onClick={() => void syncProfileToExtension()}
             disabled={syncingSettings}
@@ -826,9 +959,16 @@ export default function Jobs() {
           </button>
         </div>
 
+        {installMessage ? (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            {installMessage}
+          </div>
+        ) : null}
+
         <ol className="mt-4 text-sm text-gray-700 list-decimal pl-5 space-y-1">
           <li>Login to LinkedIn in your browser.</li>
-          <li>Install AutoApply CV extension from `e:\Autoapply\CareerPilotLinkedInExtension` (Load unpacked).</li>
+          <li>Download and unzip `AutoApplyCVLinkedInExtension.zip`.</li>
+          <li>Open `chrome://extensions/`, enable Developer mode, click Load unpacked, and select the unzipped folder that contains `manifest.json`.</li>
           <li>Open LinkedIn Jobs page.</li>
           <li>Click extension icon, choose AutoApply CV extension, then click Start.</li>
         </ol>
@@ -977,6 +1117,8 @@ export default function Jobs() {
             const company = String(job.criteriaJson?.company || "LinkedIn");
             const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "Auto-Apply Job");
             const location = String(job.criteriaJson?.location || job.criteriaJson?.currentCity || "N/A");
+            const reason = getJobReason(job);
+            const displayStatus = displayJobStatus(job);
             return (
               <motion.div
                 key={job.id}
@@ -998,8 +1140,13 @@ export default function Jobs() {
                       <p className="text-sm text-gray-600">{company}</p>
                     </div>
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge(job.status)}`}>{job.status}</div>
+                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge(job.status)}`}>{displayStatus}</div>
                 </div>
+                {reason ? (
+                  <div className="mb-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">
+                    Reason: {reason}
+                  </div>
+                ) : null}
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2 text-gray-600">
                     <MapPin className="w-4 h-4" />
@@ -1033,7 +1180,7 @@ export default function Jobs() {
                   <h2 className="text-2xl font-bold text-gray-900">{String(selectedJob.criteriaJson?.title || selectedJob.criteriaJson?.keywords || "Auto-Apply Job")}</h2>
                   <p className="text-sm text-gray-600 mt-2">Job ID: {selectedJob.id}</p>
                 </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${statusBadge(selectedJob.status)}`}>{selectedJob.status}</div>
+                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${statusBadge(selectedJob.status)}`}>{displayJobStatus(selectedJob)}</div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4 mb-6">
@@ -1048,6 +1195,12 @@ export default function Jobs() {
                   </div>
                 </div>
               </div>
+
+              {getJobReason(selectedJob) ? (
+                <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
+                  Skipped reason: {getJobReason(selectedJob)}
+                </div>
+              ) : null}
 
               {selectedJob.errorMessage ? (
                 <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{selectedJob.errorMessage}</div>

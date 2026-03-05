@@ -15,7 +15,8 @@ import {
   FileText,
   DollarSign,
   MessageSquare,
-  Activity
+  Activity,
+  BookOpen
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -33,6 +34,7 @@ export default function AdminLayout() {
     { name: 'Applications', href: '/admin/applications', icon: FileText },
     { name: 'Revenue', href: '/admin/revenue', icon: DollarSign },
     { name: 'Support', href: '/admin/support', icon: MessageSquare },
+    { name: 'Blogs', href: '/admin/blogs', icon: BookOpen },
     { name: 'System Health', href: '/admin/health', icon: Activity },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
   ];

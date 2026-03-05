@@ -48,6 +48,7 @@ function isAllowedDashboardOrigin(origin, allowlist) {
 
 let dynamicAllowlist = [...DEFAULT_ALLOWLIST];
 let BRIDGE_ENABLED = isAllowedDashboardOrigin(window.location.origin, dynamicAllowlist);
+let bridgeHeartbeatTimer = null;
 
 function nowIso() {
   return new Date().toISOString();
@@ -106,6 +107,23 @@ function announceBridgeReady() {
   logBridge("bridge ready", bridgeMeta(), "runtimeId=", chrome?.runtime?.id || "");
 }
 
+function ensureBridgeHeartbeat() {
+  if (!BRIDGE_ENABLED) return;
+  if (bridgeHeartbeatTimer) return;
+  bridgeHeartbeatTimer = window.setInterval(() => {
+    if (!BRIDGE_ENABLED) return;
+    markDomBridgeReady();
+    safePost({
+      type: "CP_WEB_BRIDGE_HEARTBEAT",
+      installed: true,
+      runtimeId: chrome?.runtime?.id || "",
+      bridge: bridgeMeta(),
+      ts: nowIso(),
+    });
+    void pushQuotaToExtension();
+  }, 10000);
+}
+
 async function hydrateDynamicAllowlist() {
   try {
     const res = await fetch(`${window.location.origin}/api/public/extension-config`, {
@@ -124,6 +142,7 @@ async function hydrateDynamicAllowlist() {
     BRIDGE_ENABLED = isAllowedDashboardOrigin(window.location.origin, dynamicAllowlist);
     if (!wasEnabled && BRIDGE_ENABLED) {
       announceBridgeReady();
+      ensureBridgeHeartbeat();
     }
   } catch (error) {
     logBridge("failed to hydrate extension config", String(error?.message || error));
@@ -168,8 +187,7 @@ async function pushQuotaToExtension() {
 
 if (BRIDGE_ENABLED) {
   announceBridgeReady();
-  // Keep portal quota reasonably fresh for LinkedIn tabs.
-  window.setInterval(() => void pushQuotaToExtension(), 8000);
+  ensureBridgeHeartbeat();
 }
 
 // Allow the extension service worker to notify the dashboard tab that it just synced/charged.

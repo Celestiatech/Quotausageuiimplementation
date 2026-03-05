@@ -120,6 +120,8 @@ const WIZARD_STEPS = [
   "Auto-fill Fields",
   "Review",
 ] as const;
+const EXT_BRIDGE_PING_TIMEOUT_MS = 4500;
+const EXT_BRIDGE_ACK_TIMEOUT_MS = 5000;
 
 const DEFAULT_SEARCH_TERMS = "Software Engineer, Full Stack Developer";
 const EDU_BACHELORS_LABEL = "Have you completed the following level of education: Bachelor's Degree?";
@@ -493,9 +495,9 @@ export default function Onboarding() {
   const onboardingHydratedRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
 
-  const extensionZipUrl = "/downloads/AutoApplyCVLinkedInExtension.zip";
+  const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/downloads/AutoApplyCVLinkedInExtension.zip").trim();
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
-  const canDownloadExtensionZip = process.env.NODE_ENV !== "production";
+  const canDownloadExtensionZip = Boolean(extensionZipUrl);
   const showExtensionDebug =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("debug") === "1";
@@ -611,7 +613,7 @@ export default function Onboarding() {
             }));
           }
           resolve({ installed: false });
-        }, 1600);
+        }, EXT_BRIDGE_PING_TIMEOUT_MS);
 
         const onMessage = (event: MessageEvent) => {
           const data = event.data as any;
@@ -1001,7 +1003,7 @@ export default function Onboarding() {
         done = true;
         window.removeEventListener("message", onMessage);
         resolve({ ok: false, error: "Extension did not acknowledge settings sync. Reload extension and retry." });
-      }, 2600);
+      }, EXT_BRIDGE_ACK_TIMEOUT_MS);
 
       const onMessage = (event: MessageEvent) => {
         const data = event.data as any;
@@ -1054,23 +1056,60 @@ export default function Onboarding() {
     return "";
   };
 
-  const onInstallExtension = () => {
+  const onInstallExtension = async () => {
     if (typeof window === "undefined") return;
-    if (extensionStoreUrl) {
-      window.open(extensionStoreUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
     if (!canDownloadExtensionZip) {
       setError("Extension install link is managed by admin. Please contact support.");
       return;
     }
-    const anchor = document.createElement("a");
-    anchor.href = extensionZipUrl;
-    anchor.download = "AutoApplyCVLinkedInExtension.zip";
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
+    try {
+      setError("");
+      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, { method: "GET", cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = "AutoApplyCVLinkedInExtension.zip";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch {
+      const anchor = document.createElement("a");
+      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
+      anchor.download = "AutoApplyCVLinkedInExtension.zip";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }
+    setMessage(
+      "ZIP downloaded. Unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, and select the folder that contains manifest.json.",
+    );
     window.open("chrome://extensions/", "_blank");
+  };
+
+  const copyInstallSteps = async () => {
+    if (typeof window === "undefined" || !window.navigator?.clipboard) {
+      setError("Clipboard is not available in this browser.");
+      return;
+    }
+    try {
+      await window.navigator.clipboard.writeText(
+        [
+          "AutoApply CV Extension Setup (Load Unpacked)",
+          "1) Download and unzip AutoApplyCVLinkedInExtension.zip.",
+          "2) Open chrome://extensions/",
+          "3) Turn ON Developer mode.",
+          "4) Click Load unpacked.",
+          "5) Select the unzipped folder that contains manifest.json.",
+          "6) Return to onboarding and click Check Extension.",
+        ].join("\n"),
+      );
+      setMessage("Install steps copied.");
+    } catch (copyError) {
+      setError(copyError instanceof Error ? copyError.message : "Failed to copy install steps");
+    }
   };
 
   const copyExtensionDebug = async () => {
@@ -1338,8 +1377,18 @@ export default function Onboarding() {
               onClick={onInstallExtension}
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
             >
-              Add Extension to Chrome
+              Download Extension ZIP
             </button>
+            {extensionStoreUrl ? (
+              <a
+                href={extensionStoreUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50"
+              >
+                Open Chrome Web Store
+              </a>
+            ) : null}
             {canDownloadExtensionZip ? (
               <a
                 href={extensionZipUrl}
@@ -1349,6 +1398,13 @@ export default function Onboarding() {
                 Download ZIP Only
               </a>
             ) : null}
+            <button
+              type="button"
+              onClick={() => void copyInstallSteps()}
+              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50"
+            >
+              Copy Setup Steps
+            </button>
           </div>
 
           <ol className="text-sm text-gray-700 list-decimal pl-5 space-y-1">
@@ -1359,7 +1415,7 @@ export default function Onboarding() {
             )}
             <li>Open `chrome://extensions/` and ensure the extension is enabled.</li>
             {canDownloadExtensionZip ? (
-              <li>Click Load unpacked and select the unzipped extension folder.</li>
+              <li>Click Load unpacked and select the unzipped folder that contains `manifest.json`.</li>
             ) : null}
             <li>Refresh this onboarding page and click Check Extension.</li>
           </ol>

@@ -82,6 +82,23 @@ enum HireTxnStatus {
   voided
 }
 
+enum BlogPostStatus {
+  draft
+  published
+}
+
+enum DiscountCodeType {
+  percent
+  flat_rupees
+}
+
+enum DiscountCodeTarget {
+  all
+  wallet_topup
+  plan_pro
+  plan_coach
+}
+
 model User {
   id             String   @id @default(cuid())
   name          String
@@ -119,6 +136,9 @@ model User {
   subscription  Subscription?
   hireTransactions HireTransaction[]
   auditLogs     AuditLog[] @relation("actorAuditLogs")
+  blogPosts     BlogPost[] @relation("blogPostAuthor")
+  createdDiscountCodes DiscountCode[] @relation("discountCodeCreator")
+  discountRedemptions  DiscountRedemption[]
 }
 
 model EmailOtp {
@@ -315,4 +335,70 @@ model AuditLog {
 
   @@index([actorUserId, createdAt])
   @@index([action, createdAt])
+}
+
+model BlogPost {
+  id           String         @id @default(cuid())
+  title        String
+  slug         String         @unique
+  excerpt      String?
+  coverImage   String?
+  contentHtml  String         @db.Text
+  keywordsJson Json?
+  status       BlogPostStatus @default(draft)
+  publishedAt  DateTime?
+  authorId     String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  author       User?          @relation("blogPostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([status, publishedAt])
+  @@index([createdAt])
+}
+
+model DiscountCode {
+  id                String             @id @default(cuid())
+  code              String             @unique
+  description       String?
+  type              DiscountCodeType
+  target            DiscountCodeTarget @default(wallet_topup)
+  percentOff        Int?
+  flatAmountRupees  Int?
+  maxDiscountRupees Int?
+  minOrderRupees    Int?
+  usageLimitTotal   Int?
+  usageLimitPerUser Int?
+  usedCount         Int                @default(0)
+  active            Boolean            @default(true)
+  startsAt          DateTime?
+  endsAt            DateTime?
+  createdById       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  createdBy         User?              @relation("discountCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  redemptions       DiscountRedemption[]
+
+  @@index([active, target, code])
+  @@index([createdAt])
+}
+
+model DiscountRedemption {
+  id             String       @id @default(cuid())
+  discountCodeId String
+  userId         String
+  context        String
+  orderId        String?
+  paymentId      String?      @unique
+  baseRupees     Int
+  discountRupees Int
+  finalRupees    Int
+  createdAt      DateTime     @default(now())
+
+  discountCode   DiscountCode @relation(fields: [discountCodeId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([discountCodeId, userId])
+  @@index([context, createdAt])
 }

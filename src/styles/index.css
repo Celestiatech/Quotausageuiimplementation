@@ -1,6 +1,7 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+@import 'react-quill-new/dist/quill.snow.css';
 
 /* Premium Base Styles */
 * {
@@ -256,6 +257,82 @@ html {
 
 .hover-glow:hover {
   box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
+}
+
+/* Blog editor and public blog content styles */
+.admin-blog-editor .ql-toolbar.ql-snow {
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+  border-color: #d1d5db;
+}
+
+.admin-blog-editor .ql-container.ql-snow {
+  min-height: 320px;
+  border-bottom-left-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+  border-color: #d1d5db;
+  font-family: "Inter", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.blog-rich-content h1,
+.blog-rich-content h2,
+.blog-rich-content h3,
+.blog-rich-content h4 {
+  color: #111827;
+  font-weight: 700;
+  margin-top: 1.2em;
+  margin-bottom: 0.45em;
+}
+
+.blog-rich-content h1 {
+  font-size: 2rem;
+}
+
+.blog-rich-content h2 {
+  font-size: 1.6rem;
+}
+
+.blog-rich-content h3 {
+  font-size: 1.3rem;
+}
+
+.blog-rich-content p {
+  margin: 0.8em 0;
+  line-height: 1.8;
+  color: #1f2937;
+}
+
+.blog-rich-content ul,
+.blog-rich-content ol {
+  margin: 0.75em 0 0.9em 1.2em;
+}
+
+.blog-rich-content li {
+  margin: 0.35em 0;
+}
+
+.blog-rich-content a {
+  color: #4f46e5;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.blog-rich-content blockquote {
+  margin: 1em 0;
+  padding: 0.85em 1em;
+  border-left: 4px solid #818cf8;
+  background: #f5f3ff;
+  color: #4338ca;
+  border-radius: 0.5rem;
+}
+
+.blog-rich-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+  margin: 0.8em 0;
 }
 
 /* Premium Button Styles */

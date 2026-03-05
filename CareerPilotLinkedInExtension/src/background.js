@@ -6,11 +6,18 @@ const DAILY_CAP_STORAGE_KEY = "cpDailyCapState";
 const SETTINGS_SCHEMA_VERSION = 2;
 const PORTAL_IMPORT_QUEUE_KEY = "cpPortalImportQueue";
 const PORTAL_SYNC_COOLDOWN_KEY = "cpPortalSyncCooldown";
+const PORTAL_ORIGIN_STATE_KEY = "cpPortalOriginState";
+const PORTAL_ORIGIN_FAILURE_THRESHOLD = 3;
 const PORTAL_DEFAULT_ORIGIN = "https://autoapplycv.vercel.app";
-const PORTAL_FALLBACK_ORIGINS = [
+const PORTAL_REMOTE_ORIGIN_PRIORITY = [
+  PORTAL_DEFAULT_ORIGIN,
   "https://autoapplycv.in",
   "https://www.autoapplycv.in",
-  "https://autoapplycv.vercel.app",
+];
+const PORTAL_FALLBACK_ORIGINS = [
+  PORTAL_DEFAULT_ORIGIN,
+  "https://autoapplycv.in",
+  "https://www.autoapplycv.in",
   "http://localhost:3001",
   "http://localhost:3000",
 ];
@@ -23,6 +30,69 @@ let portalQuotaCache = {
 };
 let portalOrigin = "";
 let portalImportInFlight = false;
+let portalOriginState = {
+  origin: "",
+  failureCount: 0,
+  updatedAt: 0,
+};
+
+function normalizePortalOrigin(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "";
+  }
+}
+
+function persistPortalOriginState() {
+  const payload = {
+    origin: String(portalOriginState.origin || "").trim(),
+    failureCount: Math.max(0, Math.floor(Number(portalOriginState.failureCount || 0))),
+    updatedAt: Date.now(),
+  };
+  return chrome.storage.local.set({ [PORTAL_ORIGIN_STATE_KEY]: payload }).catch(() => {});
+}
+
+function setPreferredPortalOrigin(origin, opts = {}) {
+  const normalized = normalizePortalOrigin(origin);
+  if (!normalized) return;
+  const resetFailures = opts.resetFailures !== false;
+  portalOrigin = normalized;
+  portalOriginState = {
+    origin: normalized,
+    failureCount: resetFailures ? 0 : Math.max(0, Math.floor(Number(portalOriginState.failureCount || 0))),
+    updatedAt: Date.now(),
+  };
+  void persistPortalOriginState();
+}
+
+async function markPortalOriginFailure(origin) {
+  const normalized = normalizePortalOrigin(origin);
+  if (!normalized) return;
+  if (normalizePortalOrigin(portalOriginState.origin) !== normalized) return;
+  const nextFailures = Math.max(0, Math.floor(Number(portalOriginState.failureCount || 0))) + 1;
+  portalOriginState = {
+    origin: nextFailures >= PORTAL_ORIGIN_FAILURE_THRESHOLD ? "" : normalized,
+    failureCount: nextFailures >= PORTAL_ORIGIN_FAILURE_THRESHOLD ? 0 : nextFailures,
+    updatedAt: Date.now(),
+  };
+  if (!portalOriginState.origin) portalOrigin = "";
+  await persistPortalOriginState();
+}
+
+void chrome.storage.local.get(PORTAL_ORIGIN_STATE_KEY).then((snap) => {
+  const raw = snap?.[PORTAL_ORIGIN_STATE_KEY];
+  if (!raw || typeof raw !== "object") return;
+  const normalized = normalizePortalOrigin(raw.origin);
+  portalOriginState = {
+    origin: normalized,
+    failureCount: Math.max(0, Math.floor(Number(raw.failureCount || 0))),
+    updatedAt: Math.max(0, Number(raw.updatedAt || 0)),
+  };
+  if (normalized) portalOrigin = normalized;
+}).catch(() => {});
 
 async function notifyDashboardTabs(payload) {
   try {
@@ -53,7 +123,9 @@ async function notifyDashboardTabs(payload) {
 function setPortalQuota(data) {
   try {
     const maybeOrigin = String(data?._origin || "").trim();
-    if (maybeOrigin) portalOrigin = maybeOrigin;
+    if (maybeOrigin) {
+      setPreferredPortalOrigin(maybeOrigin, { resetFailures: true });
+    }
   } catch {
     // ignore
   }
@@ -77,6 +149,8 @@ function portalSpendable() {
 }
 
 function getPortalOrigin() {
+  const fromState = normalizePortalOrigin(portalOriginState.origin);
+  if (fromState) return fromState;
   const raw = String(portalOrigin || "").trim();
   if (raw) return raw;
   const fromQuota = String(portalQuotaCache?.data?._origin || "").trim();
@@ -122,9 +196,21 @@ async function detectPortalOriginsFromTabs() {
   } catch {
     // ignore
   }
+  const sortByPriority = (items, priority) => {
+    const order = new Map(priority.map((origin, idx) => [String(origin || "").trim(), idx]));
+    return [...items].sort((a, b) => {
+      const aRank = order.has(a) ? Number(order.get(a)) : Number.MAX_SAFE_INTEGER;
+      const bRank = order.has(b) ? Number(order.get(b)) : Number.MAX_SAFE_INTEGER;
+      return aRank - bRank;
+    });
+  };
+  const sortedRemotes = sortByPriority(remotes, PORTAL_REMOTE_ORIGIN_PRIORITY);
+  const localPriority = ["http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3000", "http://127.0.0.1:3000"];
+  const sortedLocals = sortByPriority(locals, localPriority);
   const uniq = new Set();
   const out = [];
-  for (const o of [...remotes, ...locals, ...PORTAL_FALLBACK_ORIGINS, PORTAL_DEFAULT_ORIGIN]) {
+  const preferred = normalizePortalOrigin(getPortalOrigin());
+  for (const o of [preferred, ...sortedRemotes, ...PORTAL_REMOTE_ORIGIN_PRIORITY, ...PORTAL_FALLBACK_ORIGINS, ...sortedLocals]) {
     const key = String(o || "").trim();
     if (!key || uniq.has(key)) continue;
     uniq.add(key);
@@ -168,7 +254,7 @@ async function refreshPortalScreeningAnswersIntoSettings() {
         if (label) merged[normalizeLabel(label)] = answer;
       }
       await saveSettings({ screeningAnswers: merged });
-      portalOrigin = origin;
+      setPreferredPortalOrigin(origin, { resetFailures: true });
       return true;
     } catch {
       // try next
@@ -212,6 +298,7 @@ async function reportPendingQuestionsToPortal(questions) {
   let usedOrigin = "";
   for (const origin of candidates) {
     try {
+      let unauthorized = false;
       for (const q of pending) {
         const questionKey = String(q?.questionKey || "").trim();
         const questionLabel = String(q?.questionLabel || "").trim();
@@ -227,10 +314,14 @@ async function reportPendingQuestionsToPortal(questions) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ questionKey, questionLabel, validationMessage }),
         });
-        if (res.status === 401 || res.status === 403) return false;
+        if (res.status === 401 || res.status === 403) {
+          unauthorized = true;
+          break;
+        }
         if (!res.ok) continue;
         reported[questionKey] = signature;
       }
+      if (unauthorized) continue;
       usedOrigin = origin;
       break;
     } catch {
@@ -239,7 +330,7 @@ async function reportPendingQuestionsToPortal(questions) {
   }
 
   if (usedOrigin) {
-    portalOrigin = usedOrigin;
+    setPreferredPortalOrigin(usedOrigin, { resetFailures: true });
     await chrome.storage.local.set({ [PORTAL_ISSUE_REPORTED_KEY]: reported });
     return true;
   }
@@ -265,21 +356,70 @@ async function clearPortalCooldown() {
   await chrome.storage.local.set({ [PORTAL_SYNC_COOLDOWN_KEY]: { untilMs: 0, reason: "" } });
 }
 
+function buildPortalImportEntryId(entry) {
+  const normalized = entry && typeof entry === "object" ? entry : {};
+  const data = normalized.data && typeof normalized.data === "object" ? normalized.data : {};
+  const outcomeType = String(normalized.outcomeType || "SKIPPED").toUpperCase();
+  const ts = String(normalized.ts || "").trim();
+  const stableJobId =
+    extractLinkedInJobId(data.jobId) ||
+    extractLinkedInJobId(data.externalJobId) ||
+    extractLinkedInJobId(data.jobUrl) ||
+    extractLinkedInJobId(data.pageUrl) ||
+    String(data.jobId || data.externalJobId || "").trim();
+  const reasonCode = String(data.reasonCode || "").trim().toUpperCase();
+  return `${outcomeType}:${stableJobId || "unknown"}:${reasonCode || "na"}:${ts || nowIso()}`;
+}
+
+function normalizePortalImportEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const outcomeType = String(entry.outcomeType || "SKIPPED").trim().toUpperCase();
+  const ts = String(entry.ts || "").trim() || nowIso();
+  const data = entry.data && typeof entry.data === "object" ? entry.data : {};
+  const normalized = {
+    ts,
+    outcomeType,
+    data,
+    entryId: String(entry.entryId || "").trim(),
+  };
+  if (!normalized.entryId) {
+    normalized.entryId = buildPortalImportEntryId(normalized);
+  }
+  return normalized;
+}
+
+function dedupePortalImportEntries(entries) {
+  const map = new Map();
+  for (const raw of Array.isArray(entries) ? entries : []) {
+    const normalized = normalizePortalImportEntry(raw);
+    if (!normalized) continue;
+    map.set(normalized.entryId, normalized);
+  }
+  return Array.from(map.values());
+}
+
 async function getPortalQueue() {
   const snap = await chrome.storage.local.get(PORTAL_IMPORT_QUEUE_KEY);
   const raw = snap?.[PORTAL_IMPORT_QUEUE_KEY];
-  return Array.isArray(raw) ? raw : [];
+  const deduped = dedupePortalImportEntries(Array.isArray(raw) ? raw : []);
+  if (Array.isArray(raw) && raw.length !== deduped.length) {
+    await chrome.storage.local.set({ [PORTAL_IMPORT_QUEUE_KEY]: deduped });
+  }
+  return deduped;
 }
 
 async function setPortalQueue(queue) {
-  const trimmed = Array.isArray(queue) ? queue.slice(-1500) : [];
+  const trimmed = dedupePortalImportEntries(Array.isArray(queue) ? queue : []).slice(-1500);
   await chrome.storage.local.set({ [PORTAL_IMPORT_QUEUE_KEY]: trimmed });
   return trimmed;
 }
 
 async function enqueuePortalImport(entry) {
+  const normalized = normalizePortalImportEntry(entry);
+  if (!normalized) return;
   const queue = await getPortalQueue();
-  queue.push(entry);
+  if (queue.find((item) => String(item?.entryId || "") === normalized.entryId)) return;
+  queue.push(normalized);
   await setPortalQueue(queue);
   void flushPortalImportsSoon();
 }
@@ -306,6 +446,7 @@ async function refreshPortalQuota() {
       const body = await res.json().catch(() => null);
       if (!res.ok || !body?.success) continue;
       setPortalQuota({ ...(body.data || {}), _origin: origin });
+      setPreferredPortalOrigin(origin, { resetFailures: true });
       return true;
     } catch {
       // try next origin
@@ -335,44 +476,75 @@ async function flushPortalImports() {
 
     let lastStatus = 0;
     let lastNotFound = false;
+    let authFailed = false;
+    let networkFailed = false;
+    const statusByOrigin = [];
+    const notFoundOrigins = [];
+    const authOrigins = [];
     for (const origin of candidates) {
-      const res = await fetch(`${origin}/api/extension/import`, {
-        method: "POST",
-        cache: "no-store",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries: batch }),
-      });
-      lastStatus = res.status;
-      const body = await res.json().catch(() => null);
+      try {
+        const res = await fetch(`${origin}/api/extension/import`, {
+          method: "POST",
+          cache: "no-store",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entries: batch }),
+        });
+        lastStatus = res.status;
+        const body = await res.json().catch(() => null);
+        statusByOrigin.push(`${origin}=${res.status}`);
 
-      if (res.status === 401 || res.status === 403) {
-        await pushLog("Portal sync needs login. Open dashboard once to sync and deduct Hires.", "warn");
-        await setPortalCooldown(10 * 60 * 1000, "AUTH_REQUIRED");
-        return;
-      }
-      if (res.status === 404) {
-        lastNotFound = true;
-        continue; // try another origin (common when both prod + localhost are open)
-      }
-      if (!res.ok || !body?.success) {
-        await pushLog(`Portal sync failed (HTTP ${res.status}). Will retry.`, "warn");
-        await setPortalCooldown(30 * 1000, "HTTP_ERROR");
-        return;
-      }
+        if (res.status === 401 || res.status === 403) {
+          authFailed = true;
+          authOrigins.push(origin);
+          if (preferred && origin === preferred) await markPortalOriginFailure(origin);
+          continue;
+        }
+        if (res.status === 404) {
+          lastNotFound = true;
+          notFoundOrigins.push(origin);
+          if (preferred && origin === preferred) await markPortalOriginFailure(origin);
+          continue; // try another origin (common when both prod + localhost are open)
+        }
+        if (!res.ok || !body?.success) {
+          if (preferred && origin === preferred) await markPortalOriginFailure(origin);
+          await pushLog(`Portal sync failed on ${origin} (HTTP ${res.status}). Will retry.`, "warn");
+          await setPortalCooldown(30 * 1000, "HTTP_ERROR");
+          return;
+        }
 
-      // Success for this origin.
-      await setPortalQueue(queue.slice(batch.length));
-      await clearPortalCooldown();
-      await refreshPortalQuota();
-      await pushLog(`Synced ${batch.length} update(s) to dashboard.`, "info");
-      await notifyDashboardTabs({ imported: batch.length, ts: nowIso() });
-      return;
+        // Success for this origin.
+        setPreferredPortalOrigin(origin, { resetFailures: true });
+        await setPortalQueue(queue.slice(batch.length));
+        await clearPortalCooldown();
+        await refreshPortalQuota();
+        await pushLog(`Synced ${batch.length} update(s) to dashboard via ${origin}.`, "info");
+        await notifyDashboardTabs({ imported: batch.length, ts: nowIso() });
+        return;
+      } catch {
+        networkFailed = true;
+        statusByOrigin.push(`${origin}=NETWORK_ERROR`);
+        if (preferred && origin === preferred) await markPortalOriginFailure(origin);
+        continue;
+      }
     }
 
+    if (authFailed) {
+      const authHint = authOrigins.length ? ` (${authOrigins.join(", ")})` : "";
+      const attemptHint = statusByOrigin.length ? ` Attempts: ${statusByOrigin.join(" | ")}` : "";
+      await pushLog(`Portal sync needs login${authHint}. Open dashboard once to sync and deduct Hires.${attemptHint}`, "warn");
+      await setPortalCooldown(10 * 60 * 1000, "AUTH_REQUIRED");
+      return;
+    }
     if (lastNotFound) {
-      await pushLog("Portal sync endpoint not found (404). Check dashboard URL/port and keep it open once.", "warn");
+      const originsHint = notFoundOrigins.length ? ` (${notFoundOrigins.join(", ")})` : "";
+      await pushLog(`Portal sync endpoint not found (404)${originsHint}. Check dashboard URL/port and keep it open once.`, "warn");
       await setPortalCooldown(5 * 60 * 1000, "NOT_FOUND");
+      return;
+    }
+    if (networkFailed) {
+      await pushLog("Portal sync network issue. Will retry shortly.", "warn");
+      await setPortalCooldown(30 * 1000, "NETWORK_ERROR");
       return;
     }
     await pushLog(`Portal sync failed (HTTP ${lastStatus || "?"}). Will retry.`, "warn");
@@ -775,6 +947,108 @@ async function getRunHistory() {
   };
 }
 
+function extractLinkedInJobId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const viewMatch = raw.match(/\/jobs\/view\/(\d+)/i);
+  if (viewMatch?.[1]) return String(viewMatch[1]);
+  const currentJobIdMatch = raw.match(/[?&]currentJobId=(\d+)/i);
+  if (currentJobIdMatch?.[1]) return String(currentJobIdMatch[1]);
+  const jobIdMatch = raw.match(/[?&]jobId=(\d+)/i);
+  if (jobIdMatch?.[1]) return String(jobIdMatch[1]);
+  if (/^\d+$/.test(raw)) return raw;
+  return "";
+}
+
+function collectAppliedJobIdsFromEntries(entries = []) {
+  const out = new Set();
+  for (const entry of entries) {
+    const data = entry?.data && typeof entry.data === "object" ? entry.data : {};
+    const reasonCode = String(data?.reasonCode || "").toUpperCase();
+    const candidates = [
+      data?.jobId,
+      data?.externalJobId,
+      data?.jobUrl,
+      data?.pageUrl,
+    ];
+    for (const candidate of candidates) {
+      const id = extractLinkedInJobId(candidate);
+      if (id) out.add(id);
+    }
+    if (reasonCode === "ALREADY_APPLIED" || reasonCode === "APPLIED_CACHE_HIT") {
+      const id = extractLinkedInJobId(data?.jobId || data?.jobUrl || data?.pageUrl);
+      if (id) out.add(id);
+    }
+  }
+  return out;
+}
+
+async function getAppliedJobIdsFromHistory(limit = 5000) {
+  const history = await getRunHistory();
+  const set = new Set();
+  const appliedSet = collectAppliedJobIdsFromEntries(history.applied || []);
+  for (const id of appliedSet) set.add(id);
+  const skippedSet = collectAppliedJobIdsFromEntries(
+    (history.skipped || []).filter((entry) => {
+      const reasonCode = String(entry?.data?.reasonCode || "").toUpperCase();
+      return reasonCode === "ALREADY_APPLIED" || reasonCode === "APPLIED_CACHE_HIT";
+    })
+  );
+  for (const id of skippedSet) set.add(id);
+  return Array.from(set).slice(-Math.max(1, Number(limit || 5000)));
+}
+
+async function getAppliedJobIdsFromPortal(limit = 400) {
+  const set = new Set();
+  const preferred = getPortalOrigin();
+  const candidates = preferred
+    ? [preferred, ...(await detectPortalOriginsFromTabs()).filter((o) => o !== preferred)]
+    : await detectPortalOriginsFromTabs();
+  const fetchLimit = Math.max(25, Math.min(1000, Number(limit || 400)));
+
+  for (const origin of candidates) {
+    try {
+      const res = await fetch(`${origin}/api/auto-apply/jobs?limit=${fetchLimit}&page=1`, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (res.status === 401 || res.status === 403) continue;
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) continue;
+
+      const jobs = Array.isArray(body?.data?.jobs) ? body.data.jobs : [];
+      for (const job of jobs) {
+        const status = String(job?.status || "").toLowerCase();
+        const criteria = job?.criteriaJson && typeof job.criteriaJson === "object" ? job.criteriaJson : {};
+        const reasonCode = String(criteria?.reasonCode || "").toUpperCase();
+        const shouldCountApplied =
+          status === "succeeded" ||
+          reasonCode === "ALREADY_APPLIED" ||
+          reasonCode === "APPLIED_CACHE_HIT";
+        if (!shouldCountApplied) continue;
+        const id = extractLinkedInJobId(criteria?.jobId || criteria?.jobUrl || criteria?.pageUrl);
+        if (id) set.add(id);
+      }
+
+      if (set.size) return Array.from(set);
+    } catch {
+      // try next origin
+    }
+  }
+  return Array.from(set);
+}
+
+async function getKnownAppliedJobIds(limit = 5000) {
+  const set = new Set(await getAppliedJobIdsFromHistory(limit));
+  const portalIds = await getAppliedJobIdsFromPortal(Math.min(600, Number(limit || 5000))).catch(() => []);
+  for (const id of portalIds) {
+    const normalized = String(id || "").trim();
+    if (/^\d+$/.test(normalized)) set.add(normalized);
+  }
+  return Array.from(set).slice(-Math.max(1, Number(limit || 5000)));
+}
+
 async function appendRunHistory(outcomeType, data = {}) {
   const key = HISTORY_KEY_MAP[String(outcomeType || "").toUpperCase()] || HISTORY_KEY_MAP.SKIPPED;
   const current = await chrome.storage.local.get(key);
@@ -1135,7 +1409,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       // Always enqueue outcome for portal import so Hires deduction stays in sync even if the dashboard isn't open.
       try {
-        await enqueuePortalImport({ ts: nowIso(), outcomeType, data });
+        await enqueuePortalImport({
+          ts: String(entry?.ts || nowIso()),
+          outcomeType,
+          data,
+          entryId: buildPortalImportEntryId({ ts: entry?.ts || nowIso(), outcomeType, data }),
+        });
       } catch {
         // ignore enqueue failures
       }
@@ -1173,6 +1452,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "CP_GET_RUN_HISTORY") {
       sendResponse({ ok: true, history: await getRunHistory() });
+      return;
+    }
+
+    if (message.type === "CP_GET_APPLIED_JOB_IDS") {
+      const limit = Math.max(1, Math.min(10000, Number(message.limit || 5000)));
+      sendResponse({ ok: true, jobIds: await getKnownAppliedJobIds(limit) });
       return;
     }
 

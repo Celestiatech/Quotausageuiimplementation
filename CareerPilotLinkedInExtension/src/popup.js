@@ -65,10 +65,8 @@ async function resolvePortalBaseUrl() {
         return;
       }
     }
-    if (origins.has("http://localhost:3001") || origins.has("http://127.0.0.1:3001")) {
-      portalBaseUrl = DEV_BASE_URL;
-      return;
-    }
+    // Keep production domain as default so popup actions stay on live dashboard.
+    // Localhost is still supported by bridge/import logic when explicitly opened.
   } catch {
     // ignore and use prod default
   }
@@ -133,6 +131,29 @@ async function detectSignedInUserFromTabs() {
     }
   }
   return null;
+}
+
+async function detectSignedInUserOnOrigin(origin) {
+  const base = String(origin || "").trim().replace(/\/+$/, "");
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/api/auth/me`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => null);
+    const user = data?.data?.user || data?.user || null;
+    if (!res.ok || !data?.success || !user?.email) return null;
+    return {
+      ok: true,
+      email: String(user.email || ""),
+      name: String(user.name || ""),
+      origin: base,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function renderAccountState(settings, sessionUser) {
@@ -368,11 +389,12 @@ function bindPopupToggle() {
 
 async function refresh() {
   await resolvePortalBaseUrl();
-  const [boot, loadedSettings, sessionUser] = await Promise.all([
+  const [boot, loadedSettings, selectedOriginSession] = await Promise.all([
     sendMessage({ type: "CP_GET_BOOTSTRAP" }),
     sendMessage({ type: "CP_LOAD_SETTINGS" }),
-    detectSignedInUserFromTabs(),
+    detectSignedInUserOnOrigin(portalBaseUrl),
   ]);
+  const sessionUser = selectedOriginSession || await detectSignedInUserFromTabs();
   if (!boot.ok) {
     setStatus("Extension service unavailable.", "error");
     return;

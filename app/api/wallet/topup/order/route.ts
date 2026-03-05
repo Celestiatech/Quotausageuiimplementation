@@ -7,9 +7,11 @@ import { getRazorpayClient } from "src/lib/billing";
 import { prisma } from "src/lib/prisma";
 import { enforceRateLimit, rateLimitKey } from "src/lib/rate-limit";
 import { hiresFromRupees, MIN_TOPUP_RUPEES } from "src/lib/hires";
+import { DiscountValidationError, evaluateDiscountForOrder } from "src/lib/discounts";
 
 const topupOrderSchema = z.object({
   rupees: z.number().int().min(MIN_TOPUP_RUPEES).max(200000),
+  discountCode: z.string().trim().max(32).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -30,7 +32,15 @@ export async function POST(req: NextRequest) {
     const body = topupOrderSchema.parse(await req.json());
     const rupees = body.rupees;
     const hires = hiresFromRupees(rupees);
-    const amountPaise = rupees * 100;
+    const appliedDiscount = await evaluateDiscountForOrder({
+      codeInput: body.discountCode,
+      userId: authResult.auth.user.id,
+      context: "wallet_topup",
+      baseRupees: rupees,
+    });
+    const discountRupees = appliedDiscount?.discountRupees || 0;
+    const finalRupees = appliedDiscount?.finalRupees || rupees;
+    const amountPaise = finalRupees * 100;
     const idempotencyKey = (req.headers.get("x-idempotency-key") || "").trim();
 
     if (idempotencyKey) {
@@ -52,6 +62,11 @@ export async function POST(req: NextRequest) {
         userId: authResult.auth.user.id,
         userEmail: authResult.auth.user.email,
         rupees: String(rupees),
+        baseRupees: String(rupees),
+        finalRupees: String(finalRupees),
+        discountRupees: String(discountRupees),
+        discountCode: appliedDiscount?.code || "",
+        discountCodeId: appliedDiscount?.discountCodeId || "",
         hires: String(hires),
         mode: "wallet_topup",
       },
@@ -62,7 +77,11 @@ export async function POST(req: NextRequest) {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      rupees,
+      rupees: finalRupees,
+      baseRupees: rupees,
+      finalRupees,
+      discountRupees,
+      discountCode: appliedDiscount?.code || null,
       hires,
       keyId: process.env.RZP_KEY_ID || "",
       minTopupRupees: MIN_TOPUP_RUPEES,
@@ -89,6 +108,9 @@ export async function POST(req: NextRequest) {
 
     return ok("Top-up order created", orderData);
   } catch (error) {
+    if (error instanceof DiscountValidationError) {
+      return fail(error.message, error.status, error.errorCode);
+    }
     return handleApiError(error, "Failed to create top-up order");
   }
 }

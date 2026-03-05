@@ -31,6 +31,12 @@ export const otpVerifySchema = z.object({
   purpose: z.enum(["signup", "login", "password_reset"]).default("signup"),
 });
 
+export const resetPasswordSchema = z.object({
+  email: emailSchema,
+  otp: z.string().regex(/^\d{6}$/),
+  password: passwordSchema,
+});
+
 export const consentSchema = z.object({
   consentType: z.enum(["auto_apply_terms", "communication_opt_in"]),
   version: z.string().trim().min(1).max(32),

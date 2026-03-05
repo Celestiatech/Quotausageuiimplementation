@@ -7,6 +7,9 @@ type Application = {
   company?: string | null;
   status: "submitted" | "skipped" | "failed";
   submittedAt: string;
+  reason?: string | null;
+  reasonCode?: string | null;
+  jobUrl?: string | null;
   user: { id: string; name: string; email: string; plan: string };
 };
 
@@ -70,6 +73,7 @@ export default function AdminApplications() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Application</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">User</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Status</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Reason</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Submitted</th>
               </tr>
             </thead>
@@ -85,11 +89,31 @@ export default function AdminApplications() {
                     <div className="text-gray-500">{app.user?.email}</div>
                   </td>
                   <td className="px-4 py-3 uppercase">{app.status}</td>
+                  <td className="px-4 py-3">
+                    {(app.status === "skipped" || app.status === "failed") ? (
+                      <div className="space-y-1">
+                        <div className="text-gray-900 font-medium">{app.reason || app.reasonCode || "-"}</div>
+                        {app.reasonCode ? <div className="text-xs text-gray-500">{app.reasonCode}</div> : null}
+                        {app.jobUrl ? (
+                          <a
+                            href={app.jobUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-blue-600 hover:underline break-all"
+                          >
+                            Open job URL
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">{new Date(app.submittedAt).toLocaleString()}</td>
                 </tr>
               ))}
               {!loading && applications.length === 0 ? (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-500">No applications found</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No applications found</td></tr>
               ) : null}
             </tbody>
           </table>

@@ -32,11 +32,24 @@ type TopupOrder = {
   orderId: string;
   amount: number;
   currency: string;
+  baseRupees: number;
+  finalRupees: number;
+  discountRupees: number;
+  discountCode?: string | null;
   rupees: number;
   hires: number;
   keyId: string;
   minTopupRupees: number;
   conversion: string;
+};
+
+type DiscountPreview = {
+  code: string;
+  description?: string | null;
+  baseRupees: number;
+  discountRupees: number;
+  finalRupees: number;
+  hires: number;
 };
 
 declare global {
@@ -70,7 +83,10 @@ export default function Billing() {
   const [txns, setTxns] = useState<WalletTxn[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [applyingDiscount, setApplyingDiscount] = useState(false);
   const [usdAmount, setUsdAmount] = useState(1.0);
+  const [discountCode, setDiscountCode] = useState("");
+  const [discountPreview, setDiscountPreview] = useState<DiscountPreview | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -126,6 +142,50 @@ export default function Billing() {
   const computedRupees = Math.max(minTopupRupees, Math.round(effectiveUsdAmount * INR_PER_USD));
   const computedHires = Math.max(0, computedRupees);
 
+  useEffect(() => {
+    setDiscountPreview((prev) => {
+      if (!prev) return prev;
+      if (prev.baseRupees === computedRupees) return prev;
+      return null;
+    });
+  }, [computedRupees]);
+
+  const applyDiscount = async () => {
+    try {
+      if (belowMinUsd) {
+        throw new Error(`Minimum top-up is $${minTopupUsd.toFixed(2)} before discount`);
+      }
+      const code = discountCode.trim().toUpperCase();
+      if (!code) {
+        setDiscountPreview(null);
+        throw new Error("Enter a discount code");
+      }
+      setApplyingDiscount(true);
+      setError("");
+      setMessage("");
+      const res = await fetch("/api/wallet/topup/discount/preview", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rupees: computedRupees,
+          discountCode: code,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        setDiscountPreview(null);
+        throw new Error(data?.message || "Failed to apply discount code");
+      }
+      setDiscountPreview(data.data as DiscountPreview);
+      setMessage(`Discount code ${String(data?.data?.code || code)} applied.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to apply discount");
+    } finally {
+      setApplyingDiscount(false);
+    }
+  };
+
   const startTopup = async () => {
     try {
       const cents = Math.round((Number.isFinite(usdAmount) ? usdAmount : 0) * 100);
@@ -141,9 +201,12 @@ export default function Billing() {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-idempotency-key": `wallet-${Date.now()}-${usdAmount.toFixed(2)}`,
+          "x-idempotency-key": `wallet-${Date.now()}-${usdAmount.toFixed(2)}-${discountCode.trim().toUpperCase() || "nocode"}`,
         },
-        body: JSON.stringify({ rupees: computedRupees }),
+        body: JSON.stringify({
+          rupees: computedRupees,
+          discountCode: discountCode.trim().toUpperCase() || undefined,
+        }),
       });
       const orderBody = await orderRes.json();
       if (!orderRes.ok || !orderBody?.success) {
@@ -160,7 +223,7 @@ export default function Billing() {
         amount: order.amount,
         currency: order.currency,
         name: "AutoApply CV Hires Wallet",
-        description: `${order.hires} Hires top-up`,
+        description: `${order.hires} Hires top-up${order.discountRupees > 0 ? ` (${order.discountCode} applied)` : ""}`,
         prefill: {
           name: user?.name || "",
           email: user?.email || "",
@@ -288,6 +351,28 @@ export default function Billing() {
           <div className="text-sm text-gray-600 pb-2">
             You will get <span className="font-semibold">{computedHires} Hires</span>. (1 Hire = 1 Apply)
           </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Discount Code (optional)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={discountCode}
+                onChange={(e) => {
+                  setDiscountCode(String(e.target.value || "").toUpperCase());
+                  setDiscountPreview(null);
+                }}
+                placeholder="WELCOME10"
+                className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none uppercase"
+              />
+              <button
+                onClick={() => void applyDiscount()}
+                disabled={applyingDiscount || belowMinUsd}
+                className="px-4 py-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold disabled:opacity-60"
+              >
+                {applyingDiscount ? "Applying..." : "Apply"}
+              </button>
+            </div>
+          </div>
           <button
             onClick={() => void startTopup()}
             disabled={processing || belowMinUsd}
@@ -296,6 +381,16 @@ export default function Billing() {
             {processing ? "Processing..." : "Pay with Razorpay"}
           </button>
         </div>
+        {discountPreview ? (
+          <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            <div className="font-semibold">Code applied: {discountPreview.code}</div>
+            <div className="mt-1">
+              Base: INR {discountPreview.baseRupees} | Discount: INR {discountPreview.discountRupees} | Payable: INR{" "}
+              {discountPreview.finalRupees}
+            </div>
+            {discountPreview.description ? <div className="text-xs mt-1 text-green-700">{discountPreview.description}</div> : null}
+          </div>
+        ) : null}
         <div className="mt-2 text-xs text-gray-500">
           Charged in INR at approximate rate: $1 = INR {INR_PER_USD.toFixed(1)}.
         </div>

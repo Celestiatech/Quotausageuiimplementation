@@ -7,6 +7,7 @@ import { consumeHiresForApplies } from "src/lib/hires";
 type IncomingEntry = {
   ts: string;
   outcomeType: string;
+  entryId?: string;
   data?: Record<string, unknown>;
 };
 
@@ -26,6 +27,18 @@ function normalizeOutcome(value: unknown) {
   const v = String(value || "").trim().toUpperCase();
   if (v === "APPLIED" || v === "FAILED" || v === "SKIPPED" || v === "EXTERNAL") return v;
   return "SKIPPED";
+}
+
+function buildEntryId(input: IncomingEntry) {
+  const data = input.data || {};
+  const stableJobId =
+    parseLinkedInJobId(data.jobUrl) ||
+    parseLinkedInJobId(data.pageUrl) ||
+    parseLinkedInJobId(data.jobId) ||
+    String(data.jobId || data.externalJobId || "").trim() ||
+    "unknown";
+  const reasonCode = String(data.reasonCode || "").trim().toUpperCase() || "na";
+  return `${normalizeOutcome(input.outcomeType)}:${stableJobId}:${reasonCode}:${String(input.ts || "").trim()}`;
 }
 
 function toJobStatus(outcomeType: string) {
@@ -51,6 +64,7 @@ export async function POST(req: NextRequest) {
       .map((e: any) => ({
         ts: String(e?.ts || ""),
         outcomeType: normalizeOutcome(e?.outcomeType),
+        entryId: String(e?.entryId || "").trim(),
         data: e?.data && typeof e.data === "object" ? (e.data as Record<string, unknown>) : {},
       }))
       .filter((e) => Boolean(e.ts));
@@ -58,9 +72,13 @@ export async function POST(req: NextRequest) {
     if (!entries.length) return fail("No entries to import", 400, "NO_ENTRIES");
 
     const userId = authResult.auth.user.id;
+    const seenEntryIds = new Set<string>();
 
     const results = [];
     for (const entry of entries.slice(0, 200)) {
+      const effectiveEntryId = entry.entryId || buildEntryId(entry);
+      if (seenEntryIds.has(effectiveEntryId)) continue;
+      seenEntryIds.add(effectiveEntryId);
       const data = entry.data || {};
       const jobUrlId = parseLinkedInJobId(data.jobUrl);
       const pageUrlId = parseLinkedInJobId(data.pageUrl);
@@ -79,6 +97,7 @@ export async function POST(req: NextRequest) {
       const status = toJobStatus(entry.outcomeType);
       const criteriaJson = {
         source: "linkedin_extension",
+        entryId: effectiveEntryId,
         jobId,
         jobUrl,
         pageUrl,
@@ -129,6 +148,7 @@ export async function POST(req: NextRequest) {
             submittedAt: new Date(entry.ts),
             metadataJson: {
               source: "linkedin_extension",
+              entryId: effectiveEntryId,
               reasonCode,
               jobUrl,
               pageUrl,
@@ -147,6 +167,7 @@ export async function POST(req: NextRequest) {
             metadataJson: {
               ...(typeof existingApp.metadataJson === "object" && existingApp.metadataJson ? (existingApp.metadataJson as any) : {}),
               source: "linkedin_extension",
+              entryId: effectiveEntryId,
               reasonCode,
               jobUrl,
               pageUrl,
@@ -168,6 +189,7 @@ export async function POST(req: NextRequest) {
           idempotencyPrefix: `ext_apply:${jobId}:${entry.ts}`,
           metadataJson: {
             source: "linkedin_extension",
+            entryId: effectiveEntryId,
             externalJobId: jobId,
             jobUrl,
             pageUrl,
@@ -189,7 +211,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      results.push({ jobId: job.id, externalJobId: jobId, outcomeType: entry.outcomeType });
+      results.push({ jobId: job.id, externalJobId: jobId, outcomeType: entry.outcomeType, entryId: effectiveEntryId });
     }
 
     return ok("Imported extension pipeline events", { imported: results.length, results });

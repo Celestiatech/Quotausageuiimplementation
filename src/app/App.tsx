@@ -16,13 +16,12 @@ import Pricing from './pages/Pricing';
 import About from './pages/About';
 import FAQ from './pages/FAQ';
 import Blog from './pages/Blog';
+import BlogPost from './pages/BlogPost';
 import ExtensionDesign from './pages/ExtensionDesign';
-import BlogLazyApplyAlternative from './pages/BlogLazyApplyAlternative';
-import BlogBestAiJobSearchTools from './pages/BlogBestAiJobSearchTools';
-import BlogLinkedInEasyApplyDoesItWork from './pages/BlogLinkedInEasyApplyDoesItWork';
 import ThankYou from './pages/ThankYou';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
 import AdminLogin from './pages/AdminLogin';
 
 // Dashboard Pages
@@ -47,6 +46,7 @@ import Revenue from './pages/admin/Revenue';
 import Support from './pages/admin/Support';
 import Health from './pages/admin/Health';
 import AdminSettings from './pages/admin/AdminSettings';
+import AdminBlogs from './pages/admin/Blogs';
 
 // Protected Route Components
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -97,14 +97,13 @@ export default function App() {
             <Route path="faq" element={<FAQ />} />
             <Route path="extension-design" element={<ExtensionDesign />} />
             <Route path="blog" element={<Blog />} />
-            <Route path="blog/lazyapply-alternative" element={<BlogLazyApplyAlternative />} />
-            <Route path="blog/best-ai-job-search-tools" element={<BlogBestAiJobSearchTools />} />
-            <Route path="blog/linkedin-easy-apply-does-it-work" element={<BlogLinkedInEasyApplyDoesItWork />} />
+            <Route path="blog/:slug" element={<BlogPost />} />
             <Route path="thank-you" element={<ThankYou />} />
           </Route>
 
           {/* Auth Pages */}
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/signup" element={<Signup />} />
 
@@ -146,6 +145,7 @@ export default function App() {
             <Route path="revenue" element={<Revenue />} />
             <Route path="support" element={<Support />} />
             <Route path="health" element={<Health />} />
+            <Route path="blogs" element={<AdminBlogs />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Routes>

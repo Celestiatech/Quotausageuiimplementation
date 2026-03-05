@@ -10,11 +10,14 @@ const JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search/?f_AL=true";
 const PANEL_PREFS_KEY = "cpPanelPrefs";
 const RUN_SEEN_STORAGE_KEY = "cpRunSeenSnapshot";
 const JOB_OUTCOME_CACHE_KEY = "cpSeenJobOutcomeCache";
+const JOB_OUTCOME_CACHE_SCHEMA_KEY = "cpSeenJobOutcomeCacheSchema";
+const JOB_OUTCOME_CACHE_SCHEMA_VERSION = 2;
 const APPLIED_JOB_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const ALREADY_APPLIED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const NO_APPLY_TTL_MS = 12 * 60 * 60 * 1000;
-const GENERIC_SKIP_TTL_MS = 6 * 60 * 60 * 1000;
+const ALREADY_APPLIED_TTL_MS = 24 * 60 * 60 * 1000;
+const NO_APPLY_TTL_MS = 35 * 60 * 1000;
+const GENERIC_SKIP_TTL_MS = 20 * 60 * 1000;
 const MAX_JOB_OUTCOME_CACHE_ITEMS = 8000;
+const KNOWN_APPLIED_REFRESH_MS = 30 * 1000;
 
 let panelEl = null;
 let runningLoop = false;
@@ -31,6 +34,8 @@ let resumeChoiceCache = new Map();
 let lastBootstrapSettings = {};
 let pendingLiveAckStart = false;
 let lastPortalQuota = null;
+let knownAppliedJobIds = new Set();
+let knownAppliedLoadedAt = 0;
 let currentJobContext = {
   title: "",
   company: "",
@@ -215,7 +220,20 @@ function normalizeJobOutcomeCacheEntry(entry) {
   };
 }
 
+function ensureJobOutcomeCacheSchema() {
+  try {
+    const raw = localStorage.getItem(JOB_OUTCOME_CACHE_SCHEMA_KEY);
+    const current = Number(raw || 0);
+    if (current === JOB_OUTCOME_CACHE_SCHEMA_VERSION) return;
+    localStorage.removeItem(JOB_OUTCOME_CACHE_KEY);
+    localStorage.setItem(JOB_OUTCOME_CACHE_SCHEMA_KEY, String(JOB_OUTCOME_CACHE_SCHEMA_VERSION));
+  } catch {
+    // ignore storage failures
+  }
+}
+
 function loadJobOutcomeCache() {
+  ensureJobOutcomeCacheSchema();
   try {
     const raw = localStorage.getItem(JOB_OUTCOME_CACHE_KEY);
     if (!raw) return new Map();
@@ -283,6 +301,64 @@ function getCachedJobOutcome(jobKey) {
     return null;
   }
   return found;
+}
+
+function isTransientSkipCooldownOutcome(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  const reason = String(entry.reasonCode || "").toUpperCase();
+  const ageMs = Math.max(0, Date.now() - Number(entry.ts || 0));
+  if (reason === "NO_APPLY_BUTTON") return ageMs < 20 * 60 * 1000;
+  if (reason === "MODAL_NOT_FOUND") return ageMs < 20 * 60 * 1000;
+  if (reason === "EXTERNAL_APPLY_ONLY") return ageMs < 60 * 60 * 1000;
+  return false;
+}
+
+function isAppliedCacheHit(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  const status = String(entry.status || "").toUpperCase();
+  const reason = String(entry.reasonCode || "").toUpperCase();
+  const ageMs = Math.max(0, Date.now() - Number(entry.ts || 0));
+  if (status === "APPLIED") return true;
+  if (reason === "ALREADY_APPLIED") return ageMs < ALREADY_APPLIED_TTL_MS;
+  return false;
+}
+
+function collectKnownAppliedFromLocalOutcomeCache() {
+  const cache = loadJobOutcomeCache();
+  const ids = [];
+  for (const entry of cache.values()) {
+    const status = String(entry?.status || "").toUpperCase();
+    const reasonCode = String(entry?.reasonCode || "").toUpperCase();
+    const key = String(entry?.jobKey || "").trim();
+    if (!/^\d+$/.test(key)) continue;
+    if (status === "APPLIED" || reasonCode === "ALREADY_APPLIED") ids.push(key);
+  }
+  return ids;
+}
+
+async function refreshKnownAppliedJobIds(force = false) {
+  const now = Date.now();
+  if (!force && now - knownAppliedLoadedAt < KNOWN_APPLIED_REFRESH_MS && knownAppliedJobIds.size) {
+    return knownAppliedJobIds;
+  }
+
+  const merged = new Set([...knownAppliedJobIds, ...collectKnownAppliedFromLocalOutcomeCache()]);
+  const res = await sendMessage({ type: "CP_GET_APPLIED_JOB_IDS" });
+  if (res?.ok && Array.isArray(res.jobIds)) {
+    for (const id of res.jobIds) {
+      const normalized = String(id || "").trim();
+      if (/^\d+$/.test(normalized)) merged.add(normalized);
+    }
+  }
+  knownAppliedJobIds = merged;
+  knownAppliedLoadedAt = now;
+  return knownAppliedJobIds;
+}
+
+function markKnownApplied(jobKey) {
+  const key = String(jobKey || "").trim();
+  if (!/^\d+$/.test(key)) return;
+  knownAppliedJobIds.add(key);
 }
 
 function clearSeenJobsForRun(runStartedAt = "") {
@@ -861,12 +937,36 @@ async function waitForApplyButtonFromDetailPane(settings, timeoutMs = 7000, cont
   return { type: "none", button: null };
 }
 
+function isAppliedStatusText(text) {
+  const t = normalizeLabel(text);
+  if (!t) return false;
+  if (t.includes("easy apply")) return false;
+  if (/\bapplication submitted\b/.test(t)) return true;
+  if (/\bapplied\b/.test(t)) return true;
+  if (/\bsubmitted\b/.test(t) && t.includes("application")) return true;
+  return false;
+}
+
 function isAlreadyAppliedCard(card) {
-  const cardText = normalizeLabel(card?.textContent || "");
-  if (cardText.includes("applied")) return true;
-  const footer = card?.querySelector(".job-card-container__footer-job-state, .job-card-list__footer-wrapper, .jobs-card__listdate");
-  const footerText = normalizeLabel(footer?.textContent || "");
-  return footerText.includes("applied");
+  const footerNodes = Array.from(
+    card?.querySelectorAll?.(
+      ".job-card-container__footer-job-state, .job-card-list__footer-wrapper, .jobs-card__listdate, .job-card-list__footer-wrapper *"
+    ) || []
+  );
+  for (const node of footerNodes) {
+    if (isAppliedStatusText(node?.textContent || "")) return true;
+  }
+
+  const stateBadgeNodes = Array.from(
+    card?.querySelectorAll?.("[aria-label], [data-test-id*='appl'], [class*='appl']") || []
+  );
+  for (const node of stateBadgeNodes) {
+    const aria = String(node?.getAttribute?.("aria-label") || "");
+    if (isAppliedStatusText(aria)) return true;
+    if (isAppliedStatusText(node?.textContent || "")) return true;
+  }
+
+  return false;
 }
 
 function extractLinkedInJobIdFromUrl(url) {
@@ -3016,6 +3116,69 @@ function getYearsFallback(settings) {
   return "1";
 }
 
+function getStructuredTextFallback(label, settings) {
+  const l = normalizeLabel(label);
+  if (!l) return "";
+
+  if (
+    l.includes("current company") ||
+    l.includes("current employer") ||
+    l.includes("employer name") ||
+    l.includes("company name")
+  ) {
+    return String(settings.recentEmployer || "").trim();
+  }
+
+  if (
+    l.includes("employee referral") ||
+    l.includes("provide their name") ||
+    l.includes("if so, who")
+  ) {
+    return "N/A";
+  }
+
+  if (
+    l.includes("how did you hear") ||
+    l.includes("how did you find") ||
+    (l.includes("hear") && (l.includes("position") || l.includes("role") || l.includes("job")))
+  ) {
+    return "LinkedIn";
+  }
+
+  if (l.includes("desired compensation") || l.includes("desired salary") || l.includes("desired pay")) {
+    return getSalaryAnswer(l, settings) || "Negotiable";
+  }
+
+  if (
+    (l.includes("earliest") && l.includes("start")) ||
+    l.includes("available to start") ||
+    l.includes("start working")
+  ) {
+    const noticeDays = normalizeNumberString(settings.noticePeriodDays);
+    if (noticeDays) {
+      const n = Number(noticeDays);
+      if (Number.isFinite(n) && n <= 7) return "Immediately";
+      return `${noticeDays} days`;
+    }
+    return "Immediately";
+  }
+
+  return "";
+}
+
+function shouldUseNumericFallbackForTextInput(label, textInput) {
+  const inputType = normalizeLabel(textInput?.getAttribute?.("type") || "");
+  if (inputType === "number") return true;
+  const l = normalizeLabel(label);
+  return (
+    l.includes("year") ||
+    l.includes("how many") ||
+    l.includes("number of") ||
+    l.includes("gpa") ||
+    l.includes("score")
+  );
+}
+
 function getSelectRuleAnswer(label, settings, optionsForMatch, currentOptionText = "") {
   const l = normalizeLabel(label);
   if (l.includes("email") && !isMarketingConsentQuestion(l)) {
@@ -3176,7 +3339,8 @@ async function fillUnlabeledQuestionBlock(block, settings) {
   if (!changed && textInput) {
     const prev = String(textInput.value || "").trim();
     if (!prev) {
-      const answer = getYearsFallback(settings);
+      const inputType = normalizeLabel(textInput.getAttribute("type") || "");
+      const answer = inputType === "number" ? getYearsFallback(settings) : "";
       if (answer && prev !== answer) {
         textInput.focus();
         textInput.value = answer;
@@ -3248,6 +3412,14 @@ async function fillQuestionBlock(block, settings) {
     answer = String(settings.coverLetter || "").trim();
   }
   if (textInput && !answer && textInput.tagName.toLowerCase() !== "textarea") {
+    answer = getStructuredTextFallback(label, settings);
+  }
+  if (
+    textInput &&
+    !answer &&
+    textInput.tagName.toLowerCase() !== "textarea" &&
+    shouldUseNumericFallbackForTextInput(label, textInput)
+  ) {
     answer = getYearsFallback(settings);
   }
   if (textInput && answer) {
@@ -3859,6 +4031,8 @@ async function runCycle(settings) {
     return false;
   }
 
+  await refreshKnownAppliedJobIds(false);
+
   if (isJobsViewPage()) {
     await debugLog(settings, "Running from jobs view page");
     const viewDescription = getJobDescriptionText();
@@ -3878,30 +4052,45 @@ async function runCycle(settings) {
       window.location.href = getActiveRunSearchUrl(settings);
       return false;
     }
-    const cachedViewOutcome = getCachedJobOutcome(viewJobKey);
-    const viewAlreadyAppliedCacheHit =
-      cachedViewOutcome &&
-      (cachedViewOutcome.status === "APPLIED" || cachedViewOutcome.reasonCode === "ALREADY_APPLIED");
-    if (viewAlreadyAppliedCacheHit) {
+    if (viewJobKey && knownAppliedJobIds.has(viewJobKey)) {
+      await debugLog(settings, "Skipping jobs view from known applied ids", { jobKey: viewJobKey });
       runStats.skipped += 1;
       await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
+      await recordOutcome("SKIPPED", {
+        reasonCode: "APPLIED_CACHE_HIT",
+        reason: "Known applied job id cache hit",
+        ...currentJobContext
+      });
+      recordJobOutcomeCache(viewJobKey, "SKIPPED", "ALREADY_APPLIED");
+      markKnownApplied(viewJobKey);
       await reportProgress();
       markJobSeen(viewJobKey);
       window.location.href = getActiveRunSearchUrl(settings);
       return true;
     }
-    if (
-      cachedViewOutcome &&
-      cachedViewOutcome.reasonCode &&
-      ["NO_APPLY_BUTTON", "MODAL_NOT_FOUND", "EXTERNAL_APPLY_ONLY"].includes(cachedViewOutcome.reasonCode)
-    ) {
+    const cachedViewOutcome = getCachedJobOutcome(viewJobKey);
+    const viewAlreadyAppliedCacheHit = isAppliedCacheHit(cachedViewOutcome);
+    if (viewAlreadyAppliedCacheHit) {
+      runStats.skipped += 1;
+      await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
+      await recordOutcome("SKIPPED", {
+        reasonCode: "APPLIED_CACHE_HIT",
+        reason: "Applied cache hit from local outcome cache",
+        ...currentJobContext
+      });
+      recordJobOutcomeCache(viewJobKey, "SKIPPED", "ALREADY_APPLIED");
+      markKnownApplied(viewJobKey);
+      await reportProgress();
+      markJobSeen(viewJobKey);
+      window.location.href = getActiveRunSearchUrl(settings);
+      return true;
+    }
+    if (cachedViewOutcome && isTransientSkipCooldownOutcome(cachedViewOutcome)) {
       await debugLog(settings, "Skipping jobs view from temporary cooldown cache", {
         jobKey: viewJobKey,
         reasonCode: cachedViewOutcome.reasonCode,
       });
-      runStats.skipped += 1;
-      await logOutcome("info", "Skipped (recently retried)", "RECENTLY_RETRIED");
-      await reportProgress();
+      await logLine("Deferred retry for recently attempted job (cooldown active).", "info");
       markJobSeen(viewJobKey);
       window.location.href = getActiveRunSearchUrl(settings);
       return true;
@@ -3936,8 +4125,28 @@ async function runCycle(settings) {
       window.location.href = getActiveRunSearchUrl(settings);
       return true;
     }
-    const applyAction = await waitForApplyButtonFromDetailPane(settings, 9000, "jobs view");
+    let applyAction = await waitForApplyButtonFromDetailPane(settings, 9000, "jobs view");
     if (applyAction.type === "none" || !applyAction.button) {
+      await sleep(650);
+      applyAction = await waitForApplyButtonFromDetailPane(settings, 3000, "jobs view recovery");
+    }
+    if (applyAction.type === "none" || !applyAction.button) {
+      await refreshKnownAppliedJobIds(true);
+      if (viewJobKey && knownAppliedJobIds.has(viewJobKey)) {
+        runStats.skipped += 1;
+        await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
+        await recordOutcome("SKIPPED", {
+          reasonCode: "APPLIED_CACHE_HIT",
+          reason: "Re-checked after missing apply button; job already applied",
+          ...currentJobContext
+        });
+        recordJobOutcomeCache(viewJobKey, "SKIPPED", "ALREADY_APPLIED");
+        markKnownApplied(viewJobKey);
+        await reportProgress();
+        markJobSeen(viewJobKey);
+        window.location.href = getActiveRunSearchUrl(settings);
+        return true;
+      }
       if (hasDailyEasyApplyLimitSignal()) {
         await logLine("LinkedIn daily Easy Apply limit detected. Stopping run.", "warn");
         await recordOutcome("SKIPPED", {
@@ -4029,6 +4238,7 @@ async function runCycle(settings) {
         ...currentJobContext
       });
       recordJobOutcomeCache(viewJobKey, "APPLIED", "SUBMITTED");
+      markKnownApplied(viewJobKey);
     } else if (resultFromView.skipped) {
       runStats.skipped += 1;
       if (resultFromView.reason) await logLine(`Skipped: ${resultFromView.reason}`, "warn");
@@ -4115,39 +4325,73 @@ async function runCycle(settings) {
       });
       continue;
     }
+    const jobAliasKeys = new Set([jobKey]);
+    const recordOutcomeCacheForAliases = (status, reasonCode = "") => {
+      for (const alias of jobAliasKeys) {
+        recordJobOutcomeCache(alias, status, reasonCode);
+      }
+    };
+    const markSeenForAliases = () => {
+      for (const alias of jobAliasKeys) {
+        markJobSeen(alias);
+      }
+    };
+    const markAppliedForAliases = () => {
+      for (const alias of jobAliasKeys) {
+        markKnownApplied(alias);
+      }
+    };
+
     if (jobKey && runSeenJobKeys.has(jobKey)) {
       await debugLog(settings, "Skipping already-seen card in this run", { jobKey });
       continue;
     }
+    if (jobKey && knownAppliedJobIds.has(jobKey)) {
+      await debugLog(settings, "Skipping job from known applied ids", { jobKey });
+      runStats.skipped += 1;
+      await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
+      await recordOutcome("SKIPPED", {
+        reasonCode: "APPLIED_CACHE_HIT",
+        reason: "Known applied job id cache hit",
+        jobId: jobKey,
+        ...extractCardMeta(card)
+      });
+      recordOutcomeCacheForAliases("SKIPPED", "ALREADY_APPLIED");
+      markAppliedForAliases();
+      await reportProgress();
+      markSeenForAliases();
+      continue;
+    }
     const cachedOutcome = getCachedJobOutcome(jobKey);
-    const alreadyAppliedCacheHit =
-      cachedOutcome &&
-      (cachedOutcome.status === "APPLIED" || cachedOutcome.reasonCode === "ALREADY_APPLIED");
+    const alreadyAppliedCacheHit = isAppliedCacheHit(cachedOutcome);
     if (alreadyAppliedCacheHit) {
       await debugLog(settings, "Skipping job from applied cache", { jobKey, reasonCode: cachedOutcome.reasonCode });
       runStats.skipped += 1;
       await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
+      await recordOutcome("SKIPPED", {
+        reasonCode: "APPLIED_CACHE_HIT",
+        reason: "Applied cache hit from local outcome cache",
+        jobId: jobKey,
+        ...extractCardMeta(card)
+      });
+      recordOutcomeCacheForAliases("SKIPPED", "ALREADY_APPLIED");
+      markAppliedForAliases();
       await reportProgress();
-      markJobSeen(jobKey);
+      markSeenForAliases();
       continue;
     }
-    if (
-      cachedOutcome &&
-      cachedOutcome.reasonCode &&
-      ["NO_APPLY_BUTTON", "MODAL_NOT_FOUND", "EXTERNAL_APPLY_ONLY"].includes(cachedOutcome.reasonCode)
-    ) {
+    if (cachedOutcome && isTransientSkipCooldownOutcome(cachedOutcome)) {
       await debugLog(settings, "Skipping job from temporary cooldown cache", {
         jobKey,
         reasonCode: cachedOutcome.reasonCode,
       });
-      runStats.skipped += 1;
-      await logOutcome("info", "Skipped (recently retried)", "RECENTLY_RETRIED");
-      await reportProgress();
-      markJobSeen(jobKey);
+      await logLine("Deferred retry for recently attempted job (cooldown active).", "info");
+      markSeenForAliases();
       continue;
     }
     if (isAlreadyAppliedCard(card)) {
       const stableJobId = extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || jobKey || "";
+      if (stableJobId) jobAliasKeys.add(stableJobId);
       runStats.skipped += 1;
       await logOutcome("info", "Skipped (already applied)", "ALREADY_APPLIED");
       await recordOutcome("SKIPPED", {
@@ -4156,16 +4400,16 @@ async function runCycle(settings) {
         jobId: stableJobId,
         ...extractCardMeta(card)
       });
-      recordJobOutcomeCache(jobKey, "SKIPPED", "ALREADY_APPLIED");
-      if (stableJobId && stableJobId !== jobKey) recordJobOutcomeCache(stableJobId, "SKIPPED", "ALREADY_APPLIED");
+      recordOutcomeCacheForAliases("SKIPPED", "ALREADY_APPLIED");
+      markAppliedForAliases();
       await reportProgress();
-      markJobSeen(jobKey);
-      if (stableJobId && stableJobId !== jobKey) markJobSeen(stableJobId);
+      markSeenForAliases();
       continue;
     }
     const ruleDecision = shouldSkipByRules(card, settings);
     if (ruleDecision.skip) {
       const stableJobId = extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || jobKey || "";
+      if (stableJobId) jobAliasKeys.add(stableJobId);
       runStats.skipped += 1;
       await logOutcome("warn", `Skipped: ${ruleDecision.reason}`, ruleDecision.reasonCode);
       await recordOutcome("SKIPPED", {
@@ -4174,11 +4418,9 @@ async function runCycle(settings) {
         jobId: stableJobId,
         ...extractCardMeta(card)
       });
-      recordJobOutcomeCache(jobKey, "SKIPPED", ruleDecision.reasonCode);
-      if (stableJobId && stableJobId !== jobKey) recordJobOutcomeCache(stableJobId, "SKIPPED", ruleDecision.reasonCode);
+      recordOutcomeCacheForAliases("SKIPPED", ruleDecision.reasonCode);
       await reportProgress();
-      markJobSeen(jobKey);
-      if (stableJobId && stableJobId !== jobKey) markJobSeen(stableJobId);
+      markSeenForAliases();
       continue;
     }
 
@@ -4194,8 +4436,7 @@ async function runCycle(settings) {
     const resolvedJobId = extractLinkedInJobIdFromUrl(window.location.href);
     if (resolvedJobId && resolvedJobId !== jobKey) {
       await debugLog(settings, "Resolved job id differs from card key", { from: jobKey, to: resolvedJobId });
-      // Mark both keys as seen to avoid repeated reopening.
-      if (jobKey) markJobSeen(jobKey);
+      jobAliasKeys.add(resolvedJobId);
       jobKey = resolvedJobId;
     }
 
@@ -4220,9 +4461,9 @@ async function runCycle(settings) {
         reason: aboutCompanyDecision.reason,
         ...currentJobContext
       });
-      recordJobOutcomeCache(jobKey, "SKIPPED", aboutCompanyDecision.reasonCode);
+      recordOutcomeCacheForAliases("SKIPPED", aboutCompanyDecision.reasonCode);
       await reportProgress();
-      markJobSeen(jobKey);
+      markSeenForAliases();
       continue;
     }
 
@@ -4235,9 +4476,9 @@ async function runCycle(settings) {
         reason: descriptionDecision.reason,
         ...currentJobContext
       });
-      recordJobOutcomeCache(jobKey, "SKIPPED", descriptionDecision.reasonCode);
+      recordOutcomeCacheForAliases("SKIPPED", descriptionDecision.reasonCode);
       await reportProgress();
-      markJobSeen(jobKey);
+      markSeenForAliases();
       continue;
     }
 
@@ -4260,6 +4501,26 @@ async function runCycle(settings) {
       }
     }
     if (!applyAction.button) {
+      await sleep(650);
+      applyAction = await waitForApplyButtonFromDetailPane(settings, 3200, "search card settle retry");
+    }
+    if (!applyAction.button) {
+      await refreshKnownAppliedJobIds(true);
+      const appliedAlias = Array.from(jobAliasKeys).find((alias) => knownAppliedJobIds.has(alias));
+      if (appliedAlias) {
+        runStats.skipped += 1;
+        await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
+        await recordOutcome("SKIPPED", {
+          reasonCode: "APPLIED_CACHE_HIT",
+          reason: "Re-checked after missing apply button; job already applied",
+          ...currentJobContext
+        });
+        recordOutcomeCacheForAliases("SKIPPED", "ALREADY_APPLIED");
+        markAppliedForAliases();
+        await reportProgress();
+        markSeenForAliases();
+        continue;
+      }
       if (hasDailyEasyApplyLimitSignal()) {
         await logLine("LinkedIn daily Easy Apply limit detected. Stopping run.", "warn");
         await recordOutcome("SKIPPED", {
@@ -4281,9 +4542,9 @@ async function runCycle(settings) {
         reason: "No apply button found in job detail pane",
         ...currentJobContext
       });
-      recordJobOutcomeCache(jobKey, "SKIPPED", "NO_APPLY_BUTTON");
+      recordOutcomeCacheForAliases("SKIPPED", "NO_APPLY_BUTTON");
       await reportProgress();
-      markJobSeen(jobKey);
+      markSeenForAliases();
       continue;
     }
     if (applyAction.type === "external") {
@@ -4295,7 +4556,7 @@ async function runCycle(settings) {
           reason: "External apply blocked because easyApplyOnly is enabled",
           ...currentJobContext
         });
-        recordJobOutcomeCache(jobKey, "SKIPPED", "EXTERNAL_APPLY_ONLY");
+        recordOutcomeCacheForAliases("SKIPPED", "EXTERNAL_APPLY_ONLY");
       } else {
         await resilientClick(applyAction.button, "External Apply");
         runStats.skipped += 1;
@@ -4306,10 +4567,10 @@ async function runCycle(settings) {
           reason: "External apply opened",
           ...currentJobContext
         });
-        recordJobOutcomeCache(jobKey, "EXTERNAL", "EXTERNAL_APPLY_OPENED");
+        recordOutcomeCacheForAliases("EXTERNAL", "EXTERNAL_APPLY_OPENED");
       }
       await reportProgress();
-      markJobSeen(jobKey);
+      markSeenForAliases();
       continue;
     }
 
@@ -4333,9 +4594,9 @@ async function runCycle(settings) {
         reason: "Easy Apply modal not found",
         ...currentJobContext
       });
-      recordJobOutcomeCache(jobKey, "SKIPPED", "MODAL_NOT_FOUND");
+      recordOutcomeCacheForAliases("SKIPPED", "MODAL_NOT_FOUND");
       await reportProgress();
-      markJobSeen(jobKey);
+      markSeenForAliases();
       continue;
     }
     await sleep(400);
@@ -4349,7 +4610,8 @@ async function runCycle(settings) {
         reason: settings.dryRun ? "Dry-run reached submit stage" : "Application submitted",
         ...currentJobContext
       });
-      recordJobOutcomeCache(jobKey, "APPLIED", "SUBMITTED");
+      recordOutcomeCacheForAliases("APPLIED", "SUBMITTED");
+      markAppliedForAliases();
     } else if (result.skipped) {
       runStats.skipped += 1;
       if (result.reason) {
@@ -4367,14 +4629,14 @@ async function runCycle(settings) {
           reason: result.reason,
           ...currentJobContext
         });
-        recordJobOutcomeCache(jobKey, "SKIPPED", reasonCode);
+        recordOutcomeCacheForAliases("SKIPPED", reasonCode);
       } else {
         await recordOutcome("SKIPPED", {
           reasonCode: "SUBMIT_NOT_REACHED",
           reason: "Submit step not reached",
           ...currentJobContext
         });
-        recordJobOutcomeCache(jobKey, "SKIPPED", "SUBMIT_NOT_REACHED");
+        recordOutcomeCacheForAliases("SKIPPED", "SUBMIT_NOT_REACHED");
       }
     } else {
       runStats.failed += 1;
@@ -4384,10 +4646,10 @@ async function runCycle(settings) {
         reason: "Failed to process easy apply modal",
         ...currentJobContext
       });
-      recordJobOutcomeCache(jobKey, "FAILED", "MODAL_FLOW_ERROR");
+      recordOutcomeCacheForAliases("FAILED", "MODAL_FLOW_ERROR");
     }
     await reportProgress();
-    markJobSeen(jobKey);
+    markSeenForAliases();
     if (runSearchTermSuccessCount >= getSwitchNumber(settings)) {
       runSearchTermSuccessCount = 0;
       const switched = await rotateSearchTerm(settings);
@@ -4412,6 +4674,7 @@ async function runAutomationLoop() {
       skipped: Number(boot.state.skipped || 0),
       failed: Number(boot.state.failed || 0)
     };
+    await refreshKnownAppliedJobIds(true);
     let lastProgressAt = Date.now();
     let noProgressCycles = 0;
     let noProgressRecoveries = 0;
@@ -4427,6 +4690,7 @@ async function runAutomationLoop() {
       if (state.startedAt && state.startedAt !== lastRunStartedAt) {
         lastRunStartedAt = state.startedAt;
         runSeenJobKeys = loadRunSeenJobKeys(lastRunStartedAt);
+        await refreshKnownAppliedJobIds(true);
         resumeChoiceCache.clear();
         runSearchTermSuccessCount = 0;
         currentJobContext = {

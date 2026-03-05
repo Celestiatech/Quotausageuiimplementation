@@ -3,6 +3,8 @@ node_modules/
 
 # next.js build output
 .next/
+.next_cache_backup_*/
+.next_cache_bak_*/
 out/
 
 # production / build artifacts

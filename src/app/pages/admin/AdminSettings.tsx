@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Loader2, Plus, RefreshCw } from "lucide-react";
 
 type MeUser = {
   id: string;
@@ -10,12 +10,68 @@ type MeUser = {
   createdAt: string;
 };
 
+type AdminDiscountCode = {
+  id: string;
+  code: string;
+  description?: string | null;
+  type: "percent" | "flat_rupees";
+  target: "all" | "wallet_topup" | "plan_pro" | "plan_coach";
+  percentOff?: number | null;
+  flatAmountRupees?: number | null;
+  maxDiscountRupees?: number | null;
+  minOrderRupees?: number | null;
+  usageLimitTotal?: number | null;
+  usageLimitPerUser?: number | null;
+  usedCount: number;
+  active: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type DiscountForm = {
+  code: string;
+  description: string;
+  type: "percent" | "flat_rupees";
+  target: "all" | "wallet_topup" | "plan_pro" | "plan_coach";
+  percentOff: string;
+  flatAmountRupees: string;
+  maxDiscountRupees: string;
+  minOrderRupees: string;
+  usageLimitTotal: string;
+  usageLimitPerUser: string;
+  startsAt: string;
+  endsAt: string;
+  active: boolean;
+};
+
+const EMPTY_DISCOUNT_FORM: DiscountForm = {
+  code: "",
+  description: "",
+  type: "percent",
+  target: "wallet_topup",
+  percentOff: "10",
+  flatAmountRupees: "",
+  maxDiscountRupees: "",
+  minOrderRupees: "50",
+  usageLimitTotal: "",
+  usageLimitPerUser: "1",
+  startsAt: "",
+  endsAt: "",
+  active: true,
+};
+
 export default function AdminSettings() {
   const [user, setUser] = useState<MeUser | null>(null);
   const [mailHealth, setMailHealth] = useState<{ success: boolean; message: string } | null>(null);
   const [allowedOriginsText, setAllowedOriginsText] = useState("");
+  const [discountCodes, setDiscountCodes] = useState<AdminDiscountCode[]>([]);
+  const [discountForm, setDiscountForm] = useState<DiscountForm>(EMPTY_DISCOUNT_FORM);
   const [loading, setLoading] = useState(true);
   const [savingOrigins, setSavingOrigins] = useState(false);
+  const [savingDiscount, setSavingDiscount] = useState(false);
+  const [updatingDiscountId, setUpdatingDiscountId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -25,6 +81,14 @@ export default function AdminSettings() {
       .map((line) => line.trim())
       .filter(Boolean);
 
+  const parseNumber = (value: string) => {
+    const raw = String(value || "").trim();
+    if (!raw) return undefined;
+    const asNumber = Number(raw);
+    if (!Number.isFinite(asNumber)) return undefined;
+    return Math.floor(asNumber);
+  };
+
   const originCount = useMemo(() => parseOrigins(allowedOriginsText).length, [allowedOriginsText]);
 
   const load = async () => {
@@ -32,12 +96,18 @@ export default function AdminSettings() {
       setLoading(true);
       setError("");
       setSuccess("");
-      const [meRes, mailRes, extRes] = await Promise.all([
+      const [meRes, mailRes, extRes, discountRes] = await Promise.all([
         fetch("/api/auth/me", { credentials: "include" }),
         fetch("/api/auth/mail-health", { credentials: "include" }),
         fetch("/api/admin/settings/extension", { credentials: "include" }),
+        fetch("/api/admin/discount-codes?limit=200", { credentials: "include" }),
       ]);
-      const [meData, mailData, extData] = await Promise.all([meRes.json(), mailRes.json(), extRes.json()]);
+      const [meData, mailData, extData, discountData] = await Promise.all([
+        meRes.json(),
+        mailRes.json(),
+        extRes.json(),
+        discountRes.json(),
+      ]);
       if (meRes.ok && meData?.success) setUser(meData?.data?.user || meData?.user);
       setMailHealth({
         success: Boolean(mailData?.success),
@@ -48,6 +118,12 @@ export default function AdminSettings() {
           ? extData.data.allowedDashboardOrigins.map((v: unknown) => String(v || ""))
           : [];
         setAllowedOriginsText(origins.join("\n"));
+      }
+      if (discountRes.ok && discountData?.success) {
+        const codes = Array.isArray(discountData?.data?.codes)
+          ? (discountData.data.codes as AdminDiscountCode[])
+          : [];
+        setDiscountCodes(codes);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load settings");
@@ -80,6 +156,79 @@ export default function AdminSettings() {
       setError(e instanceof Error ? e.message : "Failed to save extension origins");
     } finally {
       setSavingOrigins(false);
+    }
+  };
+
+  const createDiscountCode = async () => {
+    try {
+      setSavingDiscount(true);
+      setError("");
+      setSuccess("");
+
+      const payload: Record<string, unknown> = {
+        code: discountForm.code.trim(),
+        description: discountForm.description.trim(),
+        type: discountForm.type,
+        target: discountForm.target,
+        active: discountForm.active,
+        startsAt: discountForm.startsAt || "",
+        endsAt: discountForm.endsAt || "",
+      };
+
+      if (discountForm.type === "percent") {
+        payload.percentOff = parseNumber(discountForm.percentOff);
+      } else {
+        payload.flatAmountRupees = parseNumber(discountForm.flatAmountRupees);
+      }
+
+      const maxDiscount = parseNumber(discountForm.maxDiscountRupees);
+      const minOrder = parseNumber(discountForm.minOrderRupees);
+      const usageLimitTotal = parseNumber(discountForm.usageLimitTotal);
+      const usageLimitPerUser = parseNumber(discountForm.usageLimitPerUser);
+
+      if (maxDiscount !== undefined) payload.maxDiscountRupees = maxDiscount;
+      if (minOrder !== undefined) payload.minOrderRupees = minOrder;
+      if (usageLimitTotal !== undefined) payload.usageLimitTotal = usageLimitTotal;
+      if (usageLimitPerUser !== undefined) payload.usageLimitPerUser = usageLimitPerUser;
+
+      const res = await fetch("/api/admin/discount-codes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to create discount code");
+
+      setDiscountForm(EMPTY_DISCOUNT_FORM);
+      setSuccess("Discount code created.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create discount code");
+    } finally {
+      setSavingDiscount(false);
+    }
+  };
+
+  const toggleDiscountCode = async (codeId: string, active: boolean) => {
+    try {
+      setUpdatingDiscountId(codeId);
+      setError("");
+      setSuccess("");
+      const res = await fetch(`/api/admin/discount-codes/${codeId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to update discount code");
+      setSuccess(`Discount code ${active ? "enabled" : "disabled"}.`);
+      setDiscountCodes((prev) => prev.map((item) => (item.id === codeId ? { ...item, active } : item)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update discount code");
+    } finally {
+      setUpdatingDiscountId("");
     }
   };
 
@@ -158,6 +307,247 @@ export default function AdminSettings() {
             {savingOrigins ? "Saving..." : "Save Origins"}
           </button>
           <span className="text-xs text-gray-500">Extension picks this up on next page refresh/check.</span>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border-2 border-gray-200 p-6 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-gray-900">Discount Codes</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Create wallet/plan discount codes and enable or disable them instantly.
+            </p>
+          </div>
+          <div className="text-xs text-gray-500">{discountCodes.length} code(s)</div>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Code</label>
+            <input
+              value={discountForm.code}
+              onChange={(e) =>
+                setDiscountForm((prev) => ({ ...prev, code: String(e.target.value || "").toUpperCase() }))
+              }
+              placeholder="WELCOME10"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold tracking-wide"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Description</label>
+            <input
+              value={discountForm.description}
+              onChange={(e) => setDiscountForm((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="First purchase offer"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Type</label>
+            <select
+              value={discountForm.type}
+              onChange={(e) =>
+                setDiscountForm((prev) => ({ ...prev, type: e.target.value as DiscountForm["type"] }))
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="percent">Percent (%)</option>
+              <option value="flat_rupees">Flat (INR)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Target</label>
+            <select
+              value={discountForm.target}
+              onChange={(e) =>
+                setDiscountForm((prev) => ({ ...prev, target: e.target.value as DiscountForm["target"] }))
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="wallet_topup">Wallet Top-up</option>
+              <option value="all">All</option>
+              <option value="plan_pro">Plan Pro</option>
+              <option value="plan_coach">Plan Coach</option>
+            </select>
+          </div>
+          {discountForm.type === "percent" ? (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Percent Off</label>
+              <input
+                type="number"
+                min={1}
+                max={95}
+                value={discountForm.percentOff}
+                onChange={(e) => setDiscountForm((prev) => ({ ...prev, percentOff: e.target.value }))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Flat Amount (INR)</label>
+              <input
+                type="number"
+                min={1}
+                value={discountForm.flatAmountRupees}
+                onChange={(e) => setDiscountForm((prev) => ({ ...prev, flatAmountRupees: e.target.value }))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Max Discount (INR, optional)</label>
+            <input
+              type="number"
+              min={1}
+              value={discountForm.maxDiscountRupees}
+              onChange={(e) => setDiscountForm((prev) => ({ ...prev, maxDiscountRupees: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Min Order (INR, optional)</label>
+            <input
+              type="number"
+              min={1}
+              value={discountForm.minOrderRupees}
+              onChange={(e) => setDiscountForm((prev) => ({ ...prev, minOrderRupees: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Total Usage Limit (optional)</label>
+            <input
+              type="number"
+              min={1}
+              value={discountForm.usageLimitTotal}
+              onChange={(e) => setDiscountForm((prev) => ({ ...prev, usageLimitTotal: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Per-user Limit (optional)</label>
+            <input
+              type="number"
+              min={1}
+              value={discountForm.usageLimitPerUser}
+              onChange={(e) => setDiscountForm((prev) => ({ ...prev, usageLimitPerUser: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Starts At (optional)</label>
+            <input
+              type="datetime-local"
+              value={discountForm.startsAt}
+              onChange={(e) => setDiscountForm((prev) => ({ ...prev, startsAt: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Ends At (optional)</label>
+            <input
+              type="datetime-local"
+              value={discountForm.endsAt}
+              onChange={(e) => setDiscountForm((prev) => ({ ...prev, endsAt: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={discountForm.active}
+              onChange={(e) => setDiscountForm((prev) => ({ ...prev, active: e.target.checked }))}
+            />
+            Active on create
+          </label>
+          <button
+            onClick={() => void createDiscountCode()}
+            disabled={savingDiscount}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2"
+          >
+            {savingDiscount ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Create Discount
+          </button>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-600">
+              <tr>
+                <th className="text-left px-3 py-2">Code</th>
+                <th className="text-left px-3 py-2">Value</th>
+                <th className="text-left px-3 py-2">Target</th>
+                <th className="text-left px-3 py-2">Usage</th>
+                <th className="text-left px-3 py-2">Validity</th>
+                <th className="text-left px-3 py-2">Status</th>
+                <th className="text-left px-3 py-2">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {discountCodes.map((item) => (
+                <tr key={item.id} className="border-b border-gray-100">
+                  <td className="px-3 py-2 font-semibold text-gray-900">
+                    {item.code}
+                    {item.description ? <div className="text-xs text-gray-500 font-normal mt-0.5">{item.description}</div> : null}
+                  </td>
+                  <td className="px-3 py-2 text-gray-700">
+                    {item.type === "percent" ? `${item.percentOff || 0}%` : `INR ${item.flatAmountRupees || 0}`}
+                    {item.maxDiscountRupees ? <div className="text-xs text-gray-500">max INR {item.maxDiscountRupees}</div> : null}
+                    {item.minOrderRupees ? <div className="text-xs text-gray-500">min INR {item.minOrderRupees}</div> : null}
+                  </td>
+                  <td className="px-3 py-2 text-gray-700">{item.target}</td>
+                  <td className="px-3 py-2 text-gray-700">
+                    used {item.usedCount}
+                    <div className="text-xs text-gray-500">
+                      total {item.usageLimitTotal ?? "unlimited"} / user {item.usageLimitPerUser ?? "unlimited"}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-gray-700">
+                    <div className="text-xs">
+                      {item.startsAt ? `From ${new Date(item.startsAt).toLocaleString()}` : "Starts immediately"}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {item.endsAt ? `Until ${new Date(item.endsAt).toLocaleString()}` : "No expiry"}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-semibold border ${
+                        item.active
+                          ? "bg-green-100 text-green-700 border-green-200"
+                          : "bg-gray-100 text-gray-700 border-gray-200"
+                      }`}
+                    >
+                      {item.active ? "active" : "inactive"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => void toggleDiscountCode(item.id, !item.active)}
+                      disabled={updatingDiscountId === item.id}
+                      className="px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-xs font-semibold disabled:opacity-60"
+                    >
+                      {updatingDiscountId === item.id
+                        ? "Saving..."
+                        : item.active
+                        ? "Disable"
+                        : "Enable"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {discountCodes.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500">
+                    No discount codes yet.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
