@@ -40,7 +40,7 @@ export default function ExtensionDesign() {
             Extension Design Preview
           </div>
           <h1 className="text-4xl lg:text-5xl font-black tracking-tight text-slate-900">
-            CareerPilot Chrome Extension UI
+            AutoApply CV Chrome Extension UI
           </h1>
           <p className="text-slate-600 mt-4 text-lg">
             This page shows the visual design system for the extension panel: status, controls, run logs, and safety states.
@@ -57,7 +57,7 @@ export default function ExtensionDesign() {
             <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-700">
               <div className="flex items-center gap-2 font-semibold">
                 <Chrome className="w-4 h-4" />
-                CareerPilot Copilot
+                AutoApply CV Copilot
               </div>
               <div className="text-xs px-2 py-1 rounded-md border border-emerald-400/40 bg-emerald-500/20 text-emerald-300">Connected</div>
             </div>

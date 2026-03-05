@@ -11,13 +11,13 @@ export function Footer() {
             <Link to="/" className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
               <img
                 src="/logos/android-chrome-192x192.png"
-                alt="CareerPilot"
+                alt="AutoApply CV"
                 className="w-10 h-10 rounded-xl shadow-lg"
                 loading="lazy"
                 decoding="async"
               />
               <span className="text-xl font-bold bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">
-                CareerPilot
+                AutoApply CV
               </span>
             </Link>
             <p className="text-gray-600 mb-6 leading-relaxed">
@@ -134,7 +134,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-gray-600 text-sm">
-            (c) 2026 CareerPilot. All rights reserved.
+            (c) 2026 AutoApply CV. All rights reserved.
           </p>
           <div className="flex gap-6">
             <a href="#" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">

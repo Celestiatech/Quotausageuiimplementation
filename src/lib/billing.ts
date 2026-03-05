@@ -24,8 +24,8 @@ export function getPlanRazorpayId(plan: "pro" | "coach") {
 }
 
 const PLAN_CONFIG: Record<"pro" | "coach", { amountPaise: number; name: string }> = {
-  pro: { amountPaise: 99900, name: "CareerPilot Pro Monthly" },
-  coach: { amountPaise: 299900, name: "CareerPilot Coach Monthly" },
+  pro: { amountPaise: 99900, name: "AutoApply CV Pro Monthly" },
+  coach: { amountPaise: 299900, name: "AutoApply CV Coach Monthly" },
 };
 
 export async function getOrCreatePlanRazorpayId(plan: "pro" | "coach") {

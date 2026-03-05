@@ -9,7 +9,7 @@ const PORTAL_SYNC_COOLDOWN_KEY = "cpPortalSyncCooldown";
 const PORTAL_DEFAULT_ORIGIN = "http://localhost:3000";
 const PORTAL_ISSUE_REPORTED_KEY = "cpPortalIssueReported";
 
-// Best-effort portal sync (CareerPilot web app). This is fed by dashboard-bridge.js running on the site origin.
+// Best-effort portal sync (AutoApply CV web app). This is fed by dashboard-bridge.js running on the site origin.
 let portalQuotaCache = {
   ts: 0,
   data: null,
@@ -104,7 +104,7 @@ async function detectPortalOriginsFromTabs() {
       }
       if (!origin) continue;
       if (host === "localhost" || host === "127.0.0.1") locals.push(origin);
-      if (host === "careerpilot.ai" || host.endsWith(".careerpilot.ai")) remotes.push(origin);
+      if (host === "autoapplycv.in" || host.endsWith(".autoapplycv.in")) remotes.push(origin);
     }
   } catch {
     // ignore

@@ -234,7 +234,7 @@ export default function Features() {
           </h2>
           
           <p className="text-xl text-purple-100 mb-12">
-            Join 50,000+ engineers using CareerPilot for job search automation, AI resume building, and interview preparation
+            Join 50,000+ engineers using AutoApply CV for job search automation, AI resume building, and interview preparation
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

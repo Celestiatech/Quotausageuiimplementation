@@ -11,7 +11,7 @@ export default function Resume() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Resume Setup</h1>
-          <p className="text-gray-600">CareerPilot uses the latest resume attached in LinkedIn Easy Apply.</p>
+          <p className="text-gray-600">AutoApply CV uses the latest resume attached in LinkedIn Easy Apply.</p>
         </div>
         <button
           onClick={() => navigate("/dashboard/onboarding")}

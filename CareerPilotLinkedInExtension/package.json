@@ -2,7 +2,7 @@
   "name": "careerpilot-linkedin-extension",
   "version": "0.1.0",
   "private": true,
-  "description": "Local Playwright tests for CareerPilot LinkedIn extension.",
+  "description": "Local Playwright tests for AutoApply CV LinkedIn extension.",
   "scripts": {
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",

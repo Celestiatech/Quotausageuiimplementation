@@ -2004,8 +2004,8 @@ function ensurePanel() {
   const toggle = document.createElement("button");
   toggle.id = TOGGLE_ID;
   toggle.textContent = "";
-  toggle.title = "CareerPilot Copilot";
-  toggle.setAttribute("aria-label", "CareerPilot Copilot");
+  toggle.title = "AutoApply CV Copilot";
+  toggle.setAttribute("aria-label", "AutoApply CV Copilot");
   try {
     const img = document.createElement("img");
     img.src = chrome.runtime.getURL("icons/icon32.png");
@@ -2035,7 +2035,7 @@ function ensurePanel() {
       <div class="cp-brand">
         <div class="cp-orb"><img class="cp-orb-img" alt="" /></div>
         <div class="cp-title-wrap">
-          <div class="cp-title">CareerPilot Copilot</div>
+          <div class="cp-title">AutoApply CV Copilot</div>
           <div class="cp-sub">LinkedIn job assistant</div>
         </div>
       </div>

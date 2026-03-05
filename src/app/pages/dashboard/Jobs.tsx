@@ -776,7 +776,7 @@ export default function Jobs() {
               Extension Installed
             </div>
             <p className="text-sm text-gray-700">
-              {extensionStatus.installed ? "Detected on dashboard." : "Not detected. Install/reload CareerPilot extension."}
+              {extensionStatus.installed ? "Detected on dashboard." : "Not detected. Install/reload AutoApply CV extension."}
             </p>
           </div>
           <div className={`rounded-xl border p-4 ${extensionStatus.linkedIn?.hasLinkedInTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
@@ -828,9 +828,9 @@ export default function Jobs() {
 
         <ol className="mt-4 text-sm text-gray-700 list-decimal pl-5 space-y-1">
           <li>Login to LinkedIn in your browser.</li>
-          <li>Install CareerPilot extension from `e:\Autoapply\CareerPilotLinkedInExtension` (Load unpacked).</li>
+          <li>Install AutoApply CV extension from `e:\Autoapply\CareerPilotLinkedInExtension` (Load unpacked).</li>
           <li>Open LinkedIn Jobs page.</li>
-          <li>Click extension icon, choose CareerPilot extension, then click Start.</li>
+          <li>Click extension icon, choose AutoApply CV extension, then click Start.</li>
         </ol>
 
         <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">

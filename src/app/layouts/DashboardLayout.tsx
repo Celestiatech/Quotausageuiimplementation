@@ -97,12 +97,12 @@ export default function DashboardLayout() {
             <Link to="/" className="flex items-center gap-2">
               <img
                 src="/logos/android-chrome-192x192.png"
-                alt="CareerPilot"
+                alt="AutoApply CV"
                 className="w-8 h-8 rounded-lg shadow-sm"
                 loading="eager"
                 decoding="async"
               />
-              <span className="font-bold text-gradient">CareerPilot</span>
+              <span className="font-bold text-gradient">AutoApply CV</span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}

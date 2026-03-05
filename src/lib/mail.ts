@@ -21,8 +21,8 @@ const resolveMailConfig = () => {
   const username = process.env.MAIL_USERNAME || process.env.SMTP_USER || "";
   const password = process.env.MAIL_PASSWORD || process.env.SMTP_PASS || "";
   const fromAddress =
-    process.env.MAIL_FROM_ADDRESS || process.env.EMAIL_FROM || "no-reply@careerpilot.com";
-  const fromName = process.env.MAIL_FROM_NAME || "CareerPilot";
+    process.env.MAIL_FROM_ADDRESS || process.env.EMAIL_FROM || "no-reply@autoapplycv.in";
+  const fromName = process.env.MAIL_FROM_NAME || "AutoApply CV";
   const encryptionRaw = (process.env.MAIL_ENCRYPTION || "").trim().toLowerCase();
   const encryption = encryptionRaw === "null" ? "" : encryptionRaw;
   // For SMTP 587 (STARTTLS), secure must be false. secure=true is for implicit TLS (usually 465).

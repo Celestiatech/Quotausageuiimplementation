@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://careerpilot.com/sitemap.xml
+Sitemap: https://autoapplycv.in/sitemap.xml
 

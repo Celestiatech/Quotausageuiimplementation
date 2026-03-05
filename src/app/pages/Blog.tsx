@@ -83,7 +83,7 @@ export default function Blog() {
           </div>
           <h2 className="text-4xl font-bold text-gray-900 mb-5">Put these tactics into action</h2>
           <p className="text-xl text-gray-600 mb-10">
-            Use CareerPilot to apply to LinkedIn jobs automatically, optimize your resume for ATS, and track outcomes in one dashboard.
+            Use AutoApply CV to apply to LinkedIn jobs automatically, optimize your resume for ATS, and track outcomes in one dashboard.
           </p>
           <button
             onClick={() => navigate('/pricing')}

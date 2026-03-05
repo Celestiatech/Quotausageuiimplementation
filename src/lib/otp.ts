@@ -54,10 +54,10 @@ export async function createAndSendOtp(emailRaw: string, purpose: OtpPurpose) {
     try {
       await sendMail({
         to: email,
-        subject: "CareerPilot verification code",
+        subject: "AutoApply CV verification code",
         template: "otp_verification",
-        text: `Your CareerPilot verification code is ${otp}. It expires in ${OTP_TTL_MINUTES} minutes.`,
-        html: `<div style="font-family:Arial,sans-serif;line-height:1.5;"><h2>CareerPilot Verification</h2><p>Your one-time code:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px;">${otp}</p><p>Expires in ${OTP_TTL_MINUTES} minutes.</p></div>`,
+        text: `Your AutoApply CV verification code is ${otp}. It expires in ${OTP_TTL_MINUTES} minutes.`,
+        html: `<div style="font-family:Arial,sans-serif;line-height:1.5;"><h2>AutoApply CV Verification</h2><p>Your one-time code:</p><p style="font-size:28px;font-weight:700;letter-spacing:4px;">${otp}</p><p>Expires in ${OTP_TTL_MINUTES} minutes.</p></div>`,
       });
       delivered = true;
     } catch (error) {

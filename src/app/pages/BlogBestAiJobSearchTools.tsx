@@ -39,7 +39,7 @@ export default function BlogBestAiJobSearchTools() {
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 border border-purple-100">
             <h2 className="text-2xl font-bold text-gray-900 mb-3">One workflow, end to end</h2>
             <p className="text-gray-700 mb-6">
-              CareerPilot combines LinkedIn auto apply workflows, ATS resume optimization, and interview prep AI in one platform.
+              AutoApply CV combines LinkedIn auto apply workflows, ATS resume optimization, and interview prep AI in one platform.
             </p>
             <button
               onClick={() => navigate('/features')}

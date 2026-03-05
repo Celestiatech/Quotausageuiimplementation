@@ -1,7 +1,7 @@
-Create a complete, production-grade design system and full website UI for a Next.js product called “CareerPilot”.
+Create a complete, production-grade design system and full website UI for a Next.js product called “AutoApply CV”.
 
 Product:
-CareerPilot is an AI-powered career platform for Software Development Engineers (SDEs) and job seekers. It helps users tailor resumes, match jobs, track applications, prepare for interviews, and improve offer outcomes. It also has B2B use for career coaches/agencies.
+AutoApply CV is an AI-powered career platform for Software Development Engineers (SDEs) and job seekers. It helps users tailor resumes, match jobs, track applications, prepare for interviews, and improve offer outcomes. It also has B2B use for career coaches/agencies.
 
 Primary outcomes:
 - Increase interview callbacks
@@ -17,7 +17,7 @@ Design style direction:
 - Responsive-first (desktop + tablet + mobile)
 
 Brand foundation:
-- Brand name: CareerPilot
+- Brand name: AutoApply CV
 - Tagline: Land Better Jobs, Faster.
 - Tone: confident, clear, practical, engineer-friendly
 - Personality: intelligent, trustworthy, execution-driven

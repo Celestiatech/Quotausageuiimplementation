@@ -159,7 +159,7 @@ export default function Billing() {
         order_id: order.orderId,
         amount: order.amount,
         currency: order.currency,
-        name: "CareerPilot Hires Wallet",
+        name: "AutoApply CV Hires Wallet",
         description: `${order.hires} Hires top-up`,
         prefill: {
           name: user?.name || "",

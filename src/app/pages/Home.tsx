@@ -79,7 +79,7 @@ export default function Home() {
       role: 'Software Engineer',
       company: 'Amazon',
       image: 'https://images.unsplash.com/photo-1576558656222-ba66febe3dec?w=400',
-      content: 'Got 4 FAANG offers using CareerPilot. Simply amazing!'
+      content: 'Got 4 FAANG offers using AutoApply CV. Simply amazing!'
     }
   ];
 
@@ -191,7 +191,7 @@ export default function Home() {
               <div className="relative rounded-3xl overflow-hidden shadow-premium-lg border-8 border-white hover-lift">
                 <ImageWithFallback
                   src="https://images.unsplash.com/photo-1580894896813-652ff5aa8146?w=1080"
-                  alt="CareerPilot Dashboard"
+                  alt="AutoApply CV Dashboard"
                   className="w-full h-auto"
                 />
                 {/* Floating Card */}
@@ -371,7 +371,7 @@ export default function Home() {
               Join thousands of successful engineers
             </h2>
             <p className="text-xl text-purple-100">
-              Real results from real people using CareerPilot
+              Real results from real people using AutoApply CV
             </p>
           </div>
 
@@ -420,7 +420,7 @@ export default function Home() {
           </h2>
           
           <p className="text-xl text-gray-600 mb-12">
-            Join 50,000+ engineers using CareerPilot as their AI job search tool to auto apply, tailor resumes, and land interviews faster.
+            Join 50,000+ engineers using AutoApply CV as their AI job search tool to auto apply, tailor resumes, and land interviews faster.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

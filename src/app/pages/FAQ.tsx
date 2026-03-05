@@ -11,16 +11,16 @@ export default function FAQ() {
       category: 'Getting Started',
       questions: [
         {
-          q: 'How do I get started with CareerPilot?',
+          q: 'How do I get started with AutoApply CV?',
           a: 'Simply sign up for a free account, upload your resume or import from LinkedIn, and you\'ll be matched with jobs within minutes. Our onboarding process takes less than 5 minutes.'
         },
         {
           q: 'Do I need to provide my credit card for the free plan?',
-          a: 'No! Our free plan requires no credit card. You can start using CareerPilot immediately and upgrade anytime when you need more features.'
+          a: 'No! Our free plan requires no credit card. You can start using AutoApply CV immediately and upgrade anytime when you need more features.'
         },
         {
           q: 'Can I import my resume from LinkedIn?',
-          a: 'Yes! We offer one-click LinkedIn import that automatically extracts your experience, skills, and education into your CareerPilot profile.'
+          a: 'Yes! We offer one-click LinkedIn import that automatically extracts your experience, skills, and education into your AutoApply CV profile.'
         }
       ]
     },
@@ -40,8 +40,8 @@ export default function FAQ() {
           a: 'Free includes 3 Auto-Apply actions per day ($0). For unlimited applications, upgrade to Pro for $3/month. You can also use Custom Hires top-up (1 Hire = 1 Apply, minimum top-up $0.54).'
         },
         {
-          q: 'Is CareerPilot a LinkedIn auto apply bot?',
-          a: 'CareerPilot includes LinkedIn easy apply automation to help you apply faster, plus safeguards and review controls so you can stay in charge of your job search.'
+          q: 'Is AutoApply CV a LinkedIn auto apply bot?',
+          a: 'AutoApply CV includes LinkedIn easy apply automation to help you apply faster, plus safeguards and review controls so you can stay in charge of your job search.'
         },
         {
           q: 'Do you include a job application tracker?',
@@ -100,10 +100,10 @@ export default function FAQ() {
         },
         {
           q: 'What browsers are supported?',
-          a: 'CareerPilot works on all modern browsers including Chrome, Firefox, Safari, and Edge. We recommend using the latest version for the best experience.'
+          a: 'AutoApply CV works on all modern browsers including Chrome, Firefox, Safari, and Edge. We recommend using the latest version for the best experience.'
         },
         {
-          q: 'Can I use CareerPilot as an AI resume builder?',
+          q: 'Can I use AutoApply CV as an AI resume builder?',
           a: 'Yes. You can use the AI resume builder to tailor resume content for specific job descriptions and improve ATS keyword alignment before applying.'
         }
       ]

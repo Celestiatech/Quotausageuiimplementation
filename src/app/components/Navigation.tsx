@@ -43,13 +43,13 @@ export function Navigation() {
             <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <img
                 src="/logos/android-chrome-192x192.png"
-                alt="CareerPilot"
+                alt="AutoApply CV"
                 className="w-10 h-10 rounded-xl shadow-lg"
                 loading="eager"
                 decoding="async"
               />
               <span className="text-xl font-bold bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">
-                CareerPilot
+                AutoApply CV
               </span>
             </Link>
 

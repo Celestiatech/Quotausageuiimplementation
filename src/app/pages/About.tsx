@@ -37,7 +37,7 @@ export default function About() {
       name: 'Alex Chen',
       role: 'CEO & Founder',
       image: 'https://images.unsplash.com/photo-1723537742563-15c3d351dbf2?w=400',
-      bio: 'Ex-Google SWE, built CareerPilot after landing 15 offers'
+      bio: 'Ex-Google SWE, built AutoApply CV after landing 15 offers'
     },
     {
       name: 'Sarah Martinez',
@@ -73,7 +73,7 @@ export default function About() {
               </h1>
               
               <p className="text-xl text-gray-600 leading-relaxed mb-8">
-                CareerPilot was born from frustration with the traditional job search process. After helping thousands of engineers land roles at top tech companies, we built the platform we wish we had.
+                AutoApply CV was born from frustration with the traditional job search process. After helping thousands of engineers land roles at top tech companies, we built the platform we wish we had.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">

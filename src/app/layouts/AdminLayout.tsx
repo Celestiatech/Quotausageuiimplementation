@@ -70,14 +70,14 @@ export default function AdminLayout() {
             <Link to="/" className="flex items-center gap-2">
               <img
                 src="/logos/android-chrome-192x192.png"
-                alt="CareerPilot"
+                alt="AutoApply CV"
                 className="w-8 h-8 rounded-lg shadow-sm"
                 loading="eager"
                 decoding="async"
               />
               <div>
                 <div className="font-bold text-white">Admin Panel</div>
-                <div className="text-xs text-gray-400">CareerPilot</div>
+                <div className="text-xs text-gray-400">AutoApply CV</div>
               </div>
             </Link>
             <button

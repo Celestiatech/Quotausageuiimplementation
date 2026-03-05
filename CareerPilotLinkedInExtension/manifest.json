@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "CareerPilot LinkedIn Copilot",
+  "name": "AutoApply CV LinkedIn Copilot",
   "version": "0.1.0",
   "description": "Battle-tested LinkedIn auto-apply copilot with live status panel.",
   "icons": {
@@ -17,8 +17,8 @@
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
-    "https://careerpilot.ai/*",
-    "https://www.careerpilot.ai/*",
+    "https://autoapplycv.in/*",
+    "https://www.autoapplycv.in/*",
     "http://localhost:3000/*",
     "http://127.0.0.1:3000/*",
     "http://localhost:3001/*",
@@ -73,7 +73,7 @@
   ],
   "options_page": "src/options.html",
   "action": {
-    "default_title": "CareerPilot Copilot",
+    "default_title": "AutoApply CV Copilot",
     "default_popup": "src/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

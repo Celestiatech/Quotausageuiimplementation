@@ -39,7 +39,7 @@ export default function BlogLazyApplyAlternative() {
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 border border-purple-100">
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Recommended setup</h2>
             <p className="text-gray-700 mb-6">
-              Use CareerPilot to apply to LinkedIn jobs automatically with resume tailoring, ATS checks, and pipeline tracking in one place.
+              Use AutoApply CV to apply to LinkedIn jobs automatically with resume tailoring, ATS checks, and pipeline tracking in one place.
             </p>
             <button
               onClick={() => navigate('/pricing')}

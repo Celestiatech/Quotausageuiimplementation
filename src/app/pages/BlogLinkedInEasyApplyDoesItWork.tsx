@@ -39,7 +39,7 @@ export default function BlogLinkedInEasyApplyDoesItWork() {
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 border border-purple-100">
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Better Easy Apply workflow</h2>
             <p className="text-gray-700 mb-6">
-              CareerPilot helps you apply to LinkedIn jobs automatically while keeping screening controls, resume optimization, and tracking in one dashboard.
+              AutoApply CV helps you apply to LinkedIn jobs automatically while keeping screening controls, resume optimization, and tracking in one dashboard.
             </p>
             <button
               onClick={() => navigate('/how-it-works')}

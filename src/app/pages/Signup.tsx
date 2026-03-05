@@ -119,12 +119,12 @@ export default function Signup() {
             <Link to="/" className="flex items-center gap-3 mb-8">
               <img
                 src="/logos/android-chrome-192x192.png"
-                alt="CareerPilot"
+                alt="AutoApply CV"
                 className="w-12 h-12 rounded-xl shadow-premium"
                 loading="eager"
                 decoding="async"
               />
-              <span className="text-2xl font-bold text-gradient">CareerPilot</span>
+              <span className="text-2xl font-bold text-gradient">AutoApply CV</span>
             </Link>
 
             <h1 className="text-5xl font-bold text-gray-900 mb-6">

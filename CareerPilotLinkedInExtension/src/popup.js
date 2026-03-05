@@ -5,10 +5,11 @@ function sendMessage(message) {
 }
 
 const JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search/?f_AL=true";
-const PROD_BASE_URL = "https://careerpilot.ai";
+const PROD_BASE_URL = "https://autoapplycv.in";
 const DEV_BASE_URL = "http://localhost:3001";
 let accountConnected = false;
 let portalBaseUrl = PROD_BASE_URL;
+let popupCollapsed = false;
 
 function normalizeText(value) {
   return String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -63,8 +64,8 @@ async function detectSignedInUserFromTabs() {
   const patterns = [
     "http://localhost:3001/*",
     "http://127.0.0.1:3001/*",
-    "https://careerpilot.ai/*",
-    "https://www.careerpilot.ai/*",
+    "https://autoapplycv.in/*",
+    "https://www.autoapplycv.in/*",
   ];
   let tabs = [];
   try {
@@ -114,10 +115,15 @@ function renderAccountState(settings, sessionUser) {
   const text = document.getElementById("accountText");
   const action = document.getElementById("accountAction");
   const runArea = document.getElementById("runArea");
+  const body = document.body;
 
   const connectedFromSettings = isAccountConnected(settings || {});
   const connectedFromSession = Boolean(sessionUser?.ok && sessionUser?.email);
   accountConnected = connectedFromSettings || connectedFromSession;
+  if (body) {
+    body.classList.toggle("cp-connected", accountConnected);
+    body.classList.toggle("cp-disconnected", !accountConnected);
+  }
   const contactEmail = String(sessionUser?.email || settings?.contactEmail || "").trim();
   if (accountConnected) {
     card.classList.remove("disconnected");
@@ -135,7 +141,7 @@ function renderAccountState(settings, sessionUser) {
         ? `Signed in as ${contactEmail}. You can run auto-apply now.`
         : "Your account is connected. You can run auto-apply now.";
     }
-    action.textContent = "Open CareerPilot Dashboard";
+    action.textContent = "Open AutoApply CV Dashboard";
     action.dataset.action = "dashboard";
     action.classList.add("btn-primary");
     if (runArea) runArea.style.display = "block";
@@ -146,8 +152,8 @@ function renderAccountState(settings, sessionUser) {
     badge.classList.add("disconnected");
     badge.textContent = "Disconnected";
     title.textContent = "Sign in required";
-    text.textContent = "Sign in to CareerPilot to continue.";
-    action.textContent = "Sign in to CareerPilot";
+    text.textContent = "Sign in to AutoApply CV to continue.";
+    action.textContent = "Sign in to AutoApply CV";
     action.dataset.action = "login";
     action.classList.add("btn-primary");
     if (runArea) runArea.style.display = "none";
@@ -291,6 +297,48 @@ function setStats(state, settings) {
   // Popup is intentionally minimal; live feed is available in the floating panel.
 }
 
+function applyPopupCollapsed(collapsed, persist = true) {
+  popupCollapsed = Boolean(collapsed);
+  const body = document.body;
+  const toggle = document.getElementById("popupToggle");
+  if (body) body.classList.toggle("cp-collapsed", popupCollapsed);
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", String(!popupCollapsed));
+    toggle.title = popupCollapsed ? "Show popup content" : "Hide popup content";
+  }
+  if (persist) {
+    try {
+      chrome.storage.local.set({ cpPopupCollapsed: popupCollapsed });
+    } catch {
+      // ignore storage failures
+    }
+  }
+}
+
+function togglePopupCollapsed() {
+  applyPopupCollapsed(!popupCollapsed, true);
+}
+
+async function loadCollapsedPreference() {
+  try {
+    const stored = await chrome.storage.local.get(["cpPopupCollapsed"]);
+    applyPopupCollapsed(Boolean(stored?.cpPopupCollapsed), false);
+  } catch {
+    applyPopupCollapsed(false, false);
+  }
+}
+
+function bindPopupToggle() {
+  const toggle = document.getElementById("popupToggle");
+  if (!toggle) return;
+  toggle.addEventListener("click", () => togglePopupCollapsed());
+  toggle.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    togglePopupCollapsed();
+  });
+}
+
 async function refresh() {
   await resolvePortalBaseUrl();
   const [boot, loadedSettings, sessionUser] = await Promise.all([
@@ -304,7 +352,7 @@ async function refresh() {
   }
   renderAccountState(loadedSettings?.settings || {}, sessionUser);
   if (!accountConnected) {
-    setStatus("Sign in to CareerPilot to enable run controls.", "warn");
+    setStatus("Sign in to AutoApply CV to enable run controls.", "warn");
     return;
   }
   setStats(boot.state || {}, loadedSettings?.settings || {});
@@ -395,7 +443,7 @@ async function focusOrOpenLinkedInJobs() {
 
 document.getElementById("start").addEventListener("click", async () => {
   if (!accountConnected) {
-    setStatus("Sign in to CareerPilot first.", "warn");
+    setStatus("Sign in to AutoApply CV first.", "warn");
     return;
   }
   await focusOrOpenLinkedInJobs();
@@ -414,7 +462,7 @@ document.getElementById("start").addEventListener("click", async () => {
 
 document.getElementById("pause").addEventListener("click", async () => {
   if (!accountConnected) {
-    setStatus("Sign in to CareerPilot first.", "warn");
+    setStatus("Sign in to AutoApply CV first.", "warn");
     return;
   }
   await sendMessage({ type: "CP_PAUSE" });
@@ -424,7 +472,7 @@ document.getElementById("pause").addEventListener("click", async () => {
 
 document.getElementById("stop").addEventListener("click", async () => {
   if (!accountConnected) {
-    setStatus("Sign in to CareerPilot first.", "warn");
+    setStatus("Sign in to AutoApply CV first.", "warn");
     return;
   }
   await sendMessage({ type: "CP_STOP" });
@@ -439,4 +487,10 @@ document.getElementById("accountAction").addEventListener("click", async () => {
   setStatus(action === "dashboard" ? "Opened dashboard." : "Opened login.");
 });
 
-refresh().catch(() => setStatus("Unavailable", "error"));
+async function init() {
+  bindPopupToggle();
+  await loadCollapsedPreference();
+  await refresh();
+}
+
+init().catch(() => setStatus("Unavailable", "error"));

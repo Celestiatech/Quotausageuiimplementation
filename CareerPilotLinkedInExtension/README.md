@@ -1,4 +1,4 @@
-# CareerPilot LinkedIn Copilot Extension
+# AutoApply CV LinkedIn Copilot Extension
 
 Chrome extension scaffold for battle-tested LinkedIn auto-apply behavior with:
 - Always-visible floating control panel

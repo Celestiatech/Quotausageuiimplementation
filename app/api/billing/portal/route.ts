@@ -8,6 +8,6 @@ export async function POST() {
   // Return support/management hint for frontend.
   return ok("Portal link generated", {
     provider: "razorpay",
-    redirectUrl: process.env.BILLING_PORTAL_URL || "mailto:billing@careerpilot.com",
+    redirectUrl: process.env.BILLING_PORTAL_URL || "mailto:billing@autoapplycv.in",
   });
 }

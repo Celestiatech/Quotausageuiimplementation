@@ -62,7 +62,7 @@ export default function ThankYou() {
 
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-100 to-emerald-100 rounded-full text-green-700 text-sm font-semibold mb-6">
             <Sparkles className="w-4 h-4" />
-            Welcome to CareerPilot!
+            Welcome to AutoApply CV!
           </div>
           
           <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
@@ -202,7 +202,7 @@ export default function ThankYou() {
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { title: 'Live Chat', description: 'Instant help from our team', icon: '💬' },
-              { title: 'Email Support', description: 'support@careerpilot.com', icon: '📧' },
+              { title: 'Email Support', description: 'support@autoapplycv.in', icon: '📧' },
               { title: 'Help Center', description: 'Browse our knowledge base', icon: '📚' }
             ].map((option, index) => (
               <button
@@ -238,7 +238,7 @@ export default function ThankYou() {
             onClick={() => navigate('/')}
             className="px-10 py-5 bg-white text-purple-700 rounded-xl font-bold text-lg hover:bg-gray-100 shadow-2xl hover:scale-105 transition-all duration-200 inline-flex items-center gap-2"
           >
-            Start Using CareerPilot
+            Start Using AutoApply CV
             <ArrowRight className="w-5 h-5" />
           </button>
         </div>

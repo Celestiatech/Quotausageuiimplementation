@@ -238,52 +238,52 @@ const PREFERENCE_FIELDS: PreferenceField[] = [
   {
     key: "searchTerms",
     questionKey: "cp_pref_search_terms",
-    questionLabel: "CareerPilot Preference: Search terms",
+    questionLabel: "AutoApply CV Preference: Search terms",
   },
   {
     key: "searchLocation",
     questionKey: "cp_pref_search_location",
-    questionLabel: "CareerPilot Preference: Search location",
+    questionLabel: "AutoApply CV Preference: Search location",
   },
   {
     key: "yearsOfExperienceAnswer",
     questionKey: "cp_pref_years_of_experience",
-    questionLabel: "CareerPilot Preference: Years of experience",
+    questionLabel: "AutoApply CV Preference: Years of experience",
   },
   {
     key: "requireVisa",
     questionKey: "cp_pref_require_visa",
-    questionLabel: "CareerPilot Preference: Need visa sponsorship",
+    questionLabel: "AutoApply CV Preference: Need visa sponsorship",
   },
   {
     key: "usCitizenship",
     questionKey: "cp_pref_us_citizenship",
-    questionLabel: "CareerPilot Preference: US work authorization",
+    questionLabel: "AutoApply CV Preference: US work authorization",
   },
   {
     key: "desiredSalary",
     questionKey: "cp_pref_desired_salary",
-    questionLabel: "CareerPilot Preference: Desired salary",
+    questionLabel: "AutoApply CV Preference: Desired salary",
   },
   {
     key: "noticePeriodDays",
     questionKey: "cp_pref_notice_period_days",
-    questionLabel: "CareerPilot Preference: Notice period (days)",
+    questionLabel: "AutoApply CV Preference: Notice period (days)",
   },
   {
     key: "recentEmployer",
     questionKey: "cp_pref_recent_employer",
-    questionLabel: "CareerPilot Preference: Recent employer",
+    questionLabel: "AutoApply CV Preference: Recent employer",
   },
   {
     key: "confidenceLevel",
     questionKey: "cp_pref_confidence_level",
-    questionLabel: "CareerPilot Preference: Confidence level",
+    questionLabel: "AutoApply CV Preference: Confidence level",
   },
   {
     key: "coverLetter",
     questionKey: "cp_pref_cover_letter",
-    questionLabel: "CareerPilot Preference: Default long-form answer",
+    questionLabel: "AutoApply CV Preference: Default long-form answer",
   },
 ];
 
@@ -1238,7 +1238,7 @@ export default function Onboarding() {
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-gray-900">Resume Setup</h2>
           <p className="text-sm text-gray-700">
-            Please upload your CV directly in LinkedIn Easy Apply profile. CareerPilot copilot will automatically use
+            Please upload your CV directly in LinkedIn Easy Apply profile. AutoApply CV copilot will automatically use
             the latest resume attached on LinkedIn while applying.
           </p>
           <a
@@ -1298,7 +1298,7 @@ export default function Onboarding() {
 
       {currentStep === 2 ? (
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Install CareerPilot Chrome Extension</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Install AutoApply CV Chrome Extension</h2>
           <p className="text-sm text-gray-600">Download, load, and check detection.</p>
 
           <div
@@ -1355,7 +1355,7 @@ export default function Onboarding() {
             {canDownloadExtensionZip ? (
               <li>Download and unzip `CareerPilotLinkedInExtension.zip`.</li>
             ) : (
-              <li>Open the Chrome Web Store listing and install CareerPilot extension.</li>
+              <li>Open the Chrome Web Store listing and install AutoApply CV extension.</li>
             )}
             <li>Open `chrome://extensions/` and ensure the extension is enabled.</li>
             {canDownloadExtensionZip ? (

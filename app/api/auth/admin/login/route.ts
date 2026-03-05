@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     if (!admin && allowBootstrap) {
       const envAdminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase();
       const envAdminPassword = process.env.ADMIN_PASSWORD || "";
-      const envAdminName = process.env.ADMIN_NAME || "CareerPilot Admin";
+      const envAdminName = process.env.ADMIN_NAME || "AutoApply CV Admin";
       if (envAdminEmail && envAdminPassword && envAdminEmail === email && envAdminPassword === password) {
         admin = await prisma.user.create({
           data: {

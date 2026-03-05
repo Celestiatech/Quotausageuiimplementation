@@ -33,7 +33,7 @@ function isAllowedDashboardOrigin(origin, allowlist) {
   if (set.has(normalizeOrigin(origin))) return true;
   try {
     const hostname = new URL(String(origin || "")).hostname.toLowerCase();
-    return hostname === "careerpilot.ai" || hostname.endsWith(".careerpilot.ai");
+    return hostname === "autoapplycv.in" || hostname.endsWith(".autoapplycv.in");
   } catch {
     return false;
   }
@@ -57,7 +57,7 @@ function bridgeMeta() {
 function logBridge(...args) {
   if (!BRIDGE_DEBUG) return;
   try {
-    console.debug("[CareerPilotBridge]", ...args);
+    console.debug("[AutoApplyCVBridge]", ...args);
   } catch {
     // ignore
   }

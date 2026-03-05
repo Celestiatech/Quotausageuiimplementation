@@ -101,7 +101,7 @@ export default function AdminLogin() {
           </Link>
           <span className="mx-2 text-gray-300">|</span>
           <Link to="/" className="text-sm text-gray-500 hover:text-gray-700 inline-flex items-center gap-1">
-            <img src="/logos/android-chrome-192x192.png" alt="CareerPilot" className="w-3.5 h-3.5 rounded-sm" />
+            <img src="/logos/android-chrome-192x192.png" alt="AutoApply CV" className="w-3.5 h-3.5 rounded-sm" />
             Home
           </Link>
         </div>
