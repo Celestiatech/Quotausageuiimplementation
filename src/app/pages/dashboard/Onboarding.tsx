@@ -495,7 +495,7 @@ export default function Onboarding() {
   const onboardingHydratedRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
 
-  const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/downloads/AutoApplyCVLinkedInExtension.zip").trim();
+  const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
   const canDownloadExtensionZip = Boolean(extensionZipUrl);
   const showExtensionDebug =

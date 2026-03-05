@@ -166,7 +166,7 @@ function parseSearchTermsInput(value: string) {
 
 export default function Jobs() {
   const { user } = useAuth();
-  const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/downloads/AutoApplyCVLinkedInExtension.zip").trim();
+  const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
