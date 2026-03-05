@@ -8,6 +8,9 @@ const BRIDGE_DEBUG = (() => {
 })();
 
 const DEFAULT_ALLOWLIST = [
+  "https://autoapplycv.in",
+  "https://www.autoapplycv.in",
+  "https://autoapplycv.vercel.app",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "http://localhost:3001",
@@ -33,7 +36,11 @@ function isAllowedDashboardOrigin(origin, allowlist) {
   if (set.has(normalizeOrigin(origin))) return true;
   try {
     const hostname = new URL(String(origin || "")).hostname.toLowerCase();
-    return hostname === "autoapplycv.in" || hostname.endsWith(".autoapplycv.in");
+    return (
+      hostname === "autoapplycv.in" ||
+      hostname.endsWith(".autoapplycv.in") ||
+      hostname === "autoapplycv.vercel.app"
+    );
   } catch {
     return false;
   }

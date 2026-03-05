@@ -6,7 +6,14 @@ const DAILY_CAP_STORAGE_KEY = "cpDailyCapState";
 const SETTINGS_SCHEMA_VERSION = 2;
 const PORTAL_IMPORT_QUEUE_KEY = "cpPortalImportQueue";
 const PORTAL_SYNC_COOLDOWN_KEY = "cpPortalSyncCooldown";
-const PORTAL_DEFAULT_ORIGIN = "http://localhost:3000";
+const PORTAL_DEFAULT_ORIGIN = "https://autoapplycv.vercel.app";
+const PORTAL_FALLBACK_ORIGINS = [
+  "https://autoapplycv.in",
+  "https://www.autoapplycv.in",
+  "https://autoapplycv.vercel.app",
+  "http://localhost:3001",
+  "http://localhost:3000",
+];
 const PORTAL_ISSUE_REPORTED_KEY = "cpPortalIssueReported";
 
 // Best-effort portal sync (AutoApply CV web app). This is fed by dashboard-bridge.js running on the site origin.
@@ -104,14 +111,20 @@ async function detectPortalOriginsFromTabs() {
       }
       if (!origin) continue;
       if (host === "localhost" || host === "127.0.0.1") locals.push(origin);
-      if (host === "autoapplycv.in" || host.endsWith(".autoapplycv.in")) remotes.push(origin);
+      if (
+        host === "autoapplycv.in" ||
+        host.endsWith(".autoapplycv.in") ||
+        host === "autoapplycv.vercel.app"
+      ) {
+        remotes.push(origin);
+      }
     }
   } catch {
     // ignore
   }
   const uniq = new Set();
   const out = [];
-  for (const o of [...locals, ...remotes, PORTAL_DEFAULT_ORIGIN]) {
+  for (const o of [...remotes, ...locals, ...PORTAL_FALLBACK_ORIGINS, PORTAL_DEFAULT_ORIGIN]) {
     const key = String(o || "").trim();
     if (!key || uniq.has(key)) continue;
     uniq.add(key);

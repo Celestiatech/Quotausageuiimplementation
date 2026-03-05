@@ -1,6 +1,9 @@
 import { prisma } from "./prisma";
 
 export const DEFAULT_ALLOWED_DASHBOARD_ORIGINS = [
+  "https://autoapplycv.in",
+  "https://www.autoapplycv.in",
+  "https://autoapplycv.vercel.app",
   "http://localhost:3001",
   "http://127.0.0.1:3001",
   "http://localhost",

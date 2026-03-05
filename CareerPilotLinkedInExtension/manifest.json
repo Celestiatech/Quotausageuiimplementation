@@ -19,6 +19,7 @@
     "https://www.linkedin.com/*",
     "https://autoapplycv.in/*",
     "https://www.autoapplycv.in/*",
+    "https://autoapplycv.vercel.app/*",
     "http://localhost:3000/*",
     "http://127.0.0.1:3000/*",
     "http://localhost:3001/*",
@@ -56,6 +57,9 @@
     },
     {
       "matches": [
+        "https://autoapplycv.in/*",
+        "https://www.autoapplycv.in/*",
+        "https://autoapplycv.vercel.app/*",
         "http://localhost:3000/*",
         "http://127.0.0.1:3000/*",
         "http://localhost:3001/*",

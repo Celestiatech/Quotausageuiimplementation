@@ -20,12 +20,17 @@ export async function POST(req: NextRequest) {
     const { email, password } = body;
     let admin = await prisma.user.findUnique({ where: { email } });
     const allowBootstrap = (process.env.ALLOW_ADMIN_BOOTSTRAP || "false").toLowerCase() === "true";
+    const envAdminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase();
+    const envAdminPassword = process.env.ADMIN_PASSWORD || "";
+    const envAdminName = process.env.ADMIN_NAME || "AutoApply CV Admin";
+    const bootstrapMatchesEnv =
+      allowBootstrap &&
+      Boolean(envAdminEmail && envAdminPassword) &&
+      envAdminEmail === email &&
+      envAdminPassword === password;
 
-    if (!admin && allowBootstrap) {
-      const envAdminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase();
-      const envAdminPassword = process.env.ADMIN_PASSWORD || "";
-      const envAdminName = process.env.ADMIN_NAME || "AutoApply CV Admin";
-      if (envAdminEmail && envAdminPassword && envAdminEmail === email && envAdminPassword === password) {
+    if (bootstrapMatchesEnv) {
+      if (!admin) {
         admin = await prisma.user.create({
           data: {
             name: envAdminName,
@@ -38,6 +43,18 @@ export async function POST(req: NextRequest) {
             quotaResetTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
           },
         });
+      } else {
+        const passwordMatches = await bcrypt.compare(envAdminPassword, admin.passwordHash);
+        if (!passwordMatches || admin.role !== "admin") {
+          admin = await prisma.user.update({
+            where: { id: admin.id },
+            data: {
+              role: "admin",
+              passwordHash: await bcrypt.hash(envAdminPassword, 10),
+              name: admin.name || envAdminName,
+            },
+          });
+        }
       }
     }
 

@@ -5,8 +5,13 @@ function sendMessage(message) {
 }
 
 const JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search/?f_AL=true";
-const PROD_BASE_URL = "https://autoapplycv.in";
+const PROD_BASE_URL = "https://autoapplycv.vercel.app";
 const DEV_BASE_URL = "http://localhost:3001";
+const REMOTE_BASE_CANDIDATES = [
+  "https://autoapplycv.vercel.app",
+  "https://autoapplycv.in",
+  "https://www.autoapplycv.in",
+];
 let accountConnected = false;
 let portalBaseUrl = PROD_BASE_URL;
 let popupCollapsed = false;
@@ -36,10 +41,31 @@ function buildPortalUrl(path) {
 
 async function resolvePortalBaseUrl() {
   try {
-    const tabs = await chrome.tabs.query({
-      url: ["http://localhost:3001/*", "http://127.0.0.1:3001/*"],
-    });
-    if (Array.isArray(tabs) && tabs.length) {
+    const tabs = await chrome.tabs.query({ url: [
+      "https://autoapplycv.vercel.app/*",
+      "https://autoapplycv.in/*",
+      "https://www.autoapplycv.in/*",
+      "http://localhost:3001/*",
+      "http://127.0.0.1:3001/*",
+    ] });
+    const origins = new Set(
+      (Array.isArray(tabs) ? tabs : [])
+        .map((tab) => {
+          try {
+            return new URL(String(tab?.url || "")).origin;
+          } catch {
+            return "";
+          }
+        })
+        .filter(Boolean),
+    );
+    for (const origin of REMOTE_BASE_CANDIDATES) {
+      if (origins.has(origin)) {
+        portalBaseUrl = origin;
+        return;
+      }
+    }
+    if (origins.has("http://localhost:3001") || origins.has("http://127.0.0.1:3001")) {
       portalBaseUrl = DEV_BASE_URL;
       return;
     }
@@ -62,10 +88,11 @@ function isAccountConnected(settings) {
 
 async function detectSignedInUserFromTabs() {
   const patterns = [
-    "http://localhost:3001/*",
-    "http://127.0.0.1:3001/*",
+    "https://autoapplycv.vercel.app/*",
     "https://autoapplycv.in/*",
     "https://www.autoapplycv.in/*",
+    "http://localhost:3001/*",
+    "http://127.0.0.1:3001/*",
   ];
   let tabs = [];
   try {
