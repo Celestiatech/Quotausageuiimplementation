@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "src/lib/prisma";
-import { fail, handleApiError, ok } from "src/lib/api";
+import { fail, handleApiError, ok, parsePagination } from "src/lib/api";
 import { requireAuth } from "src/lib/guards";
 import { consumeHiresForApplies } from "src/lib/hires";
 
@@ -17,6 +17,15 @@ type ImportBilling = {
   sourceBreakdown: { free: number; paid: number };
   reason: string;
 };
+
+const DEFAULT_IMPORT_LIMIT = 120;
+const MAX_IMPORT_LIMIT = 200;
+
+function parseBoundedInt(value: unknown, fallback: number, min: number, max: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
 
 function parseLinkedInJobId(input: unknown) {
   const raw = String(input || "").trim();
@@ -66,6 +75,12 @@ export async function POST(req: NextRequest) {
     if ("error" in authResult) return authResult.error;
 
     const body = await req.json().catch(() => null);
+    const requestedLimit = parseBoundedInt(
+      body?.limit ?? new URL(req.url).searchParams.get("limit"),
+      DEFAULT_IMPORT_LIMIT,
+      1,
+      MAX_IMPORT_LIMIT,
+    );
     const entriesRaw = Array.isArray(body?.entries) ? body.entries : [];
     const entries: IncomingEntry[] = entriesRaw
       .map((e: any) => ({
@@ -75,8 +90,11 @@ export async function POST(req: NextRequest) {
         data: e?.data && typeof e.data === "object" ? (e.data as Record<string, unknown>) : {},
       }))
       .filter((e) => Boolean(e.ts));
+    const totalReceived = entries.length;
+    const entriesToProcess = entries.slice(0, requestedLimit);
+    const dropped = Math.max(0, totalReceived - entriesToProcess.length);
 
-    if (!entries.length) return fail("No entries to import", 400, "NO_ENTRIES");
+    if (!entriesToProcess.length) return fail("No entries to import", 400, "NO_ENTRIES");
 
     const userId = authResult.auth.user.id;
     const seenEntryIds = new Set<string>();
@@ -97,7 +115,7 @@ export async function POST(req: NextRequest) {
       paidConsumed: 0,
       chargeFailures: 0,
     };
-    for (const entry of entries.slice(0, 200)) {
+    for (const entry of entriesToProcess) {
       const effectiveEntryId = entry.entryId || buildEntryId(entry);
       if (seenEntryIds.has(effectiveEntryId)) continue;
       seenEntryIds.add(effectiveEntryId);
@@ -277,10 +295,65 @@ export async function POST(req: NextRequest) {
 
     return ok("Imported extension pipeline events", {
       imported: results.length,
+      received: totalReceived,
+      processed: entriesToProcess.length,
+      dropped,
+      hasMore: dropped > 0,
+      limit: requestedLimit,
       results,
       billing: billingTotals,
     });
   } catch (error) {
     return handleApiError(error, "Failed to import extension events");
+  }
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const authResult = await requireAuth();
+    if ("error" in authResult) return authResult.error;
+    const userId = authResult.auth.user.id;
+    const { page, limit, skip } = parsePagination(req, { defaultLimit: 25, maxLimit: 100 });
+    const url = new URL(req.url);
+    const statusRaw = String(url.searchParams.get("status") || "").trim().toLowerCase();
+    const status =
+      statusRaw === "submitted" || statusRaw === "skipped" || statusRaw === "failed"
+        ? statusRaw
+        : "";
+
+    const where = {
+      userId,
+      ...(status ? { status: status as any } : {}),
+      job: {
+        idempotencyKey: { startsWith: "ext:li:" },
+      },
+    };
+
+    const [applications, total] = await Promise.all([
+      prisma.application.findMany({
+        where,
+        orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: limit,
+        include: {
+          job: {
+            select: { id: true, status: true, idempotencyKey: true },
+          },
+        },
+      }),
+      prisma.application.count({ where }),
+    ]);
+
+    return ok("Extension applications fetched", {
+      applications,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    return handleApiError(error, "Failed to fetch extension applications");
   }
 }

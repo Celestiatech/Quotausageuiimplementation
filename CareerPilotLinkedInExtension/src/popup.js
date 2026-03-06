@@ -211,6 +211,8 @@ function renderAccountState(settings, sessionUser) {
     const btn = document.getElementById(id);
     if (btn) btn.disabled = !accountConnected;
   }
+  const liveModeToggle = document.getElementById("liveModeToggle");
+  if (liveModeToggle) liveModeToggle.disabled = !accountConnected;
 }
 
 function updateStatusBadge(state) {
@@ -334,6 +336,19 @@ function modeLine(settings) {
   return "Mode: Manual Submit (fills forms; submit manually).";
 }
 
+function applyModeControls(settings) {
+  const s = settings || {};
+  const toggle = document.getElementById("liveModeToggle");
+  const badge = document.getElementById("modeBadge");
+  const isLive = Boolean(!s.dryRun && s.autoSubmit);
+  const label = isLive ? "Live Auto Submit" : s.dryRun ? "Dry Run" : "Manual Submit";
+  if (toggle) toggle.checked = isLive;
+  if (badge) {
+    badge.textContent = label;
+    badge.className = `mode-badge ${isLive ? "live" : s.dryRun ? "" : "manual"}`.trim();
+  }
+}
+
 function setStats(state, settings) {
   document.getElementById("applied").textContent = String(state?.applied || 0);
   document.getElementById("skipped").textContent = String(state?.skipped || 0);
@@ -342,6 +357,7 @@ function setStats(state, settings) {
   const now = deriveNowCard(state || {});
   document.getElementById("nowTitle").textContent = now.title;
   document.getElementById("nowDetail").textContent = `${modeLine(settings)} ${now.detail}`;
+  applyModeControls(settings);
   // Popup is intentionally minimal; live feed is available in the floating panel.
 }
 
@@ -496,13 +512,33 @@ document.getElementById("start").addEventListener("click", async () => {
     return;
   }
   await focusOrOpenLinkedInJobs();
-  const started = await sendMessage({ type: "CP_START", forceRestart: true });
+  const started = await sendMessage({ type: "CP_START", forceRestart: false });
   if (!started.ok) {
     setStatus(started.error || "Failed to start run", "error");
     return;
   }
   await refresh();
   setStatus("Run started.");
+});
+
+document.getElementById("liveModeToggle").addEventListener("change", async (event) => {
+  if (!accountConnected) {
+    setStatus("Sign in to AutoApply CV first.", "warn");
+    event.target.checked = false;
+    return;
+  }
+  const enableLive = Boolean(event?.target?.checked);
+  const settingsPatch = enableLive
+    ? { autoSubmit: true, dryRun: false, liveModeAcknowledged: true }
+    : { autoSubmit: false, dryRun: true };
+  const saved = await sendMessage({ type: "CP_SAVE_SETTINGS", settings: settingsPatch });
+  if (!saved?.ok) {
+    setStatus(saved?.error || "Failed to update mode", "error");
+    await refresh();
+    return;
+  }
+  await refresh();
+  setStatus(enableLive ? "Live auto-submit enabled." : "Dry-run enabled.");
 });
 
 document.getElementById("pause").addEventListener("click", async () => {

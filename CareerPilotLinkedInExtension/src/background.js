@@ -1110,7 +1110,38 @@ async function exportLogs() {
   const queue = await getPortalQueue();
   const cooldown = await getPortalCooldown();
   const portalQuota = getPortalQuota();
-  const historySummary = summarizeHistoryForExport(histories, state.startedAt);
+  let historySummary = summarizeHistoryForExport(histories, state.startedAt);
+  const historyTotalsCount =
+    Number(historySummary?.totals?.applied || 0) +
+    Number(historySummary?.totals?.skipped || 0) +
+    Number(historySummary?.totals?.failed || 0) +
+    Number(historySummary?.totals?.external || 0);
+  const stateTotalsCount =
+    Number(state?.applied || 0) + Number(state?.skipped || 0) + Number(state?.failed || 0);
+  if (historyTotalsCount === 0 && stateTotalsCount > 0) {
+    historySummary = {
+      ...historySummary,
+      totals: {
+        applied: Number(state.applied || 0),
+        skipped: Number(state.skipped || 0),
+        failed: Number(state.failed || 0),
+        external: 0,
+      },
+      submitted: {
+        ...historySummary.submitted,
+        total: Math.max(Number(historySummary?.submitted?.total || 0), Number(state.applied || 0)),
+        thisRun: Math.max(Number(historySummary?.submitted?.thisRun || 0), Number(state.applied || 0)),
+        estimatedDeductionTotal: Math.max(
+          Number(historySummary?.submitted?.estimatedDeductionTotal || 0),
+          Number(state.applied || 0),
+        ),
+        estimatedDeductionThisRun: Math.max(
+          Number(historySummary?.submitted?.estimatedDeductionThisRun || 0),
+          Number(state.applied || 0),
+        ),
+      },
+    };
+  }
   const syncOrigins = await detectPortalOriginsFromTabs();
   const queueByOutcome = {};
   for (const entry of queue) {
@@ -1435,14 +1466,21 @@ async function saveSettings(incoming = {}) {
 chrome.runtime.onInstalled.addListener(async () => {
   const settings = await getSettings();
   const capState = await getDailyCapState();
+  const existing = await chrome.storage.local.get([
+    "cpPendingQuestions",
+    "cpAppliedHistory",
+    "cpFailedHistory",
+    "cpExternalHistory",
+    "cpSkippedHistory",
+  ]);
   await chrome.storage.local.set({
     cpSettings: settings,
     cpState: await getState(),
-    cpPendingQuestions: [],
-    cpAppliedHistory: [],
-    cpFailedHistory: [],
-    cpExternalHistory: [],
-    cpSkippedHistory: [],
+    cpPendingQuestions: Array.isArray(existing.cpPendingQuestions) ? existing.cpPendingQuestions : [],
+    cpAppliedHistory: Array.isArray(existing.cpAppliedHistory) ? existing.cpAppliedHistory : [],
+    cpFailedHistory: Array.isArray(existing.cpFailedHistory) ? existing.cpFailedHistory : [],
+    cpExternalHistory: Array.isArray(existing.cpExternalHistory) ? existing.cpExternalHistory : [],
+    cpSkippedHistory: Array.isArray(existing.cpSkippedHistory) ? existing.cpSkippedHistory : [],
     [DAILY_CAP_STORAGE_KEY]: capState,
   });
 });

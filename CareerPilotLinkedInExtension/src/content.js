@@ -30,11 +30,14 @@ let runSeenJobKeys = new Set();
 let runSearchTermCursor = 0;
 let runSearchTermSuccessCount = 0;
 let lastRunStartedAt = null;
+let dailyLimitHandledRunId = "";
 let resumeChoiceCache = new Map();
 let lastBootstrapSettings = {};
 let lastPortalQuota = null;
 let knownAppliedJobIds = new Set();
 let knownAppliedLoadedAt = 0;
+let logAutoScrollPinnedToBottom = true;
+let lastLogRenderSignature = "";
 let currentJobContext = {
   title: "",
   company: "",
@@ -1170,13 +1173,66 @@ function hasDailyEasyApplyLimitSignal(root = document) {
     [
       ".artdeco-inline-feedback__message",
       "[role='alert']",
+      "[aria-live='polite']",
+      "[aria-live='assertive']",
+      ".artdeco-toast-item__message",
+      ".artdeco-toast-item",
+      ".jobs-easy-apply-content",
       ".jobs-apply-button--top-card + .artdeco-inline-feedback__message",
       ".jobs-unified-top-card .artdeco-inline-feedback__message"
     ],
     root
   );
-  const combined = normalizeLabel(candidates.map((el) => String(el?.textContent || "")).join(" "));
-  return combined.includes("daily application limit") || combined.includes("exceeded the daily application limit");
+  const scopedText = normalizeLabel(candidates.map((el) => String(el?.textContent || "")).join(" "));
+  const rootText = normalizeLabel(
+    String(
+      root?.body?.innerText ||
+        root?.documentElement?.innerText ||
+        root?.innerText ||
+        document?.body?.innerText ||
+        ""
+    )
+  );
+  const combined = scopedText || rootText;
+  if (!combined) return false;
+  const phrases = [
+    "daily application limit",
+    "exceeded the daily application limit",
+    "we limit daily submissions",
+    "apply tomorrow",
+    "maintain quality and prevent bots",
+    "each application get the right attention",
+    "each applications get the right attention",
+  ];
+  if (phrases.some((phrase) => combined.includes(phrase))) return true;
+  if (
+    combined.includes("limit") &&
+    combined.includes("daily") &&
+    combined.includes("submission") &&
+    combined.includes("tomorrow")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function pauseRunForDailyEasyApplyLimit(settings, reason = "LinkedIn daily Easy Apply limit reached") {
+  const runId = String(lastRunStartedAt || "");
+  if (runId && dailyLimitHandledRunId === runId) return false;
+  if (runId) dailyLimitHandledRunId = runId;
+
+  runStats.skipped += 1;
+  await logOutcome("warn", "LinkedIn daily Easy Apply limit detected. Run paused.", "DAILY_EASY_APPLY_LIMIT");
+  await recordOutcome("SKIPPED", {
+    reasonCode: "DAILY_EASY_APPLY_LIMIT",
+    reason,
+    ...currentJobContext
+  });
+  await reportProgress();
+  await sendMessage({ type: "CP_PAUSE" });
+  await botChat("LinkedIn daily submission limit reached. Run paused. Resume tomorrow.", "warn");
+  await debugLog(settings, "Paused due daily limit", { reason });
+  return true;
 }
 
 async function recordOutcome(outcomeType, data) {
@@ -1925,6 +1981,10 @@ async function applyAdvancedFiltersIfNeeded(settings) {
 }
 
 async function prepareRun(settings) {
+  if (hasDailyEasyApplyLimitSignal()) {
+    await pauseRunForDailyEasyApplyLimit(settings, "LinkedIn daily submission limit reached before run preparation");
+    return false;
+  }
   if (!isJobsPage()) {
     await logLine("Not on Jobs page. Redirecting to LinkedIn Jobs Search.", "warn");
     await debugLog(settings, "Redirecting to jobs search (not jobs path)", { url: window.location.href });
@@ -1963,6 +2023,39 @@ async function prepareRun(settings) {
   return true;
 }
 
+async function setLiveAutoSubmitEnabled(enabled, options = {}) {
+  const patch = enabled
+    ? { autoSubmit: true, dryRun: false, liveModeAcknowledged: true }
+    : { autoSubmit: false, dryRun: true };
+  const saved = await sendMessage({ type: "CP_SAVE_SETTINGS", settings: patch });
+  if (!saved?.ok) {
+    if (!options.silent) {
+      await botChat(saved?.error || "Could not update run mode settings.", "error");
+    }
+    return false;
+  }
+  lastBootstrapSettings = {
+    ...(lastBootstrapSettings || {}),
+    ...(saved.settings || {}),
+  };
+  const boot = await getBootstrap();
+  if (boot?.settings && typeof boot.settings === "object") {
+    lastBootstrapSettings = boot.settings;
+  }
+  if (boot?.state) {
+    renderState(boot.state);
+  }
+  if (!options.silent) {
+    await botChat(
+      enabled
+        ? "Live auto-submit enabled. Start will submit applications."
+        : "Live auto-submit disabled. Dry-run is now enabled.",
+      enabled ? "warn" : "info",
+    );
+  }
+  return true;
+}
+
 async function handleChatCommand(input) {
   const raw = String(input || "").trim();
   if (!raw) return;
@@ -1970,11 +2063,9 @@ async function handleChatCommand(input) {
   const cmd = normalizeLabel(raw);
 
   if (cmd === "ack live" || cmd === "i acknowledge" || cmd === "acknowledge") {
-    await sendMessage({
-      type: "CP_SAVE_SETTINGS",
-      settings: { liveModeAcknowledged: true, dryRun: false, autoSubmit: true }
-    });
-    const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
+    const modeSaved = await setLiveAutoSubmitEnabled(true, { silent: true });
+    if (!modeSaved) return;
+    const startRes = await sendMessage({ type: "CP_START", forceRestart: false });
     if (!startRes?.ok) {
       await botChat(startRes?.error || "Could not start auto-submit run.", "error");
       return;
@@ -1984,8 +2075,9 @@ async function handleChatCommand(input) {
   }
 
   if (cmd === "start live" || cmd === "live start" || cmd === "/live") {
-    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { dryRun: false, autoSubmit: true } });
-    const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
+    const modeSaved = await setLiveAutoSubmitEnabled(true, { silent: true });
+    if (!modeSaved) return;
+    const startRes = await sendMessage({ type: "CP_START", forceRestart: false });
     if (!startRes?.ok) {
       await botChat(startRes?.error || "Auto-submit run start failed.", "error");
       return;
@@ -2001,12 +2093,32 @@ async function handleChatCommand(input) {
     } else if (!boot?.settings?.autoSubmit) {
       await botChat("Auto-submit is OFF. I will fill forms, but submit may need manual click.", "warn");
     }
-    const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
+    const startRes = await sendMessage({ type: "CP_START", forceRestart: false });
     if (!startRes?.ok) {
       await botChat(startRes?.error || "Run start failed. Check settings.", "error");
       return;
     }
     await botChat("Run started.");
+    return;
+  }
+  if (cmd === "restart" || cmd === "/restart") {
+    const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
+    if (!startRes?.ok) {
+      await botChat(startRes?.error || "Run restart failed.", "error");
+      return;
+    }
+    await botChat("Run restarted. Counters reset for this run.", "warn");
+    return;
+  }
+  if (cmd === "restart live" || cmd === "/restart-live") {
+    const modeSaved = await setLiveAutoSubmitEnabled(true, { silent: true });
+    if (!modeSaved) return;
+    const startRes = await sendMessage({ type: "CP_START", forceRestart: true });
+    if (!startRes?.ok) {
+      await botChat(startRes?.error || "Live run restart failed.", "error");
+      return;
+    }
+    await botChat("Live run restarted. Auto-submit is ON.", "warn");
     return;
   }
   if (cmd === "pause" || cmd === "/pause") {
@@ -2065,13 +2177,14 @@ async function handleChatCommand(input) {
     return;
   }
   if (cmd === "auto submit on" || cmd === "autosubmit on") {
-    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { dryRun: false, autoSubmit: true } });
+    const enabled = await setLiveAutoSubmitEnabled(true, { silent: true });
+    if (!enabled) return;
     await botChat("Auto-submit ON.", "warn");
     return;
   }
   if (cmd === "auto submit off" || cmd === "autosubmit off") {
-    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { autoSubmit: false } });
-    await botChat("Auto-submit OFF (manual submit).");
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { autoSubmit: false, dryRun: true } });
+    await botChat("Auto-submit OFF. Dry-run enabled.");
     return;
   }
   if (cmd === "export logs") {
@@ -2086,7 +2199,7 @@ async function handleChatCommand(input) {
       return;
     }
   }
-  await botChat("Unknown command. Try: start, start live, pause, resume, stop, set city <name>, set phone <num>, set email <mail>, dry run on/off", "warn");
+  await botChat("Unknown command. Try: start, start live, restart, restart live, pause, resume, stop, set city <name>, set phone <num>, set email <mail>, dry run on/off", "warn");
 }
 
 function ensurePanel() {
@@ -2094,6 +2207,9 @@ function ensurePanel() {
   if (existing) {
     existing.classList.remove("cp-hidden");
     panelEl = existing;
+    if (!panelEl.querySelector("#cp-log")?.children?.length) {
+      lastLogRenderSignature = "";
+    }
     panelEl.classList.toggle("cp-debug-ui", debugUiEnabled);
     applyPanelLayout();
     logPanelDebug("ensure-existing");
@@ -2156,6 +2272,14 @@ function ensurePanel() {
       <div class="cp-stat"><span class="cp-stat-k">Failed</span><span id="cp-failed">0</span></div>
     </div>
     <div class="cp-wallet" id="cp-wallet">Plan: - | Hires: - | Free today: -/-</div>
+    <div class="cp-run-mode">
+      <label class="cp-run-mode-toggle" for="cp-auto-submit-toggle">
+        <input id="cp-auto-submit-toggle" type="checkbox" />
+        <span class="cp-switch-ui" aria-hidden="true"></span>
+        <span class="cp-run-mode-label">Live Auto Submit</span>
+      </label>
+      <span class="cp-run-mode-chip" id="cp-run-mode-chip">Dry Run</span>
+    </div>
     <div class="cp-quick">
       <button id="cp-start">Start</button>
       <button id="cp-pause">Pause</button>
@@ -2174,6 +2298,7 @@ function ensurePanel() {
   `;
   document.body.appendChild(panel);
   panelEl = panel;
+  lastLogRenderSignature = "";
   panelEl.classList.remove("cp-hidden");
 
   try {
@@ -2186,6 +2311,25 @@ function ensurePanel() {
   panel.querySelector("#cp-start").addEventListener("click", async () => handleChatCommand("start"));
   panel.querySelector("#cp-pause").addEventListener("click", async () => handleChatCommand("pause"));
   panel.querySelector("#cp-stop").addEventListener("click", async () => handleChatCommand("stop"));
+  const logEl = panel.querySelector("#cp-log");
+  if (logEl) {
+    logAutoScrollPinnedToBottom = true;
+    logEl.addEventListener(
+      "scroll",
+      () => {
+        logAutoScrollPinnedToBottom = isLogNearBottom(logEl);
+      },
+      { passive: true }
+    );
+  }
+  const liveModeToggle = panel.querySelector("#cp-auto-submit-toggle");
+  liveModeToggle.addEventListener("change", async () => {
+    const enableLive = Boolean(liveModeToggle?.checked);
+    const ok = await setLiveAutoSubmitEnabled(enableLive, { silent: false });
+    if (!ok && liveModeToggle) {
+      liveModeToggle.checked = Boolean(lastBootstrapSettings?.autoSubmit && !lastBootstrapSettings?.dryRun);
+    }
+  });
   // Copy logs without surfacing debug UI controls in the panel.
   panel.querySelector(".cp-head-right").insertAdjacentHTML(
     "beforeend",
@@ -2335,6 +2479,28 @@ function deriveNowCard(state, logs) {
   return { title, detail, meta };
 }
 
+function isLogNearBottom(logEl, threshold = 36) {
+  if (!logEl) return true;
+  const maxScrollTop = Math.max(0, Number(logEl.scrollHeight || 0) - Number(logEl.clientHeight || 0));
+  const current = Math.max(0, Number(logEl.scrollTop || 0));
+  return maxScrollTop - current <= Math.max(0, Number(threshold || 0));
+}
+
+function buildLogRenderSignature(logs, state, settings) {
+  const list = Array.isArray(logs) ? logs.slice(-80) : [];
+  const last = list.length ? list[list.length - 1] : null;
+  return [
+    list.length,
+    String(last?.ts || ""),
+    String(last?.message || ""),
+    String(last?.level || ""),
+    Number(state?.running ? 1 : 0),
+    Number(state?.paused ? 1 : 0),
+    Number(settings?.dryRun ? 1 : 0),
+    Number(settings?.autoSubmit ? 1 : 0),
+  ].join("|");
+}
+
 function renderState(state) {
   if (!panelEl) return;
   panelEl.classList.remove("cp-hidden");
@@ -2344,10 +2510,20 @@ function renderState(state) {
 
   const s = lastBootstrapSettings || {};
   const modeLabel = s?.dryRun ? "Dry Run" : s?.autoSubmit ? "Auto Submit" : "Manual Submit";
+  const liveAutoSubmitEnabled = Boolean(!s?.dryRun && s?.autoSubmit);
   const status = panelEl.querySelector("#cp-status-badge");
   const base = state.running ? "Running" : state.paused ? "Paused" : "Idle";
   status.textContent = `${base} \u00b7 ${modeLabel}`;
   status.className = `cp-badge ${state.running ? "cp-run" : state.paused ? "cp-pause" : ""}`;
+  const modeToggle = panelEl.querySelector("#cp-auto-submit-toggle");
+  if (modeToggle) {
+    modeToggle.checked = liveAutoSubmitEnabled;
+  }
+  const modeChip = panelEl.querySelector("#cp-run-mode-chip");
+  if (modeChip) {
+    modeChip.textContent = liveAutoSubmitEnabled ? "Live" : s?.dryRun ? "Dry Run" : "Manual";
+    modeChip.className = `cp-run-mode-chip ${liveAutoSubmitEnabled ? "cp-live" : s?.dryRun ? "cp-dry" : "cp-manual"}`;
+  }
   panelEl.querySelector("#cp-applied").textContent = String(state.applied || 0);
   panelEl.querySelector("#cp-skipped").textContent = String(state.skipped || 0);
   panelEl.querySelector("#cp-failed").textContent = String(state.failed || 0);
@@ -2391,22 +2567,44 @@ function renderState(state) {
   const typingLine = state.running
     ? `<div class="cp-line cp-bot cp-typing"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">Copilot</span><span class="cp-kind">${typingKind}</span></div><div class="cp-msg-text"><span class="cp-dot"></span><span class="cp-dot"></span><span class="cp-dot"></span> Working on next step...</div></div></div>`
     : "";
-  logEl.innerHTML = logs
-    .slice(-80)
-    .map((l) => {
-      const visual = getLogVisual(l);
-      const level = escapeHtml(visual.level || "info");
-      const role = escapeHtml(visual.role || "cp-bot");
-      const sender = escapeHtml(visual.sender || "Copilot");
-      const kind = escapeHtml(visual.kind || "Update");
-      const msg = escapeHtml(visual.message || "");
-      const metaText = summarizeMeta(l?.meta);
-      const metaHtml = metaText ? `<div class="cp-msg-meta">${escapeHtml(metaText)}</div>` : "";
-      const debugClass = visual.isDebug ? " cp-debug" : "";
-      return `<div class="cp-line ${role} cp-${level}${debugClass}"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">${sender}</span><span class="cp-kind">${kind}</span><span class="cp-time">${escapeHtml(l.ts?.slice(11, 19) || "")}</span></div><div class="cp-msg-text">${msg}</div>${metaHtml}</div></div>`;
-    })
-    .join("") + typingLine;
-  logEl.scrollTop = logEl.scrollHeight;
+  const logsWindow = logs.slice(-80);
+  const logSignature = buildLogRenderSignature(logsWindow, state, s);
+  if (logSignature !== lastLogRenderSignature) {
+    const previousDistanceFromBottom = Math.max(
+      0,
+      Number(logEl.scrollHeight || 0) - Number(logEl.clientHeight || 0) - Number(logEl.scrollTop || 0)
+    );
+    const wasNearBottom = isLogNearBottom(logEl);
+    const shouldStickToBottom = logAutoScrollPinnedToBottom || wasNearBottom;
+
+    logEl.innerHTML =
+      logsWindow
+        .map((l) => {
+          const visual = getLogVisual(l);
+          const level = escapeHtml(visual.level || "info");
+          const role = escapeHtml(visual.role || "cp-bot");
+          const sender = escapeHtml(visual.sender || "Copilot");
+          const kind = escapeHtml(visual.kind || "Update");
+          const msg = escapeHtml(visual.message || "");
+          const metaText = summarizeMeta(l?.meta);
+          const metaHtml = metaText ? `<div class="cp-msg-meta">${escapeHtml(metaText)}</div>` : "";
+          const debugClass = visual.isDebug ? " cp-debug" : "";
+          return `<div class="cp-line ${role} cp-${level}${debugClass}"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">${sender}</span><span class="cp-kind">${kind}</span><span class="cp-time">${escapeHtml(l.ts?.slice(11, 19) || "")}</span></div><div class="cp-msg-text">${msg}</div>${metaHtml}</div></div>`;
+        })
+        .join("") + typingLine;
+    lastLogRenderSignature = logSignature;
+
+    if (shouldStickToBottom) {
+      logEl.scrollTop = logEl.scrollHeight;
+      logAutoScrollPinnedToBottom = true;
+    } else {
+      const nextTop = Math.max(
+        0,
+        Number(logEl.scrollHeight || 0) - Number(logEl.clientHeight || 0) - previousDistanceFromBottom
+      );
+      logEl.scrollTop = nextTop;
+    }
+  }
   logPanelDebug("render");
 }
 
@@ -4047,6 +4245,10 @@ async function processEasyApplyModal(settings) {
 }
 
 async function runCycle(settings) {
+  if (hasDailyEasyApplyLimitSignal()) {
+    await pauseRunForDailyEasyApplyLimit(settings, "LinkedIn daily submission limit reached while scanning jobs");
+    return false;
+  }
   if (!isJobsPage()) {
     await logLine("Left jobs page. Pausing run.", "warn");
     return false;
@@ -4174,13 +4376,7 @@ async function runCycle(settings) {
         return true;
       }
       if (hasDailyEasyApplyLimitSignal()) {
-        await logLine("LinkedIn daily Easy Apply limit detected. Stopping run.", "warn");
-        await recordOutcome("SKIPPED", {
-          reasonCode: "DAILY_EASY_APPLY_LIMIT",
-          reason: "LinkedIn daily Easy Apply limit reached",
-          ...currentJobContext
-        });
-        await sendMessage({ type: "CP_STOP" });
+        await pauseRunForDailyEasyApplyLimit(settings);
         return false;
       }
       runStats.skipped += 1;
@@ -4230,13 +4426,7 @@ async function runCycle(settings) {
     const modal = await waitForModalOpen(4500);
     if (!modal) {
       if (hasDailyEasyApplyLimitSignal()) {
-        await logLine("LinkedIn daily Easy Apply limit detected. Stopping run.", "warn");
-        await recordOutcome("SKIPPED", {
-          reasonCode: "DAILY_EASY_APPLY_LIMIT",
-          reason: "LinkedIn daily Easy Apply limit reached",
-          ...currentJobContext
-        });
-        await sendMessage({ type: "CP_STOP" });
+        await pauseRunForDailyEasyApplyLimit(settings);
         return false;
       }
       runStats.skipped += 1;
@@ -4561,13 +4751,7 @@ async function runCycle(settings) {
         continue;
       }
       if (hasDailyEasyApplyLimitSignal()) {
-        await logLine("LinkedIn daily Easy Apply limit detected. Stopping run.", "warn");
-        await recordOutcome("SKIPPED", {
-          reasonCode: "DAILY_EASY_APPLY_LIMIT",
-          reason: "LinkedIn daily Easy Apply limit reached",
-          ...currentJobContext
-        });
-        await sendMessage({ type: "CP_STOP" });
+        await pauseRunForDailyEasyApplyLimit(settings);
         return false;
       }
       await debugLog(settings, "No detail apply button found", {
@@ -4617,13 +4801,7 @@ async function runCycle(settings) {
     const modal = await waitForModalOpen(4500);
     if (!modal) {
       if (hasDailyEasyApplyLimitSignal()) {
-        await logLine("LinkedIn daily Easy Apply limit detected. Stopping run.", "warn");
-        await recordOutcome("SKIPPED", {
-          reasonCode: "DAILY_EASY_APPLY_LIMIT",
-          reason: "LinkedIn daily Easy Apply limit reached",
-          ...currentJobContext
-        });
-        await sendMessage({ type: "CP_STOP" });
+        await pauseRunForDailyEasyApplyLimit(settings);
         return false;
       }
       runStats.skipped += 1;
@@ -4707,6 +4885,7 @@ async function runAutomationLoop() {
   runningLoop = true;
   try {
     const boot = await getBootstrap();
+    dailyLimitHandledRunId = "";
     runSeenJobKeys = loadRunSeenJobKeys(boot?.state?.startedAt || "");
     runStats = {
       applied: Number(boot.state.applied || 0),
@@ -4728,6 +4907,7 @@ async function runAutomationLoop() {
 
       if (state.startedAt && state.startedAt !== lastRunStartedAt) {
         lastRunStartedAt = state.startedAt;
+        dailyLimitHandledRunId = "";
         runSeenJobKeys = loadRunSeenJobKeys(lastRunStartedAt);
         await refreshKnownAppliedJobIds(true);
         resumeChoiceCache.clear();
@@ -4774,6 +4954,7 @@ async function runAutomationLoop() {
             await logLine("Starting next non-stop cycle.", "info");
           }
           runStats = { applied: 0, skipped: 0, failed: 0 };
+          dailyLimitHandledRunId = "";
           clearSeenJobsForRun(lastRunStartedAt);
           resumeChoiceCache.clear();
           runSearchTermSuccessCount = 0;
