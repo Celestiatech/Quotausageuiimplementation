@@ -123,19 +123,64 @@ function formatDate(value: string) {
 function normalizeLabel(value: string) {
   return String(value || "")
     .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function hasWords(label: string, words: string[]) {
+  return words.every((word) => label.includes(word));
 }
 
 function toQuestionKey(value: string) {
   const normalized = normalizeLabel(value);
   if (!normalized) return "";
+  if (
+    (hasWords(normalized, ["authorized", "work"]) ||
+      hasWords(normalized, ["eligible", "work"]) ||
+      hasWords(normalized, ["work", "authorization"])) &&
+    (normalized.includes("united states") || normalized.includes("u s") || normalized.includes("us"))
+  ) {
+    return "work_authorization_us";
+  }
+  if (hasWords(normalized, ["visa", "sponsorship"]) || hasWords(normalized, ["require", "sponsorship"])) {
+    return "visa_sponsorship_required";
+  }
+  if (normalized.includes("onsite") || normalized.includes("on site")) return "comfortable_working_onsite";
+  if (normalized.includes("commut")) return "comfortable_commuting";
+  if (normalized.includes("relocat")) return "comfortable_relocation";
+  if ((normalized.includes("salary") || normalized.includes("compensation") || normalized.includes("pay")) && normalized.includes("expect")) {
+    return "expected_salary";
+  }
+  if (normalized.includes("year") && normalized.includes("experience")) return "years_of_experience";
+  if (normalized.includes("bachelor") && normalized.includes("degree")) return "bachelors_degree_completed";
+  if (normalized.includes("english") && normalized.includes("proficiency")) return "english_proficiency";
   return normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 160);
 }
 
 function labelFromQuestionKey(questionKey: string) {
   const key = String(questionKey || "").trim();
   if (!key) return "Screening field";
+  const prettyByKnownKey: Record<string, string> = {
+    work_authorization_us: "U.S. Work Authorization",
+    visa_sponsorship_required: "Need Visa Sponsorship",
+    comfortable_working_onsite: "Comfortable Working Onsite",
+    comfortable_commuting: "Comfortable Commuting",
+    comfortable_relocation: "Comfortable Relocation",
+    expected_salary: "Expected Salary",
+    years_of_experience: "Years of Experience",
+    bachelors_degree_completed: "Bachelor's Degree Completed",
+    english_proficiency: "English Proficiency",
+    cp_pref_search_terms: "Preferred Job Titles / Search Terms",
+    cp_pref_search_location: "Primary Search Location",
+    cp_pref_search_locations: "Preferred Locations",
+    cp_pref_years_of_experience: "Years of Experience",
+    cp_pref_require_visa: "Need Visa Sponsorship",
+    cp_pref_us_citizenship: "U.S. Work Authorization",
+    cp_pref_desired_salary: "Desired Salary",
+    cp_pref_confidence_level: "Confidence Level",
+  };
+  if (prettyByKnownKey[key]) return prettyByKnownKey[key];
   return key
     .split("_")
     .filter(Boolean)
@@ -1020,11 +1065,10 @@ export default function Jobs() {
 
         {allScreeningFields.length > 0 ? (
           <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
-            <h3 className="font-semibold text-gray-900">Saved Screening Fields (Synced)</h3>
+            <h3 className="font-semibold text-gray-900">Saved Screening Answers</h3>
             {allScreeningFields.map((field) => (
               <div key={field.questionKey} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <div className="text-sm font-semibold text-gray-900">{field.questionLabel}</div>
-                <div className="text-[11px] text-gray-500 mt-1">{field.questionKey}</div>
                 <div className="mt-2 flex gap-2">
                   <input
                     value={answerDrafts[field.questionKey] ?? field.answer}

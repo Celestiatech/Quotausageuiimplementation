@@ -196,7 +196,7 @@ try {
     if (!message || message.type !== "CP_PORTAL_SYNCED") return;
     try {
       // Trigger React listeners (DashboardLayout listens for this to refresh the user wallet immediately).
-      window.dispatchEvent(new Event("cp:extensionImported"));
+      window.dispatchEvent(new CustomEvent("cp:extensionImported", { detail: message }));
     } catch {
       // ignore
     }
@@ -204,6 +204,12 @@ try {
       type: "CP_WEB_PORTAL_SYNCED",
       imported: Number(message.imported || 0),
       ts: message.ts || nowIso(),
+      chargedJobs: Number(message.chargedJobs || 0),
+      consumedTotal: Number(message.consumedTotal || 0),
+      freeConsumed: Number(message.freeConsumed || 0),
+      paidConsumed: Number(message.paidConsumed || 0),
+      chargeFailures: Number(message.chargeFailures || 0),
+      lastChargedJobId: String(message.lastChargedJobId || ""),
       bridge: bridgeMeta(),
     });
   });

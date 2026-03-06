@@ -1,17 +1,44 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  Loader2,
+  Plus,
+  Save,
+  Sparkles,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
+type TabKey = "profile" | "preferences" | "screening";
+
+type ScreeningAnswerType = "text" | "boolean" | "number" | "choice" | "multiselect";
+type ScreeningSource = "manual" | "linkedin_import" | "resume_parse" | "extension_capture" | "system";
+
 type ScreeningAnswerApiItem = {
-  questionKey: string;
-  questionLabel: string;
-  answer: string;
+  questionKey?: string;
+  questionLabel?: string;
+  answer?: string;
+  answerType?: ScreeningAnswerType;
+  source?: ScreeningSource;
+  lastUsed?: string;
+  updatedAt?: string;
+};
+
+type PendingIssueItem = {
+  questionKey?: string;
+  questionLabel?: string;
+  validationMessage?: string;
+  updatedAt?: string;
 };
 
 type OnboardingProgressApi = {
   currentStep?: number;
   profileQuestionIndex?: number;
-  preferences?: Partial<ExtensionPreferences>;
+  preferences?: Record<string, unknown>;
   screeningRows?: Array<{
     questionKey?: string;
     questionLabel?: string;
@@ -32,627 +59,538 @@ type OnboardingProfileApi = {
   progress?: OnboardingProgressApi | null;
 };
 
-type ScreeningFieldRow = {
-  id: string;
-  questionKey: string;
-  questionLabel: string;
-  answer: string;
-};
-
 type ExtensionStatus = {
   installed: boolean;
   runtimeId?: string;
-  bridge?: {
-    version?: string;
-    pageUrl?: string;
-    origin?: string;
-    ts?: string;
-  };
   linkedIn?: {
     hasLinkedInTab: boolean;
     hasJobsTab: boolean;
   };
 };
 
-type ExtensionDebugState = {
-  lastCheckAt: string;
-  lastRequestId: string;
-  postedOrigin: string;
-  domBridgeReady: string;
-  domBridgeVersion: string;
-  domBridgeRuntimeId: string;
-  timedOut: boolean;
-  bridgeReadySeenAt: string;
-  bridgeRuntimeId: string;
-  pongReceived: boolean;
-  lastError: string;
-  lastResponseJson: string;
-  events: string[];
+type ScreeningRow = {
+  id: string;
+  questionLabel: string;
+  normalizedKey: string;
+  answer: string;
+  answerType: ScreeningAnswerType;
+  source: ScreeningSource;
+  lastUsed: string;
 };
 
-type ProfileQuestionKey =
-  | "name"
-  | "phoneCountryCode"
-  | "phone"
-  | "currentCity"
-  | "addressLine"
-  | "linkedinUrl"
-  | "portfolioUrl"
-  | "bachelorsDegreeCompleted"
-  | "englishProficiency"
-  | "comfortableOnsite"
-  | "comfortableCommuting";
-
-type ProfileQuestion = {
-  key: ProfileQuestionKey;
-  label: string;
-  description: string;
-  type: "input" | "select";
-  inputType?: "text" | "tel" | "url";
-  placeholder?: string;
-  options?: Array<{ label: string; value: string }>;
-};
-
-type ExtensionPreferenceKey =
-  | "searchTerms"
-  | "searchLocation"
-  | "yearsOfExperienceAnswer"
-  | "requireVisa"
-  | "usCitizenship"
-  | "desiredSalary"
-  | "noticePeriodDays"
-  | "recentEmployer"
-  | "confidenceLevel"
-  | "coverLetter";
-
-type ExtensionPreferences = Record<ExtensionPreferenceKey, string>;
-
-type PreferenceField = {
-  key: ExtensionPreferenceKey;
+type PendingQuestion = {
   questionKey: string;
   questionLabel: string;
+  validationMessage: string;
+  updatedAt: string;
 };
 
-const WIZARD_STEPS = [
-  "Resume",
-  "Profile Q&A",
-  "Extension",
-  "Auto-fill Fields",
-  "Review",
-] as const;
+type MasterProfile = {
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  city: string;
+  state: string;
+  country: string;
+  addressLine: string;
+  linkedinUrl: string;
+  portfolioUrl: string;
+  workAuthorizationUS: string;
+  visaSponsorship: string;
+  yearsOfExperience: string;
+  englishProficiency: string;
+  educationLevel: string;
+  resumeUrl: string;
+  preferredJobTitles: string[];
+  preferredLocations: string[];
+  workModePreference: string;
+};
+
+type JobPreferences = {
+  searchTerms: string[];
+  searchLocations: string[];
+  confidenceLevel: string;
+  yearsOfExperience: string;
+  workMode: string;
+  jobTypes: string[];
+  salaryMin: string;
+  salaryMax: string;
+  preferredCountries: string[];
+  excludedCompanies: string[];
+  excludedKeywords: string[];
+};
+
+type ScreeningPayload = {
+  questionKey: string;
+  questionLabel: string;
+  answer: string;
+  answerType: ScreeningAnswerType;
+  source: ScreeningSource;
+  lastUsed?: string;
+};
+
+type WizardStep = {
+  title: string;
+  description: string;
+  tab: TabKey;
+};
+
 const EXT_BRIDGE_PING_TIMEOUT_MS = 4500;
 const EXT_BRIDGE_ACK_TIMEOUT_MS = 5000;
 
-const DEFAULT_SEARCH_TERMS = "Software Engineer, Full Stack Developer";
-const EDU_BACHELORS_LABEL = "Have you completed the following level of education: Bachelor's Degree?";
-const ENGLISH_PROFICIENCY_LABEL = "What is your level of proficiency in English?";
-const ONSITE_COMFORTABLE_LABEL = "Are you comfortable working in an onsite setting?";
-const COMMUTE_COMFORTABLE_LABEL = "Are you comfortable commuting to this job's location?";
-
-const PROFILE_QUESTIONS: ProfileQuestion[] = [
-  {
-    key: "name",
-    label: "What is your full name?",
-    description: "This is used across your profile and applications.",
-    type: "input",
-    inputType: "text",
-    placeholder: "e.g., Vishal Sadyal",
-  },
-  {
-    key: "phoneCountryCode",
-    label: "Select your phone country code",
-    description: "Used to format your number for forms.",
-    type: "select",
-    options: [
-      { label: "+91 (India)", value: "+91" },
-      { label: "+1 (US/Canada)", value: "+1" },
-      { label: "+44 (UK)", value: "+44" },
-      { label: "+61 (Australia)", value: "+61" },
-      { label: "+971 (UAE)", value: "+971" },
-    ],
-  },
-  {
-    key: "phone",
-    label: "What is your phone number?",
-    description: "Enter number only, without country code.",
-    type: "input",
-    inputType: "tel",
-    placeholder: "e.g., 9876543210",
-  },
-  {
-    key: "currentCity",
-    label: "Which city are you currently in?",
-    description: "This is used as your default job search location.",
-    type: "input",
-    inputType: "text",
-    placeholder: "e.g., Austin, TX",
-  },
-  {
-    key: "addressLine",
-    label: "What is your address?",
-    description: "Required by some Easy Apply forms.",
-    type: "input",
-    inputType: "text",
-    placeholder: "Street, area, city",
-  },
-  {
-    key: "linkedinUrl",
-    label: "What is your LinkedIn profile URL?",
-    description: "Must be a valid URL.",
-    type: "input",
-    inputType: "url",
-    placeholder: "https://www.linkedin.com/in/your-profile",
-  },
-  {
-    key: "portfolioUrl",
-    label: "What is your portfolio URL?",
-    description: "GitHub, portfolio site, or personal website.",
-    type: "input",
-    inputType: "url",
-    placeholder: "https://github.com/yourname",
-  },
-  {
-    key: "bachelorsDegreeCompleted",
-    // Match LinkedIn label as closely as possible so the extension can auto-fill without fallback guesses.
-    label: "Have you completed the following level of education: Bachelor's Degree?",
-    description: "This is asked on some LinkedIn Easy Apply forms.",
-    type: "select",
-    options: [
-      { label: "Yes", value: "Yes" },
-      { label: "No", value: "No" },
-    ],
-  },
-  {
-    key: "englishProficiency",
-    label: ENGLISH_PROFICIENCY_LABEL,
-    description: "This is asked on some Easy Apply forms.",
-    type: "select",
-    options: [
-      { label: "Professional", value: "Professional" },
-      { label: "Native or bilingual", value: "Native or bilingual" },
-      { label: "Limited", value: "Limited" },
-      { label: "Basic", value: "Basic" },
-    ],
-  },
-  {
-    key: "comfortableOnsite",
-    label: ONSITE_COMFORTABLE_LABEL,
-    description: "This is asked on some Easy Apply forms.",
-    type: "select",
-    options: [
-      { label: "Yes", value: "Yes" },
-      { label: "No", value: "No" },
-    ],
-  },
-  {
-    key: "comfortableCommuting",
-    label: COMMUTE_COMFORTABLE_LABEL,
-    description: "This is asked on some Easy Apply forms.",
-    type: "select",
-    options: [
-      { label: "Yes", value: "Yes" },
-      { label: "No", value: "No" },
-    ],
-  },
+const WIZARD_STEPS: WizardStep[] = [
+  { title: "Basic Details", description: "Name, email, phone, and location", tab: "profile" },
+  { title: "Work Eligibility", description: "Work authorization and sponsorship", tab: "profile" },
+  { title: "Experience", description: "Years, education, and English", tab: "profile" },
+  { title: "Job Preferences", description: "Titles, locations, remote/onsite", tab: "preferences" },
+  { title: "Saved Answers", description: "Reusable LinkedIn screening answers", tab: "screening" },
+  { title: "Resume + LinkedIn", description: "Resume status and profile links", tab: "profile" },
 ];
 
-const PREFERENCE_FIELDS: PreferenceField[] = [
-  {
-    key: "searchTerms",
-    questionKey: "cp_pref_search_terms",
-    questionLabel: "AutoApply CV Preference: Search terms",
-  },
-  {
-    key: "searchLocation",
-    questionKey: "cp_pref_search_location",
-    questionLabel: "AutoApply CV Preference: Search location",
-  },
-  {
-    key: "yearsOfExperienceAnswer",
-    questionKey: "cp_pref_years_of_experience",
-    questionLabel: "AutoApply CV Preference: Years of experience",
-  },
-  {
-    key: "requireVisa",
-    questionKey: "cp_pref_require_visa",
-    questionLabel: "AutoApply CV Preference: Need visa sponsorship",
-  },
-  {
-    key: "usCitizenship",
-    questionKey: "cp_pref_us_citizenship",
-    questionLabel: "AutoApply CV Preference: US work authorization",
-  },
-  {
-    key: "desiredSalary",
-    questionKey: "cp_pref_desired_salary",
-    questionLabel: "AutoApply CV Preference: Desired salary",
-  },
-  {
-    key: "noticePeriodDays",
-    questionKey: "cp_pref_notice_period_days",
-    questionLabel: "AutoApply CV Preference: Notice period (days)",
-  },
-  {
-    key: "recentEmployer",
-    questionKey: "cp_pref_recent_employer",
-    questionLabel: "AutoApply CV Preference: Recent employer",
-  },
-  {
-    key: "confidenceLevel",
-    questionKey: "cp_pref_confidence_level",
-    questionLabel: "AutoApply CV Preference: Confidence level",
-  },
-  {
-    key: "coverLetter",
-    questionKey: "cp_pref_cover_letter",
-    questionLabel: "AutoApply CV Preference: Default long-form answer",
-  },
+const PROFILE_KEY_LABELS: Array<{ key: keyof MasterProfile; label: string; answerType?: ScreeningAnswerType }> = [
+  { key: "fullName", label: "Full Name" },
+  { key: "firstName", label: "First Name" },
+  { key: "lastName", label: "Last Name" },
+  { key: "email", label: "Email Address" },
+  { key: "phone", label: "Phone Number" },
+  { key: "city", label: "Current City" },
+  { key: "state", label: "State / Region" },
+  { key: "country", label: "Country" },
+  { key: "addressLine", label: "Address Line" },
+  { key: "linkedinUrl", label: "LinkedIn URL" },
+  { key: "portfolioUrl", label: "Portfolio URL" },
+  { key: "workAuthorizationUS", label: "U.S. Work Authorization", answerType: "choice" },
+  { key: "visaSponsorship", label: "Need Visa Sponsorship", answerType: "boolean" },
+  { key: "yearsOfExperience", label: "Years of Experience", answerType: "number" },
+  { key: "englishProficiency", label: "English Proficiency", answerType: "choice" },
+  { key: "educationLevel", label: "Education Level", answerType: "choice" },
+  { key: "resumeUrl", label: "Resume URL" },
+  { key: "workModePreference", label: "Remote / Onsite / Hybrid", answerType: "choice" },
 ];
+
+const PREFERENCE_KEY_LABELS: Array<{ key: keyof JobPreferences; questionKey: string; label: string; answerType?: ScreeningAnswerType }> = [
+  { key: "searchTerms", questionKey: "cp_pref_search_terms", label: "Preferred Job Titles / Search Terms", answerType: "multiselect" },
+  { key: "searchLocations", questionKey: "cp_pref_search_locations", label: "Preferred Locations", answerType: "multiselect" },
+  { key: "yearsOfExperience", questionKey: "cp_pref_years_of_experience", label: "Years of Experience", answerType: "number" },
+  { key: "workMode", questionKey: "cp_pref_work_mode", label: "Remote / Onsite / Hybrid", answerType: "choice" },
+  { key: "jobTypes", questionKey: "cp_pref_job_types", label: "Job Types", answerType: "multiselect" },
+  { key: "salaryMin", questionKey: "cp_pref_salary_min", label: "Salary Range Min", answerType: "number" },
+  { key: "salaryMax", questionKey: "cp_pref_salary_max", label: "Salary Range Max", answerType: "number" },
+  { key: "preferredCountries", questionKey: "cp_pref_preferred_countries", label: "Preferred Countries", answerType: "multiselect" },
+  { key: "excludedCompanies", questionKey: "cp_pref_excluded_companies", label: "Excluded Companies", answerType: "multiselect" },
+  { key: "excludedKeywords", questionKey: "cp_pref_excluded_keywords", label: "Excluded Keywords", answerType: "multiselect" },
+];
+
+const LEGACY_PREFERENCE_KEYS = {
+  searchTerms: "cp_pref_search_terms",
+  searchLocation: "cp_pref_search_location",
+  yearsOfExperience: "cp_pref_years_of_experience",
+  requireVisa: "cp_pref_require_visa",
+  usCitizenship: "cp_pref_us_citizenship",
+  desiredSalary: "cp_pref_desired_salary",
+  confidenceLevel: "cp_pref_confidence_level",
+};
+
+const WORK_MODE_OPTIONS = ["Remote", "Hybrid", "Onsite", "Flexible"];
+const JOB_TYPE_OPTIONS = ["Full-time", "Part-time", "Contract", "Internship", "Temporary"];
+const ENGLISH_PROFICIENCY_OPTIONS = ["Native or bilingual", "Professional", "Limited", "Basic"];
+const EDUCATION_LEVEL_OPTIONS = [
+  "High School",
+  "Associate Degree",
+  "Bachelor's Degree",
+  "Master's Degree",
+  "Doctorate",
+  "Diploma / Certificate",
+];
+
+function makeId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function normalizeLabel(value: string) {
   return String(value || "")
     .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function toQuestionKey(value: string) {
+function slugifyKey(value: string) {
   const normalized = normalizeLabel(value);
   if (!normalized) return "";
-  return normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 160);
+  return normalized.replace(/\s+/g, "_").replace(/^_+|_+$/g, "").slice(0, 160);
 }
 
-function makeRowId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function hasWords(label: string, words: string[]) {
+  return words.every((word) => label.includes(word));
+}
+
+function canonicalizeQuestionKey(value: string) {
+  const normalized = normalizeLabel(value);
+  if (!normalized) return "";
+
+  if (
+    (hasWords(normalized, ["authorized", "work"]) ||
+      hasWords(normalized, ["eligible", "work"]) ||
+      hasWords(normalized, ["work", "authorization"])) &&
+    (normalized.includes("united states") || normalized.includes("u s") || normalized.includes("us"))
+  ) {
+    return "work_authorization_us";
+  }
+  if (hasWords(normalized, ["visa", "sponsorship"]) || hasWords(normalized, ["require", "sponsorship"])) {
+    return "visa_sponsorship_required";
+  }
+  if (normalized.includes("onsite") || normalized.includes("on site")) {
+    return "comfortable_working_onsite";
+  }
+  if (normalized.includes("commut") || normalized.includes("travel to office")) {
+    return "comfortable_commuting";
+  }
+  if (normalized.includes("relocat")) {
+    return "comfortable_relocation";
+  }
+  if ((normalized.includes("salary") || normalized.includes("compensation") || normalized.includes("pay")) && normalized.includes("expect")) {
+    return "expected_salary";
+  }
+  if (normalized.includes("year") && normalized.includes("experience")) {
+    return "years_of_experience";
+  }
+  if (normalized.includes("bachelor") && normalized.includes("degree")) {
+    return "bachelors_degree_completed";
+  }
+  if (normalized.includes("english") && normalized.includes("proficiency")) {
+    return "english_proficiency";
+  }
+  if (normalized.includes("notice") && normalized.includes("period")) {
+    return "notice_period_days";
+  }
+  if (normalized.includes("start") && normalized.includes("date")) {
+    return "start_date_availability";
+  }
+
+  return slugifyKey(normalized);
+}
+
+function inferAnswerType(answer: string): ScreeningAnswerType {
+  const value = String(answer || "").trim();
+  if (!value) return "text";
+  const lower = value.toLowerCase();
+  if (lower === "yes" || lower === "no") return "boolean";
+  if (/^\d+(\.\d+)?$/.test(value)) return "number";
+  if (value.includes(",")) return "multiselect";
+  return "text";
+}
+
+function parseTags(value: string | string[] | null | undefined) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  return String(value || "")
+    .split(/[\n,|;]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 40);
+}
+
+function stringifyTags(value: string[]) {
+  return value.map((item) => String(item || "").trim()).filter(Boolean).join(", ");
+}
+
+function splitName(fullName: string) {
+  const tokens = String(fullName || "")
+    .trim()
+    .split(/\s+/g)
+    .filter(Boolean);
+  if (!tokens.length) return { firstName: "", lastName: "" };
+  return {
+    firstName: tokens[0] || "",
+    lastName: tokens.slice(1).join(" "),
+  };
+}
+
+function splitCityState(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return { city: "", state: "" };
+  const parts = raw.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length <= 1) return { city: raw, state: "" };
+  return { city: parts[0], state: parts.slice(1).join(", ") };
+}
+
+function combineCityState(city: string, state: string) {
+  const c = String(city || "").trim();
+  const s = String(state || "").trim();
+  if (!c && !s) return "";
+  if (!s) return c;
+  if (!c) return s;
+  return `${c}, ${s}`;
 }
 
 function isValidUrl(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
   try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    const url = new URL(raw);
+    return url.protocol === "https:" || url.protocol === "http:";
   } catch {
     return false;
   }
 }
 
-function splitPhone(value: string | null | undefined) {
+function normalizePhoneDigits(value: string) {
+  return String(value || "").replace(/[^\d+]/g, "").trim();
+}
+
+function extractPhoneCountryCode(value: string) {
   const raw = String(value || "").trim();
-  if (!raw) return { countryCode: "+91", number: "" };
-  const plusMatch = raw.match(/^\+\d{1,3}/);
-  if (!plusMatch) {
-    return {
-      countryCode: "+91",
-      number: raw.replace(/[^\d]/g, ""),
-    };
-  }
-  const countryCode = plusMatch[0];
-  const number = raw.slice(countryCode.length).replace(/[^\d]/g, "");
-  return { countryCode, number };
+  const plus = raw.match(/^\+\d{1,3}/);
+  return plus ? plus[0] : "+1";
 }
 
-function composePhone(number: string, countryCode: string) {
-  const raw = String(number || "").trim();
+function extractPhoneNumber(value: string) {
+  const raw = String(value || "").trim();
   if (!raw) return "";
-  if (raw.startsWith("+")) return raw;
-  const normalizedCode = String(countryCode || "+91").trim();
-  const safeCode = normalizedCode.startsWith("+") ? normalizedCode : `+${normalizedCode}`;
-  const digits = raw.replace(/[^\d]/g, "");
-  return `${safeCode}${digits}`;
+  return raw.replace(/[^\d]/g, "");
 }
 
-function parseListInput(value: string) {
-  return String(value || "")
-    .split(/[\n,]/g)
-    .map((item) => item.trim())
-    .filter(Boolean);
+function toTitleCase(input: string) {
+  return String(input || "")
+    .split(/[_\s]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
-function splitName(value: string) {
-  const parts = String(value || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  const firstName = parts[0] || "";
-  const middleName = parts.length > 2 ? parts.slice(1, -1).join(" ") : "";
-  const lastName = parts.length > 1 ? parts.slice(middleName ? -1 : 1).join(" ") : "";
-  return { firstName, middleName, lastName };
+function friendlyLabel(questionKey: string, questionLabel: string) {
+  const cleanLabel = String(questionLabel || "").trim();
+  if (cleanLabel) return cleanLabel;
+  const key = String(questionKey || "").trim();
+  if (!key) return "Screening Question";
+
+  const prettyByKnownKey: Record<string, string> = {
+    work_authorization_us: "U.S. Work Authorization",
+    visa_sponsorship_required: "Need Visa Sponsorship",
+    comfortable_working_onsite: "Comfortable Working Onsite",
+    comfortable_commuting: "Comfortable Commuting",
+    comfortable_relocation: "Comfortable Relocation",
+    expected_salary: "Expected Salary",
+    years_of_experience: "Years of Experience",
+    bachelors_degree_completed: "Bachelor's Degree Completed",
+    english_proficiency: "English Proficiency",
+    start_date_availability: "Start Date Availability",
+    cp_pref_search_terms: "Preferred Job Titles / Search Terms",
+    cp_pref_search_location: "Primary Search Location",
+    cp_pref_search_locations: "Preferred Locations",
+    cp_pref_years_of_experience: "Years of Experience",
+    cp_pref_require_visa: "Need Visa Sponsorship",
+    cp_pref_us_citizenship: "U.S. Work Authorization",
+    cp_pref_desired_salary: "Desired Salary",
+    cp_pref_confidence_level: "Confidence Level",
+    cp_pref_work_mode: "Remote / Onsite / Hybrid",
+    cp_pref_job_types: "Job Types",
+    cp_pref_salary_min: "Salary Range Min",
+    cp_pref_salary_max: "Salary Range Max",
+    cp_pref_preferred_countries: "Preferred Countries",
+    cp_pref_excluded_companies: "Excluded Companies",
+    cp_pref_excluded_keywords: "Excluded Keywords",
+  };
+  return prettyByKnownKey[key] || toTitleCase(key);
 }
 
-function compactAnswer(value: string, limit = 1000) {
-  return String(value || "").trim().slice(0, limit);
+function compactAnswer(value: string, max = 1000) {
+  return String(value || "").trim().slice(0, max);
 }
 
-function isPreferenceQuestionKey(questionKey: string) {
-  return PREFERENCE_FIELDS.some((field) => field.questionKey === questionKey);
+function toPayloadQuestionKey(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("cp_pref_")) return raw;
+  return canonicalizeQuestionKey(raw);
 }
 
-function buildDefaultScreeningRows(form: {
-  name: string;
-  phone: string;
-  currentCity: string;
-  linkedinUrl: string;
-  portfolioUrl: string;
-  bachelorsDegreeCompleted: string;
-  englishProficiency: string;
-  comfortableOnsite: string;
-  comfortableCommuting: string;
-}, email?: string): ScreeningFieldRow[] {
-  const fullName = String(form.name || "").trim();
-  const nameParts = fullName.split(/\s+/).filter(Boolean);
-  const firstName = nameParts[0] || "";
-  const lastName = nameParts.slice(1).join(" ");
+function getSuggestedAnswer(question: PendingQuestion, profile: MasterProfile, preferences: JobPreferences, existingRows: ScreeningRow[]) {
+  const normalizedKey = toPayloadQuestionKey(question.questionKey || question.questionLabel);
+  const label = normalizeLabel(question.questionLabel);
 
-  const templates = [
-    { questionLabel: "Full legal name", answer: fullName },
-    { questionLabel: "First name", answer: firstName },
-    { questionLabel: "Last name", answer: lastName },
-    { questionLabel: "Email address", answer: String(email || "").trim() },
-    { questionLabel: "Phone", answer: String(form.phone || "").trim() },
-    { questionLabel: "Mobile phone number", answer: String(form.phone || "").trim() },
-    { questionLabel: "Your location (City, State)", answer: String(form.currentCity || "").trim() },
-    { questionLabel: "LinkedIn profile", answer: String(form.linkedinUrl || "").trim() },
-    { questionLabel: "Portfolio URL", answer: String(form.portfolioUrl || "").trim() },
-    // Education (common LinkedIn screening question)
-    { questionLabel: EDU_BACHELORS_LABEL, answer: String(form.bachelorsDegreeCompleted || "").trim() },
-    { questionLabel: ENGLISH_PROFICIENCY_LABEL, answer: String(form.englishProficiency || "").trim() },
-    { questionLabel: ONSITE_COMFORTABLE_LABEL, answer: String(form.comfortableOnsite || "").trim() },
-    { questionLabel: COMMUTE_COMFORTABLE_LABEL, answer: String(form.comfortableCommuting || "").trim() },
-  ];
+  const existing = existingRows.find((row) => toPayloadQuestionKey(row.normalizedKey) === normalizedKey && row.answer.trim());
+  if (existing) return existing.answer;
 
-  return templates
-    .map((item) => {
-      const questionLabel = String(item.questionLabel || "").trim();
-      const answer = String(item.answer || "").trim();
-      const questionKey = toQuestionKey(questionLabel);
-      if (!questionLabel || !answer || !questionKey) return null;
-      return { id: makeRowId(), questionKey, questionLabel, answer };
-    })
-    .filter((item): item is ScreeningFieldRow => Boolean(item));
-}
-
-function normalizeDraftScreeningRows(
-  value: OnboardingProgressApi["screeningRows"],
-): ScreeningFieldRow[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const rows: ScreeningFieldRow[] = [];
-  for (const item of value) {
-    const questionLabel = String(item?.questionLabel || "").trim();
-    const candidateKey = String(item?.questionKey || "").trim();
-    const questionKey = toQuestionKey(candidateKey || questionLabel);
-    const answer = String(item?.answer || "").trim();
-    if (!questionKey || !questionLabel || !answer) continue;
-    if (seen.has(questionKey)) continue;
-    seen.add(questionKey);
-    rows.push({
-      id: makeRowId(),
-      questionKey,
-      questionLabel,
-      answer,
-    });
+  if (normalizedKey === "work_authorization_us") return profile.workAuthorizationUS || "";
+  if (normalizedKey === "visa_sponsorship_required") return profile.visaSponsorship || "No";
+  if (normalizedKey === "comfortable_working_onsite") return preferences.workMode === "Remote" ? "No" : "Yes";
+  if (normalizedKey === "comfortable_commuting") return preferences.workMode === "Remote" ? "No" : "Yes";
+  if (normalizedKey === "comfortable_relocation") return preferences.workMode === "Remote" ? "No" : "Yes";
+  if (normalizedKey === "years_of_experience") return profile.yearsOfExperience || preferences.yearsOfExperience || "";
+  if (normalizedKey === "expected_salary") {
+    if (preferences.salaryMin && preferences.salaryMax) return `${preferences.salaryMin}-${preferences.salaryMax}`;
+    return preferences.salaryMax || preferences.salaryMin || "";
   }
-  return rows;
+  if (normalizedKey === "bachelors_degree_completed") {
+    const edu = normalizeLabel(profile.educationLevel);
+    if (!edu) return "";
+    if (
+      edu.includes("bachelor") ||
+      edu.includes("master") ||
+      edu.includes("doctor") ||
+      edu.includes("mca") ||
+      edu.includes("btech") ||
+      edu.includes("be")
+    ) {
+      return "Yes";
+    }
+    return "No";
+  }
+  if (normalizedKey === "english_proficiency") return profile.englishProficiency || "Professional";
+
+  if (label.includes("visa") || label.includes("sponsorship")) return profile.visaSponsorship || "No";
+  if (label.includes("authorized") && label.includes("work")) return profile.workAuthorizationUS || "";
+  if (label.includes("salary") || label.includes("compensation") || label.includes("pay")) {
+    if (preferences.salaryMin && preferences.salaryMax) return `${preferences.salaryMin}-${preferences.salaryMax}`;
+    return preferences.salaryMax || preferences.salaryMin || "";
+  }
+  if (label.includes("experience") && label.includes("year")) return profile.yearsOfExperience || preferences.yearsOfExperience || "";
+  if (label.includes("onsite") || label.includes("on site")) return preferences.workMode === "Remote" ? "No" : "Yes";
+  if (label.includes("commut") || label.includes("relocat")) return preferences.workMode === "Remote" ? "No" : "Yes";
+  return "";
 }
+
+const SYSTEM_KEYS = new Set<string>([
+  "full_name",
+  "first_name",
+  "last_name",
+  "email_address",
+  "phone_number",
+  "current_city",
+  "state_region",
+  "country",
+  "address_line",
+  "linkedin_url",
+  "portfolio_url",
+  "work_authorization_us",
+  "visa_sponsorship_required",
+  "years_of_experience",
+  "english_proficiency",
+  "education_level",
+  "resume_url",
+  "preferred_job_titles",
+  "preferred_locations",
+  "work_mode_preference",
+  "cp_pref_search_terms",
+  "cp_pref_search_location",
+  "cp_pref_search_locations",
+  "cp_pref_years_of_experience",
+  "cp_pref_require_visa",
+  "cp_pref_us_citizenship",
+  "cp_pref_desired_salary",
+  "cp_pref_confidence_level",
+  "cp_pref_work_mode",
+  "cp_pref_job_types",
+  "cp_pref_salary_min",
+  "cp_pref_salary_max",
+  "cp_pref_preferred_countries",
+  "cp_pref_excluded_companies",
+  "cp_pref_excluded_keywords",
+]);
+
+const DEFAULT_PROFILE: MasterProfile = {
+  fullName: "",
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  city: "",
+  state: "",
+  country: "United States",
+  addressLine: "",
+  linkedinUrl: "",
+  portfolioUrl: "",
+  workAuthorizationUS: "",
+  visaSponsorship: "No",
+  yearsOfExperience: "",
+  englishProficiency: "Professional",
+  educationLevel: "",
+  resumeUrl: "",
+  preferredJobTitles: [],
+  preferredLocations: [],
+  workModePreference: "Remote",
+};
+
+const DEFAULT_PREFERENCES: JobPreferences = {
+  searchTerms: [],
+  searchLocations: [],
+  confidenceLevel: "8",
+  yearsOfExperience: "",
+  workMode: "Remote",
+  jobTypes: ["Full-time"],
+  salaryMin: "",
+  salaryMax: "",
+  preferredCountries: ["United States"],
+  excludedCompanies: [],
+  excludedKeywords: [],
+};
 
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
-  const parsedUserPhone = splitPhone(user?.phone || "");
 
-  const [isSaving, setIsSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>("profile");
+  const [wizardStep, setWizardStep] = useState(0);
+  const [profile, setProfile] = useState<MasterProfile>(DEFAULT_PROFILE);
+  const [preferences, setPreferences] = useState<JobPreferences>(DEFAULT_PREFERENCES);
+  const [screeningRows, setScreeningRows] = useState<ScreeningRow[]>([]);
+  const [pendingQuestions, setPendingQuestions] = useState<PendingQuestion[]>([]);
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [draftSavedAt, setDraftSavedAt] = useState("");
+  const [lastSyncAt, setLastSyncAt] = useState("");
+  const [savingAnswerKey, setSavingAnswerKey] = useState("");
   const [checkingExtension, setCheckingExtension] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({ installed: false });
-  const [extensionDebug, setExtensionDebug] = useState<ExtensionDebugState>({
-    lastCheckAt: "",
-    lastRequestId: "",
-    postedOrigin: "",
-    domBridgeReady: "",
-    domBridgeVersion: "",
-    domBridgeRuntimeId: "",
-    timedOut: false,
-    bridgeReadySeenAt: "",
-    bridgeRuntimeId: "",
-    pongReceived: false,
-    lastError: "",
-    lastResponseJson: "",
-    events: [],
-  });
-  const [screeningRows, setScreeningRows] = useState<ScreeningFieldRow[]>([]);
-  const [loadingScreening, setLoadingScreening] = useState(true);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [profileQuestionIndex, setProfileQuestionIndex] = useState(0);
-  const [phoneCountryCode, setPhoneCountryCode] = useState(parsedUserPhone.countryCode || "+91");
-  const [form, setForm] = useState({
-    name: user?.name || "",
-    phone: parsedUserPhone.number || "",
-    currentCity: user?.currentCity || "",
-    addressLine: user?.addressLine || "",
-    linkedinUrl: user?.linkedinUrl || "",
-    portfolioUrl: user?.portfolioUrl || "",
-    bachelorsDegreeCompleted: "Yes",
-    englishProficiency: "Professional",
-    comfortableOnsite: "No",
-    comfortableCommuting: "No",
-  });
-  const [preferences, setPreferences] = useState<ExtensionPreferences>({
-    searchTerms: DEFAULT_SEARCH_TERMS,
-    searchLocation: user?.currentCity || "United States",
-    yearsOfExperienceAnswer: "",
-    requireVisa: "No",
-    usCitizenship: "U.S. Citizen/Permanent Resident",
-    desiredSalary: "",
-    noticePeriodDays: "",
-    recentEmployer: "",
-    confidenceLevel: "8",
-    coverLetter: "",
-  });
-  const latestExtensionCheckRef = useRef(0);
-  const activeExtensionChecksRef = useRef(0);
-  const onboardingHydratedRef = useRef(false);
+
+  const loadedRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
 
+  const canDownloadExtensionZip = Boolean(
+    String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim(),
+  );
+
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
-  const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
-  const canDownloadExtensionZip = Boolean(extensionZipUrl);
-  const showExtensionDebug =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("debug") === "1";
-
-  const appendDebugEvent = (value: string) => {
-    const entry = `${new Date().toISOString()} ${value}`;
-    setExtensionDebug((prev) => ({
-      ...prev,
-      events: [entry, ...prev.events].slice(0, 25),
-    }));
-  };
-
-  const getQuestionValue = (key: ProfileQuestionKey) => {
-    if (key === "phoneCountryCode") return phoneCountryCode;
-    return form[key] || "";
-  };
-
-  const setQuestionValue = (key: ProfileQuestionKey, value: string) => {
-    if (key === "phoneCountryCode") {
-      setPhoneCountryCode(value);
-      return;
-    }
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const validateProfileQuestion = (key: ProfileQuestionKey) => {
-    const value = String(getQuestionValue(key) || "").trim();
-    if (key === "name") return value.length >= 2 ? "" : "Enter at least 2 characters for full name.";
-    if (key === "phoneCountryCode") return value.startsWith("+") ? "" : "Select a country code.";
-    if (key === "phone") return value.replace(/[^\d]/g, "").length >= 6 ? "" : "Enter a valid phone number.";
-    if (key === "currentCity") return value.length >= 2 ? "" : "Enter your current city.";
-    if (key === "addressLine") return value.length >= 5 ? "" : "Enter a complete address line.";
-    if (key === "linkedinUrl") return isValidUrl(value) ? "" : "Enter a valid LinkedIn URL.";
-    if (key === "portfolioUrl") return isValidUrl(value) ? "" : "Enter a valid portfolio URL.";
-    if (key === "bachelorsDegreeCompleted") return value === "Yes" || value === "No" ? "" : "Select Yes or No.";
-    if (key === "comfortableOnsite") return value === "Yes" || value === "No" ? "" : "Select Yes or No.";
-    if (key === "comfortableCommuting") return value === "Yes" || value === "No" ? "" : "Select Yes or No.";
-    if (key === "englishProficiency") return value.length ? "" : "Select an option.";
-    return "";
-  };
-
-  const firstInvalidProfileIndex = PROFILE_QUESTIONS.findIndex((question) => Boolean(validateProfileQuestion(question.key)));
-  const profileComplete = firstInvalidProfileIndex === -1;
-
-  const validatePreferences = () => {
-    const searchTerms = parseListInput(preferences.searchTerms);
-    if (!searchTerms.length) return "Add at least one search term.";
-
-    const searchLocation = String(preferences.searchLocation || "").trim();
-    if (searchLocation.length < 2) return "Enter a valid search location.";
-
-    const years = String(preferences.yearsOfExperienceAnswer || "").trim();
-    if (years && !/^\d{1,2}$/.test(years)) return "Years of experience must be a whole number.";
-
-    const noticeDays = String(preferences.noticePeriodDays || "").trim();
-    if (noticeDays && !/^\d{1,3}$/.test(noticeDays)) return "Notice period must be in days (numbers only).";
-
-    const confidence = String(preferences.confidenceLevel || "").trim();
-    if (confidence && !/^(10|[1-9])$/.test(confidence)) return "Confidence level must be between 1 and 10.";
-
-    if (!String(preferences.requireVisa || "").trim()) return "Select visa requirement preference.";
-    if (!String(preferences.usCitizenship || "").trim()) return "Select work authorization preference.";
-    return "";
-  };
-
-  const preferenceError = validatePreferences();
-  const preferencesComplete = !preferenceError;
 
   const checkExtensionStatus = async (opts?: { silent?: boolean }) => {
     if (typeof window === "undefined") return;
     const silent = Boolean(opts?.silent);
-    const checkSeq = ++latestExtensionCheckRef.current;
-    activeExtensionChecksRef.current += 1;
-    const requestId = `cp_onboarding_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const domBridgeReady = document.documentElement.getAttribute("data-cp-bridge-ready") || "";
-    const domBridgeVersion = document.documentElement.getAttribute("data-cp-bridge-version") || "";
-    const domBridgeRuntimeId = document.documentElement.getAttribute("data-cp-bridge-runtime-id") || "";
     setCheckingExtension(true);
-    setExtensionDebug((prev) => ({
-      ...prev,
-      lastCheckAt: new Date().toISOString(),
-      lastRequestId: requestId,
-      postedOrigin: window.location.origin,
-      domBridgeReady,
-      domBridgeVersion,
-      domBridgeRuntimeId,
-      timedOut: false,
-      pongReceived: false,
-      lastError: "",
-      lastResponseJson: "",
-    }));
-    if (!silent) {
-      appendDebugEvent(
-        `Posting CP_WEB_PING requestId=${requestId} domBridgeReady=${domBridgeReady || "0"} domBridgeVersion=${
-          domBridgeVersion || "-"
-        }`
-      );
-    }
-
     try {
       const result = await new Promise<ExtensionStatus>((resolve) => {
+        const requestId = `cp_onboarding_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         let settled = false;
+
         const timeout = window.setTimeout(() => {
           if (settled) return;
           settled = true;
           window.removeEventListener("message", onMessage);
-          if (checkSeq === latestExtensionCheckRef.current) {
-            if (!silent) appendDebugEvent(`Timeout waiting for CP_WEB_PONG requestId=${requestId}`);
-            setExtensionDebug((prev) => ({
-              ...prev,
-              timedOut: true,
-              lastError: "Timed out waiting for extension response",
-            }));
-          }
           resolve({ installed: false });
         }, EXT_BRIDGE_PING_TIMEOUT_MS);
 
         const onMessage = (event: MessageEvent) => {
           const data = event.data as any;
-          if (data?.type === "CP_WEB_PONG" && data.requestId !== requestId && !silent) {
-            appendDebugEvent(`Ignored CP_WEB_PONG for requestId=${String(data.requestId || "")}`);
-          }
           if (!data || data.type !== "CP_WEB_PONG" || data.requestId !== requestId) return;
           if (settled) return;
           settled = true;
           window.clearTimeout(timeout);
           window.removeEventListener("message", onMessage);
-          if (checkSeq === latestExtensionCheckRef.current) {
-            const responseJson = JSON.stringify(data, null, 2);
-            setExtensionDebug((prev) => ({
-              ...prev,
-              pongReceived: true,
-              timedOut: false,
-              bridgeRuntimeId: String(data.runtimeId || prev.bridgeRuntimeId || ""),
-              lastError: String(data.error || "").trim(),
-              lastResponseJson: responseJson.slice(0, 6000),
-            }));
-          }
           const bridgeError = String(data.error || "").trim();
           const runtimeBootstrapOk =
             Boolean(data.state) &&
             typeof data.state === "object" &&
             !Array.isArray(data.state);
           const installed = Boolean(data.installed) && !bridgeError && runtimeBootstrapOk;
-          if (!silent) {
-            appendDebugEvent(
-              `Received CP_WEB_PONG installed=${installed} runtimeOk=${runtimeBootstrapOk} runtimeId=${String(data.runtimeId || "")}${
-                bridgeError ? ` error=${bridgeError}` : ""
-              }`
-            );
-          }
           resolve({
             installed,
             runtimeId: data.runtimeId || undefined,
-            bridge: data.bridge || undefined,
             linkedIn: data.linkedIn || undefined,
           });
         };
@@ -661,170 +599,199 @@ export default function Onboarding() {
         window.postMessage({ type: "CP_WEB_PING", requestId }, window.location.origin);
       });
 
-      if (checkSeq !== latestExtensionCheckRef.current) return;
       setExtensionStatus(result);
-      if (!result.installed && !silent) {
-        if (!domBridgeReady) {
-          appendDebugEvent(
-            "Result installed=false and DOM bridge marker missing. Content script is not injected on this page."
-          );
-        } else {
-          appendDebugEvent(
-            "Result installed=false but DOM marker exists. Bridge is injected, response path failed."
-          );
+      if (!silent && !result.installed) {
+        setMessage("Extension not detected yet. You can still complete onboarding and sync later.");
+      }
+    } finally {
+      setCheckingExtension(false);
+    }
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [profileRes, answersRes, issuesRes] = await Promise.all([
+        fetch("/api/user/onboarding", { credentials: "include" }),
+        fetch("/api/user/screening/answers?limit=500&scanLimit=2500", { credentials: "include" }),
+        fetch("/api/user/screening/issues?limit=200&scanLimit=2500", { credentials: "include" }),
+      ]);
+      const [profileJson, answersJson, issuesJson] = await Promise.all([
+        profileRes.json().catch(() => null),
+        answersRes.json().catch(() => null),
+        issuesRes.json().catch(() => null),
+      ]);
+
+      const profileApi = (profileJson?.data || null) as OnboardingProfileApi | null;
+      const savedUser = profileApi?.user || {};
+      const savedProgress = profileApi?.progress || null;
+
+      const answers = Array.isArray(answersJson?.data?.answers)
+        ? (answersJson.data.answers as ScreeningAnswerApiItem[])
+        : [];
+
+      const pending = Array.isArray(issuesJson?.data?.pending)
+        ? (issuesJson.data.pending as PendingIssueItem[])
+        : [];
+
+      const answerByKey = new Map<string, ScreeningAnswerApiItem>();
+      for (const item of answers) {
+        const key = toPayloadQuestionKey(String(item?.questionKey || item?.questionLabel || ""));
+        const answer = String(item?.answer || "").trim();
+        if (!key || !answer) continue;
+        if (!answerByKey.has(key)) {
+          answerByKey.set(key, item);
         }
       }
-  } catch (checkError) {
-      if (checkSeq !== latestExtensionCheckRef.current) return;
-      const msg = String(checkError instanceof Error ? checkError.message : checkError || "Unknown extension check error");
-      setExtensionDebug((prev) => ({
-        ...prev,
-        lastError: msg,
-      }));
-      if (!silent) appendDebugEvent(`Check failed: ${msg}`);
+
+      const readAnswer = (...keys: string[]) => {
+        for (const key of keys) {
+          const canonical = toPayloadQuestionKey(key);
+          const found = answerByKey.get(canonical);
+          const value = String(found?.answer || "").trim();
+          if (value) return value;
+        }
+        return "";
+      };
+
+      const userName = String(savedUser.name || user?.name || "").trim();
+      const nameParts = splitName(userName);
+      const currentCity = String(savedUser.currentCity || user?.currentCity || "").trim();
+      const cityState = splitCityState(currentCity);
+
+      const nextProfile: MasterProfile = {
+        fullName: userName,
+        firstName: readAnswer("first_name") || nameParts.firstName,
+        lastName: readAnswer("last_name") || nameParts.lastName,
+        email: String(user?.email || "").trim(),
+        phone: normalizePhoneDigits(String(savedUser.phone || user?.phone || readAnswer("phone_number") || "")),
+        city: readAnswer("current_city", "city") || cityState.city,
+        state: readAnswer("state_region") || cityState.state,
+        country: readAnswer("country") || "United States",
+        addressLine: String(savedUser.addressLine || user?.addressLine || readAnswer("address_line") || "").trim(),
+        linkedinUrl: String(savedUser.linkedinUrl || user?.linkedinUrl || readAnswer("linkedin_url") || "").trim(),
+        portfolioUrl: String(savedUser.portfolioUrl || user?.portfolioUrl || readAnswer("portfolio_url") || "").trim(),
+        workAuthorizationUS: readAnswer("work_authorization_us", LEGACY_PREFERENCE_KEYS.usCitizenship),
+        visaSponsorship: readAnswer("visa_sponsorship_required", LEGACY_PREFERENCE_KEYS.requireVisa) || "No",
+        yearsOfExperience: readAnswer("years_of_experience", LEGACY_PREFERENCE_KEYS.yearsOfExperience),
+        englishProficiency: readAnswer("english_proficiency") || "Professional",
+        educationLevel: readAnswer("education_level", "bachelors_degree_completed"),
+        resumeUrl: readAnswer("resume_url"),
+        preferredJobTitles: parseTags(readAnswer("preferred_job_titles", LEGACY_PREFERENCE_KEYS.searchTerms)),
+        preferredLocations: parseTags(
+          readAnswer("preferred_locations", "cp_pref_search_locations", LEGACY_PREFERENCE_KEYS.searchLocation),
+        ),
+        workModePreference: readAnswer("work_mode_preference", "cp_pref_work_mode") || "Remote",
+      };
+
+      const parsedJobTypes = parseTags(readAnswer("cp_pref_job_types"));
+
+      const nextPreferences: JobPreferences = {
+        searchTerms: parseTags(readAnswer(LEGACY_PREFERENCE_KEYS.searchTerms) || stringifyTags(nextProfile.preferredJobTitles)),
+        searchLocations: parseTags(
+          readAnswer("cp_pref_search_locations", LEGACY_PREFERENCE_KEYS.searchLocation) ||
+            stringifyTags(nextProfile.preferredLocations),
+        ),
+        confidenceLevel: readAnswer(LEGACY_PREFERENCE_KEYS.confidenceLevel) || "8",
+        yearsOfExperience: readAnswer(LEGACY_PREFERENCE_KEYS.yearsOfExperience) || nextProfile.yearsOfExperience,
+        workMode: readAnswer("cp_pref_work_mode") || nextProfile.workModePreference || "Remote",
+        jobTypes: parsedJobTypes.length ? parsedJobTypes : ["Full-time"],
+        salaryMin: readAnswer("cp_pref_salary_min"),
+        salaryMax: readAnswer("cp_pref_salary_max", LEGACY_PREFERENCE_KEYS.desiredSalary),
+        preferredCountries: parseTags(readAnswer("cp_pref_preferred_countries") || nextProfile.country || "United States"),
+        excludedCompanies: parseTags(readAnswer("cp_pref_excluded_companies")),
+        excludedKeywords: parseTags(readAnswer("cp_pref_excluded_keywords")),
+      };
+
+      const customRows: ScreeningRow[] = [];
+      const seenRows = new Set<string>();
+      for (const item of answers) {
+        const normalizedKey = toPayloadQuestionKey(String(item?.questionKey || item?.questionLabel || ""));
+        const answer = String(item?.answer || "").trim();
+        if (!normalizedKey || !answer || SYSTEM_KEYS.has(normalizedKey) || seenRows.has(normalizedKey)) continue;
+        seenRows.add(normalizedKey);
+        customRows.push({
+          id: makeId(),
+          questionLabel: friendlyLabel(normalizedKey, String(item?.questionLabel || "")),
+          normalizedKey,
+          answer,
+          answerType: (item?.answerType as ScreeningAnswerType) || inferAnswerType(answer),
+          source: (item?.source as ScreeningSource) || "manual",
+          lastUsed: String(item?.lastUsed || item?.updatedAt || ""),
+        });
+      }
+
+      const nextPending: PendingQuestion[] = [];
+      for (const issue of pending) {
+        const questionLabel = String(issue?.questionLabel || "").trim();
+        const questionKey = toPayloadQuestionKey(String(issue?.questionKey || questionLabel));
+        if (!questionKey || !questionLabel) continue;
+        nextPending.push({
+          questionKey,
+          questionLabel,
+          validationMessage: String(issue?.validationMessage || "").trim(),
+          updatedAt: String(issue?.updatedAt || ""),
+        });
+      }
+
+      const suggestedDrafts: Record<string, string> = {};
+      for (const p of nextPending) {
+        const suggestion = getSuggestedAnswer(p, nextProfile, nextPreferences, customRows);
+        if (suggestion) {
+          suggestedDrafts[p.questionKey] = suggestion;
+        }
+      }
+
+      const timestamps = [
+        String(savedProgress?.savedAt || ""),
+        ...answers.map((item) => String(item?.lastUsed || item?.updatedAt || "")),
+        ...nextPending.map((item) => String(item.updatedAt || "")),
+      ]
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .sort();
+
+      setProfile(nextProfile);
+      setPreferences(nextPreferences);
+      setScreeningRows(customRows.sort((a, b) => a.questionLabel.localeCompare(b.questionLabel)));
+      setPendingQuestions(nextPending);
+      setAnswerDrafts(suggestedDrafts);
+      setWizardStep(
+        typeof savedProgress?.currentStep === "number"
+          ? Math.max(0, Math.min(WIZARD_STEPS.length - 1, Math.floor(savedProgress.currentStep)))
+          : 0,
+      );
+      setDraftSavedAt(String(savedProgress?.savedAt || ""));
+      setLastSyncAt(timestamps[timestamps.length - 1] || "");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load onboarding data");
     } finally {
-      activeExtensionChecksRef.current = Math.max(0, activeExtensionChecksRef.current - 1);
-      setCheckingExtension(activeExtensionChecksRef.current > 0);
+      loadedRef.current = true;
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    let cancelled = false;
-    const loadOnboardingState = async () => {
-      setLoadingScreening(true);
-      try {
-        const [profileRes, answersRes] = await Promise.all([
-          fetch("/api/user/onboarding", { credentials: "include" }),
-          fetch("/api/user/screening/answers?limit=500", { credentials: "include" }),
-        ]);
-        const [profileData, answersData] = await Promise.all([profileRes.json(), answersRes.json()]);
-        if (cancelled) return;
+    void loadData();
+    void checkExtensionStatus({ silent: true });
 
-        const onboardingData = (profileData?.data || null) as OnboardingProfileApi | null;
-        const savedUser = onboardingData?.user;
-        const savedProgress = onboardingData?.progress || null;
+    const extensionTimer = window.setInterval(() => {
+      void checkExtensionStatus({ silent: true });
+    }, 7000);
 
-        const loadedPhone = splitPhone(savedUser?.phone || user?.phone || "");
-        // Pull commonly asked screening answers from saved screening answers (if present) so onboarding stays consistent.
-        const bachelorsKey = toQuestionKey(EDU_BACHELORS_LABEL);
-        const englishKey = toQuestionKey(ENGLISH_PROFICIENCY_LABEL);
-        const onsiteKey = toQuestionKey(ONSITE_COMFORTABLE_LABEL);
-        const commuteKey = toQuestionKey(COMMUTE_COMFORTABLE_LABEL);
-        const apiAnswers = Array.isArray(answersData?.data?.answers)
-          ? (answersData.data.answers as ScreeningAnswerApiItem[])
-          : [];
-        const answerByKey = (key: string) =>
-          apiAnswers.find((item) => toQuestionKey(String(item?.questionKey || item?.questionLabel || "")) === key)?.answer || "";
-
-        const bachelorsAnswerFromApi = answerByKey(bachelorsKey);
-        const englishAnswerFromApi = answerByKey(englishKey);
-        const onsiteAnswerFromApi = answerByKey(onsiteKey);
-        const commuteAnswerFromApi = answerByKey(commuteKey);
-
-        const loadedForm = {
-          name: String(savedUser?.name || user?.name || ""),
-          phone: loadedPhone.number || "",
-          currentCity: String(savedUser?.currentCity || user?.currentCity || ""),
-          addressLine: String(savedUser?.addressLine || user?.addressLine || ""),
-          linkedinUrl: String(savedUser?.linkedinUrl || user?.linkedinUrl || ""),
-          portfolioUrl: String(savedUser?.portfolioUrl || user?.portfolioUrl || ""),
-          bachelorsDegreeCompleted: String(bachelorsAnswerFromApi || "Yes").trim() || "Yes",
-          englishProficiency: String(englishAnswerFromApi || "Professional").trim() || "Professional",
-          comfortableOnsite: String(onsiteAnswerFromApi || "No").trim() || "No",
-          comfortableCommuting: String(commuteAnswerFromApi || "No").trim() || "No",
-        };
-        const loadedCountryCode = loadedPhone.countryCode || "+91";
-
-        setForm(loadedForm);
-        setPhoneCountryCode(loadedCountryCode);
-        setCurrentStep(
-          typeof savedProgress?.currentStep === "number"
-            ? Math.max(0, Math.min(WIZARD_STEPS.length - 1, Math.floor(savedProgress.currentStep)))
-            : 0,
-        );
-        setProfileQuestionIndex(
-          typeof savedProgress?.profileQuestionIndex === "number"
-            ? Math.max(0, Math.min(PROFILE_QUESTIONS.length - 1, Math.floor(savedProgress.profileQuestionIndex)))
-            : 0,
-        );
-        setDraftSavedAt(String(savedProgress?.savedAt || ""));
-
-        const byKey = new Map<string, ScreeningFieldRow>();
-        const prefByKey = new Map<string, string>();
-
-        for (const item of apiAnswers) {
-          const questionLabel = String(item?.questionLabel || "").trim();
-          const sourceKey = String(item?.questionKey || "").trim();
-          const questionKey = toQuestionKey(sourceKey || questionLabel);
-          const answer = String(item?.answer || "").trim();
-          if (!questionKey || !questionLabel || !answer) continue;
-          if (isPreferenceQuestionKey(questionKey)) {
-            prefByKey.set(questionKey, answer);
-            continue;
-          }
-          if (byKey.has(questionKey)) continue;
-          byKey.set(questionKey, {
-            id: makeRowId(),
-            questionKey,
-            questionLabel,
-            answer,
-          });
-        }
-
-        const draftPreferences = savedProgress?.preferences || {};
-        const nextPreferences: ExtensionPreferences = {
-          searchTerms: String(draftPreferences.searchTerms || DEFAULT_SEARCH_TERMS),
-          searchLocation: String(draftPreferences.searchLocation || loadedForm.currentCity || "United States"),
-          yearsOfExperienceAnswer: String(draftPreferences.yearsOfExperienceAnswer || ""),
-          requireVisa: String(draftPreferences.requireVisa || "No"),
-          usCitizenship: String(draftPreferences.usCitizenship || "U.S. Citizen/Permanent Resident"),
-          desiredSalary: String(draftPreferences.desiredSalary || ""),
-          noticePeriodDays: String(draftPreferences.noticePeriodDays || ""),
-          recentEmployer: String(draftPreferences.recentEmployer || ""),
-          confidenceLevel: String(draftPreferences.confidenceLevel || "8"),
-          coverLetter: String(draftPreferences.coverLetter || ""),
-        };
-        for (const field of PREFERENCE_FIELDS) {
-          const saved = prefByKey.get(field.questionKey);
-          if (saved) nextPreferences[field.key] = saved;
-        }
-        setPreferences(nextPreferences);
-
-        for (const row of normalizeDraftScreeningRows(savedProgress?.screeningRows)) {
-          if (!byKey.has(row.questionKey)) byKey.set(row.questionKey, row);
-        }
-
-        const fullPhone = composePhone(loadedForm.phone, loadedCountryCode);
-        for (const defaultRow of buildDefaultScreeningRows({ ...loadedForm, phone: fullPhone }, user?.email)) {
-          if (!byKey.has(defaultRow.questionKey)) byKey.set(defaultRow.questionKey, defaultRow);
-        }
-
-        setScreeningRows(Array.from(byKey.values()));
-      } catch {
-        if (!cancelled) {
-          const fullPhone = composePhone(form.phone, phoneCountryCode);
-          setScreeningRows(buildDefaultScreeningRows({ ...form, phone: fullPhone }, user?.email));
-        }
-      } finally {
-        if (!cancelled) {
-          onboardingHydratedRef.current = true;
-          setLoadingScreening(false);
-        }
-      }
-    };
-
-    loadOnboardingState();
     return () => {
-      cancelled = true;
+      window.clearInterval(extensionTimer);
     };
-    // Keep one-time initial load based on current state.
+    // Initial load only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const buildDraftPayload = () => {
-    const normalizedRows = screeningRows
+    const screeningRowsForDraft = screeningRows
       .map((row) => ({
-        questionKey: toQuestionKey(row.questionKey || row.questionLabel),
+        questionKey: toPayloadQuestionKey(row.normalizedKey || row.questionLabel),
         questionLabel: String(row.questionLabel || "").trim(),
         answer: compactAnswer(row.answer),
       }))
@@ -832,51 +799,58 @@ export default function Onboarding() {
       .slice(0, 250);
 
     return {
-      ...form,
-      phone: composePhone(form.phone, phoneCountryCode),
-      currentStep,
-      profileQuestionIndex,
+      name: profile.fullName,
+      phone: profile.phone,
+      currentCity: combineCityState(profile.city, profile.state),
+      addressLine: profile.addressLine,
+      linkedinUrl: profile.linkedinUrl,
+      portfolioUrl: profile.portfolioUrl,
+      currentStep: wizardStep,
+      profileQuestionIndex: 0,
       preferences: {
-        ...preferences,
+        searchTerms: stringifyTags(preferences.searchTerms),
+        searchLocation: stringifyTags(preferences.searchLocations),
+        yearsOfExperienceAnswer: preferences.yearsOfExperience,
+        requireVisa: profile.visaSponsorship,
+        usCitizenship: profile.workAuthorizationUS,
+        desiredSalary: preferences.salaryMax,
+        confidenceLevel: preferences.confidenceLevel,
       },
-      screeningRows: normalizedRows,
+      screeningRows: screeningRowsForDraft,
     };
   };
 
-  const saveOnboardingDraft = async () => {
+  const saveDraft = async () => {
     const res = await fetch("/api/user/onboarding", {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildDraftPayload()),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) {
       throw new Error(data?.message || "Failed to save onboarding draft");
     }
-    return data;
   };
 
   useEffect(() => {
-    if (!onboardingHydratedRef.current) return;
-    if (isSaving) return;
+    if (!loadedRef.current || loading || saving) return;
 
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
     }
 
     setDraftStatus("saving");
     autosaveTimerRef.current = window.setTimeout(() => {
-      void saveOnboardingDraft()
+      void saveDraft()
         .then(() => {
           setDraftStatus("saved");
           setDraftSavedAt(new Date().toISOString());
         })
         .catch((draftError) => {
           setDraftStatus("error");
-          setError((prev) =>
-            prev || (draftError instanceof Error ? draftError.message : "Failed to save onboarding draft"),
-          );
+          setError((prev) => prev || (draftError instanceof Error ? draftError.message : "Draft autosave failed"));
         });
     }, 900);
 
@@ -886,123 +860,264 @@ export default function Onboarding() {
         autosaveTimerRef.current = null;
       }
     };
-    // Debounced autosave for all onboarding inputs and progress.
-  }, [form, phoneCountryCode, currentStep, profileQuestionIndex, preferences, screeningRows, isSaving]);
+  }, [profile, preferences, screeningRows, wizardStep, loading, saving]);
 
   useEffect(() => {
-    void checkExtensionStatus({ silent: true });
-    const id = window.setInterval(() => {
-      void checkExtensionStatus({ silent: true });
-    }, 4000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onBridgeReady = (event: MessageEvent) => {
-      if (event.source !== window) return;
-      const data = event.data as any;
-      if (!data || data.type !== "CP_WEB_BRIDGE_READY") return;
-      const runtimeId = String(data.runtimeId || "");
-      setExtensionDebug((prev) => ({
+    if (!profile.fullName.trim()) return;
+    setProfile((prev) => {
+      const parsed = splitName(prev.fullName);
+      if (prev.firstName === parsed.firstName && prev.lastName === parsed.lastName) return prev;
+      return {
         ...prev,
-        bridgeReadySeenAt: new Date().toISOString(),
-        bridgeRuntimeId: runtimeId || prev.bridgeRuntimeId,
-      }));
-      appendDebugEvent(`Bridge ready detected runtimeId=${runtimeId}`);
+        firstName: prev.firstName || parsed.firstName,
+        lastName: prev.lastName || parsed.lastName,
+      };
+    });
+  }, [profile.fullName]);
+
+  useEffect(() => {
+    if (profile.preferredJobTitles.length && !preferences.searchTerms.length) {
+      setPreferences((prev) => ({ ...prev, searchTerms: [...profile.preferredJobTitles] }));
+    }
+    if (profile.preferredLocations.length && !preferences.searchLocations.length) {
+      setPreferences((prev) => ({ ...prev, searchLocations: [...profile.preferredLocations] }));
+    }
+  }, [profile.preferredJobTitles, profile.preferredLocations, preferences.searchTerms.length, preferences.searchLocations.length]);
+
+  const completionChecks = useMemo(
+    () => [
+      { label: "Full name", done: profile.fullName.trim().length >= 2 },
+      { label: "Phone", done: extractPhoneNumber(profile.phone).length >= 6 },
+      { label: "City", done: profile.city.trim().length >= 2 },
+      { label: "Country", done: profile.country.trim().length >= 2 },
+      { label: "LinkedIn URL", done: isValidUrl(profile.linkedinUrl) },
+      { label: "Portfolio URL", done: isValidUrl(profile.portfolioUrl) },
+      { label: "Work authorization", done: profile.workAuthorizationUS.trim().length > 0 },
+      { label: "Visa sponsorship", done: profile.visaSponsorship.trim().length > 0 },
+      { label: "Experience", done: profile.yearsOfExperience.trim().length > 0 },
+      { label: "Education", done: profile.educationLevel.trim().length > 0 },
+      { label: "Search terms", done: preferences.searchTerms.length > 0 },
+      { label: "Search locations", done: preferences.searchLocations.length > 0 },
+      { label: "Work mode", done: preferences.workMode.trim().length > 0 },
+    ],
+    [profile, preferences],
+  );
+
+  const completionPercent = useMemo(() => {
+    const doneCount = completionChecks.filter((item) => item.done).length;
+    return Math.round((doneCount / completionChecks.length) * 100);
+  }, [completionChecks]);
+
+  const missingItems = useMemo(
+    () => completionChecks.filter((item) => !item.done).map((item) => item.label),
+    [completionChecks],
+  );
+
+  const stepComplete = useMemo(() => {
+    const hasBasic =
+      profile.fullName.trim().length >= 2 &&
+      profile.email.trim().length > 0 &&
+      extractPhoneNumber(profile.phone).length >= 6 &&
+      profile.city.trim().length >= 2;
+
+    const hasEligibility =
+      profile.workAuthorizationUS.trim().length > 0 &&
+      profile.visaSponsorship.trim().length > 0;
+
+    const hasExperience =
+      profile.yearsOfExperience.trim().length > 0 &&
+      profile.educationLevel.trim().length > 0 &&
+      profile.englishProficiency.trim().length > 0;
+
+    const hasPreferences =
+      preferences.searchTerms.length > 0 &&
+      preferences.searchLocations.length > 0 &&
+      preferences.workMode.trim().length > 0;
+
+    const hasSavedAnswers = screeningRows.length > 0 || pendingQuestions.length === 0;
+
+    const hasResumeLinkedin =
+      isValidUrl(profile.linkedinUrl) &&
+      (Boolean(user?.resumeFileName) || Boolean(profile.resumeUrl.trim()));
+
+    return [hasBasic, hasEligibility, hasExperience, hasPreferences, hasSavedAnswers, hasResumeLinkedin];
+  }, [profile, preferences, screeningRows.length, pendingQuestions.length, user?.resumeFileName]);
+
+  const summaryStatus = useMemo(() => {
+    return {
+      resumeUploaded: Boolean(user?.resumeFileName) || Boolean(profile.resumeUrl.trim()),
+      linkedinConnected: isValidUrl(profile.linkedinUrl),
+      extensionConnected: extensionStatus.installed,
+      pendingCount: pendingQuestions.length,
     };
-    window.addEventListener("message", onBridgeReady);
-    return () => window.removeEventListener("message", onBridgeReady);
-  }, []);
+  }, [user?.resumeFileName, profile.resumeUrl, profile.linkedinUrl, extensionStatus.installed, pendingQuestions.length]);
 
-  const buildPreferenceRows = () =>
-    PREFERENCE_FIELDS.map((field) => ({
-      id: makeRowId(),
-      questionKey: field.questionKey,
-      questionLabel: field.questionLabel,
-      answer: compactAnswer(preferences[field.key]),
-    })).filter((row) => Boolean(row.answer));
+  const validateBeforeSave = () => {
+    if (profile.fullName.trim().length < 2) return "Full name is required.";
+    if (extractPhoneNumber(profile.phone).length < 6) return "Enter a valid phone number.";
+    if (profile.city.trim().length < 2) return "City is required.";
+    if (profile.addressLine.trim().length < 5) return "Address is required.";
+    if (!isValidUrl(profile.linkedinUrl)) return "Enter a valid LinkedIn URL.";
+    if (!isValidUrl(profile.portfolioUrl)) return "Enter a valid Portfolio URL.";
+    if (!preferences.searchTerms.length) return "Add at least one search term.";
+    if (!preferences.searchLocations.length) return "Add at least one search location.";
+    if (!profile.workAuthorizationUS.trim()) return "U.S. work authorization is required.";
+    if (!profile.visaSponsorship.trim()) return "Visa sponsorship preference is required.";
+    return "";
+  };
 
-  const buildScreeningPayloads = () => {
-    const seen = new Set<string>();
-    const fullPhone = composePhone(form.phone, phoneCountryCode);
-    const defaultRows = buildDefaultScreeningRows({ ...form, phone: fullPhone }, user?.email);
-    const rows = [...defaultRows, ...screeningRows, ...buildPreferenceRows()];
-    return rows
-      .map((row) => {
-        const questionLabel = String(row.questionLabel || "").trim();
-        const answer = compactAnswer(row.answer);
-        const questionKey = toQuestionKey(row.questionKey || questionLabel);
-        if (!questionLabel || !answer || !questionKey) return null;
-        if (seen.has(questionKey)) return null;
-        seen.add(questionKey);
-        return { questionKey, questionLabel, answer };
-      })
-      .filter((item): item is { questionKey: string; questionLabel: string; answer: string } => Boolean(item));
+  const buildAllScreeningPayloads = () => {
+    const payloads: ScreeningPayload[] = [];
+
+    const push = (
+      questionKey: string,
+      questionLabel: string,
+      answer: string,
+      answerType: ScreeningAnswerType = "text",
+      source: ScreeningSource = "system",
+      lastUsed?: string,
+    ) => {
+      const key = toPayloadQuestionKey(questionKey || questionLabel);
+      const value = compactAnswer(answer);
+      if (!key || !value) return;
+      payloads.push({
+        questionKey: key,
+        questionLabel: String(questionLabel || "").trim() || friendlyLabel(key, ""),
+        answer: value,
+        answerType,
+        source,
+        ...(lastUsed ? { lastUsed } : {}),
+      });
+    };
+
+    for (const field of PROFILE_KEY_LABELS) {
+      const raw = profile[field.key];
+      if (Array.isArray(raw)) {
+        push(field.label, field.label, stringifyTags(raw), field.answerType || "multiselect");
+      } else {
+        push(field.label, field.label, String(raw || ""), field.answerType || inferAnswerType(String(raw || "")));
+      }
+    }
+
+    push("preferred_job_titles", "Preferred Job Titles", stringifyTags(profile.preferredJobTitles), "multiselect");
+    push("preferred_locations", "Preferred Locations", stringifyTags(profile.preferredLocations), "multiselect");
+
+    for (const pref of PREFERENCE_KEY_LABELS) {
+      const value = preferences[pref.key];
+      if (Array.isArray(value)) {
+        push(pref.questionKey, pref.label, stringifyTags(value), pref.answerType || "multiselect");
+      } else {
+        push(pref.questionKey, pref.label, String(value || ""), pref.answerType || inferAnswerType(String(value || "")));
+      }
+    }
+
+    push(LEGACY_PREFERENCE_KEYS.searchTerms, "AutoApply CV Preference: Search terms", stringifyTags(preferences.searchTerms), "multiselect");
+    push(
+      LEGACY_PREFERENCE_KEYS.searchLocation,
+      "AutoApply CV Preference: Search location",
+      preferences.searchLocations[0] || "",
+      "text",
+    );
+    push(
+      LEGACY_PREFERENCE_KEYS.yearsOfExperience,
+      "AutoApply CV Preference: Years of experience",
+      preferences.yearsOfExperience || profile.yearsOfExperience,
+      "number",
+    );
+    push(
+      LEGACY_PREFERENCE_KEYS.requireVisa,
+      "AutoApply CV Preference: Need visa sponsorship",
+      profile.visaSponsorship,
+      "boolean",
+    );
+    push(
+      LEGACY_PREFERENCE_KEYS.usCitizenship,
+      "AutoApply CV Preference: US work authorization",
+      profile.workAuthorizationUS,
+      "choice",
+    );
+    push(
+      LEGACY_PREFERENCE_KEYS.desiredSalary,
+      "AutoApply CV Preference: Desired salary",
+      preferences.salaryMax,
+      "number",
+    );
+    push(
+      LEGACY_PREFERENCE_KEYS.confidenceLevel,
+      "AutoApply CV Preference: Confidence level",
+      preferences.confidenceLevel,
+      "number",
+    );
+
+    for (const row of screeningRows) {
+      push(
+        row.normalizedKey || row.questionLabel,
+        row.questionLabel,
+        row.answer,
+        row.answerType || inferAnswerType(row.answer),
+        row.source || "manual",
+        row.lastUsed || undefined,
+      );
+    }
+
+    const deduped = new Map<string, ScreeningPayload>();
+    for (const item of payloads) {
+      if (!deduped.has(item.questionKey)) {
+        deduped.set(item.questionKey, item);
+      }
+    }
+
+    return Array.from(deduped.values());
   };
 
   const buildExtensionSettingsPayload = (screeningAnswers: Record<string, string>) => {
-    const fullName = String(form.name || "").trim();
-    const nameParts = splitName(fullName);
     return {
-      currentCity: String(form.currentCity || "").trim(),
-      searchLocation: String(preferences.searchLocation || form.currentCity || "").trim(),
-      searchTerms: parseListInput(preferences.searchTerms),
-      contactEmail: String(user?.email || "").trim(),
-      phoneNumber: String(form.phone || "").replace(/[^\d]/g, ""),
-      phoneCountryCode: String(phoneCountryCode || "").trim(),
+      currentCity: combineCityState(profile.city, profile.state),
+      searchLocation: preferences.searchLocations[0] || combineCityState(profile.city, profile.state),
+      searchTerms: preferences.searchTerms,
+      contactEmail: profile.email,
+      phoneNumber: extractPhoneNumber(profile.phone),
+      phoneCountryCode: extractPhoneCountryCode(profile.phone),
       marketingConsent: "No",
-      requireVisa: String(preferences.requireVisa || "No").trim(),
-      usCitizenship: String(preferences.usCitizenship || "").trim(),
-      yearsOfExperienceAnswer: String(preferences.yearsOfExperienceAnswer || "").trim(),
-      desiredSalary: String(preferences.desiredSalary || "").trim(),
-      currentCtc: "",
-      noticePeriodDays: String(preferences.noticePeriodDays || "").trim(),
-      recentEmployer: String(preferences.recentEmployer || "").trim(),
-      confidenceLevel: String(preferences.confidenceLevel || "").trim(),
-      linkedinUrl: String(form.linkedinUrl || "").trim(),
-      websiteUrl: String(form.portfolioUrl || "").trim(),
-      firstName: nameParts.firstName,
-      middleName: nameParts.middleName,
-      lastName: nameParts.lastName,
-      fullName,
-      streetAddress: String(form.addressLine || "").trim(),
-      stateRegion: "",
-      postalCode: "",
-      country: "",
-      gender: "No preference",
-      ethnicity: "No preference",
-      veteranStatus: "No",
-      disabilityStatus: "No",
-      coverLetter: compactAnswer(preferences.coverLetter, 1500),
+      requireVisa: profile.visaSponsorship || "No",
+      usCitizenship: profile.workAuthorizationUS || "",
+      yearsOfExperienceAnswer: preferences.yearsOfExperience || profile.yearsOfExperience,
+      desiredSalary: preferences.salaryMax || "",
+      noticePeriodDays: "",
+      confidenceLevel: preferences.confidenceLevel,
+      linkedinUrl: profile.linkedinUrl,
+      websiteUrl: profile.portfolioUrl,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      fullName: profile.fullName,
+      streetAddress: profile.addressLine,
+      stateRegion: profile.state,
+      country: profile.country,
+      coverLetter: "",
       easyApplyOnly: true,
       debugMode: false,
       dryRun: false,
       autoSubmit: true,
-      liveModeAcknowledged: false,
       autoResumeOnAnswer: true,
       maxApplicationsPerRun: 200,
       maxSkipsPerRun: 50,
-      switchNumber: 30,
-      blacklistedCompanies: [],
-      badWords: [],
       screeningAnswers,
     };
   };
 
   const syncExtensionSettings = async (settings: Record<string, unknown>) => {
-    if (typeof window === "undefined") return { ok: false, skipped: true as const, error: "No browser window" };
-    if (!extensionStatus.installed) {
-      return { ok: false, skipped: true as const, error: "Extension not detected. Install and check extension first." };
-    }
+    if (typeof window === "undefined") return { ok: false, skipped: true as const };
+    if (!extensionStatus.installed) return { ok: false, skipped: true as const };
+
     return new Promise<{ ok: boolean; skipped?: false; error?: string }>((resolve) => {
       const requestId = `onboarding-sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       let done = false;
+
       const timer = window.setTimeout(() => {
         if (done) return;
         done = true;
         window.removeEventListener("message", onMessage);
-        resolve({ ok: false, error: "Extension did not acknowledge settings sync. Reload extension and retry." });
+        resolve({ ok: false, error: "Extension did not acknowledge settings sync" });
       }, EXT_BRIDGE_ACK_TIMEOUT_MS);
 
       const onMessage = (event: MessageEvent) => {
@@ -1027,688 +1142,1167 @@ export default function Onboarding() {
     });
   };
 
-  const saveScreeningAnswers = async () => {
-    const payloads = buildScreeningPayloads();
+  const persistAll = async () => {
+    setSaving(true);
+    setError("");
+    setMessage("");
 
-    for (const payload of payloads) {
+    try {
+      const validationError = validateBeforeSave();
+      if (validationError) throw new Error(validationError);
+
+      const onboardingPayload = {
+        name: profile.fullName,
+        phone: profile.phone,
+        currentCity: combineCityState(profile.city, profile.state),
+        addressLine: profile.addressLine,
+        linkedinUrl: profile.linkedinUrl,
+        portfolioUrl: profile.portfolioUrl,
+      };
+
+      const onboardingRes = await fetch("/api/user/onboarding", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(onboardingPayload),
+      });
+      const onboardingJson = await onboardingRes.json().catch(() => null);
+      if (!onboardingRes.ok || !onboardingJson?.success) {
+        throw new Error(onboardingJson?.message || "Failed to save profile");
+      }
+
+      const screeningPayloads = buildAllScreeningPayloads();
+      for (const payload of screeningPayloads) {
+        const res = await fetch("/api/user/screening/answers", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.message || `Failed to save answer: ${payload.questionLabel}`);
+        }
+      }
+
+      await saveDraft();
+
+      const screeningAnswerMap: Record<string, string> = {};
+      for (const item of screeningPayloads) {
+        screeningAnswerMap[item.questionKey] = item.answer;
+      }
+
+      const syncResult = await syncExtensionSettings(buildExtensionSettingsPayload(screeningAnswerMap));
+      const syncSkipped = "skipped" in syncResult && Boolean(syncResult.skipped);
+      if (!syncResult.ok && !syncSkipped) {
+        throw new Error(("error" in syncResult && syncResult.error) || "Failed to sync extension settings");
+      }
+
+      await refreshUser();
+      setMessage(
+        syncSkipped
+          ? "Profile saved. Install/check extension to sync auto-fill settings."
+          : "Profile, preferences, and screening answer library saved.",
+      );
+      setLastSyncAt(new Date().toISOString());
+      navigate("/dashboard");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save onboarding");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveAnswer = async (
+    questionKey: string,
+    questionLabel: string,
+    answer: string,
+    answerType: ScreeningAnswerType = inferAnswerType(answer),
+    source: ScreeningSource = "manual",
+  ) => {
+    const normalizedKey = toPayloadQuestionKey(questionKey || questionLabel);
+    const cleanAnswer = compactAnswer(answer);
+    const cleanLabel = String(questionLabel || "").trim() || friendlyLabel(normalizedKey, "");
+    if (!normalizedKey || !cleanAnswer || !cleanLabel) return;
+
+    setSavingAnswerKey(normalizedKey);
+    setError("");
+
+    try {
+      const payload: ScreeningPayload = {
+        questionKey: normalizedKey,
+        questionLabel: cleanLabel,
+        answer: cleanAnswer,
+        answerType,
+        source,
+        lastUsed: new Date().toISOString(),
+      };
+
       const res = await fetch("/api/user/screening/answers", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok || !data?.success) {
-        throw new Error(data?.message || `Failed to save field: ${payload.questionLabel}`);
+        throw new Error(data?.message || "Failed to save answer");
       }
-    }
 
-    const screeningAnswers: Record<string, string> = {};
-    for (const payload of payloads) screeningAnswers[payload.questionKey] = payload.answer;
-    const settingsPayload = buildExtensionSettingsPayload(screeningAnswers);
-    const sync = await syncExtensionSettings(settingsPayload);
-    if (!sync.ok && !sync.skipped) {
-      throw new Error(sync.error || "Failed to sync extension settings");
-    }
-    if (!sync.ok && sync.skipped) {
-      return "Onboarding saved. Install/check extension to sync auto-fill settings.";
-    }
-    return "";
-  };
+      setScreeningRows((prev) => {
+        const existingIdx = prev.findIndex((item) => toPayloadQuestionKey(item.normalizedKey) === normalizedKey);
+        if (existingIdx === -1) {
+          return [
+            ...prev,
+            {
+              id: makeId(),
+              questionLabel: cleanLabel,
+              normalizedKey,
+              answer: cleanAnswer,
+              answerType,
+              source,
+              lastUsed: new Date().toISOString(),
+            },
+          ].sort((a, b) => a.questionLabel.localeCompare(b.questionLabel));
+        }
 
-  const onInstallExtension = async () => {
-    if (typeof window === "undefined") return;
-    if (!canDownloadExtensionZip) {
-      setError("Extension install link is managed by admin. Please contact support.");
-      return;
-    }
-    try {
-      setError("");
-      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, { method: "GET", cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = "AutoApplyCVLinkedInExtension.zip";
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch {
-      const anchor = document.createElement("a");
-      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
-      anchor.download = "AutoApplyCVLinkedInExtension.zip";
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-    }
-    setMessage(
-      "ZIP downloaded. Unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, and select the folder that contains manifest.json.",
-    );
-    window.open("chrome://extensions/", "_blank");
-  };
-
-  const copyInstallSteps = async () => {
-    if (typeof window === "undefined" || !window.navigator?.clipboard) {
-      setError("Clipboard is not available in this browser.");
-      return;
-    }
-    try {
-      await window.navigator.clipboard.writeText(
-        [
-          "AutoApply CV Extension Setup (Load Unpacked)",
-          "1) Download and unzip AutoApplyCVLinkedInExtension.zip.",
-          "2) Open chrome://extensions/",
-          "3) Turn ON Developer mode.",
-          "4) Click Load unpacked.",
-          "5) Select the unzipped folder that contains manifest.json.",
-          "6) Return to onboarding and click Check Extension.",
-        ].join("\n"),
-      );
-      setMessage("Install steps copied.");
-    } catch (copyError) {
-      setError(copyError instanceof Error ? copyError.message : "Failed to copy install steps");
-    }
-  };
-
-  const copyExtensionDebug = async () => {
-    if (typeof window === "undefined" || !window.navigator?.clipboard) {
-      setError("Clipboard is not available in this browser.");
-      return;
-    }
-    try {
-      const payload = { pageUrl: window.location.href, extensionStatus, extensionDebug };
-      await window.navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      setMessage("Extension debug copied to clipboard.");
-      appendDebugEvent("Copied extension debug payload to clipboard.");
-    } catch (copyError) {
-      const msg = String(copyError instanceof Error ? copyError.message : copyError || "Failed to copy debug");
-      setError(msg);
-      appendDebugEvent(`Failed to copy debug: ${msg}`);
-    }
-  };
-
-  const onSave = async () => {
-    setError("");
-    setMessage("");
-
-    if (!profileComplete) {
-      setCurrentStep(1);
-      setProfileQuestionIndex(firstInvalidProfileIndex >= 0 ? firstInvalidProfileIndex : 0);
-      setError("Please answer all profile questions correctly before saving.");
-      return;
-    }
-
-    if (!preferencesComplete) {
-      setCurrentStep(3);
-      setError(preferenceError || "Please complete required auto-fill preferences.");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const payload = {
-        ...form,
-        phone: composePhone(form.phone, phoneCountryCode),
-      };
-
-      const res = await fetch("/api/user/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        const next = [...prev];
+        next[existingIdx] = {
+          ...next[existingIdx],
+          questionLabel: cleanLabel,
+          normalizedKey,
+          answer: cleanAnswer,
+          answerType,
+          source,
+          lastUsed: new Date().toISOString(),
+        };
+        return next;
       });
-      const data = await res.json();
-      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to save onboarding");
 
-      const syncNote = await saveScreeningAnswers();
-      await refreshUser();
-      setMessage(syncNote || "Onboarding and extension fields saved");
-      navigate("/dashboard");
+      setPendingQuestions((prev) => prev.filter((item) => item.questionKey !== normalizedKey));
+      setAnswerDrafts((prev) => ({ ...prev, [normalizedKey]: cleanAnswer }));
+      setMessage(`Saved answer for: ${cleanLabel}`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to save onboarding");
+      setError(saveError instanceof Error ? saveError.message : "Failed to save answer");
     } finally {
-      setIsSaving(false);
+      setSavingAnswerKey("");
     }
   };
 
-  const goBack = () => {
-    setError("");
-    setMessage("");
-    if (currentStep === 1 && profileQuestionIndex > 0) {
-      setProfileQuestionIndex((prev) => prev - 1);
-      return;
-    }
-    setCurrentStep((prev) => Math.max(prev - 1, 0));
-  };
+  const onboardingHeaderDescription = "Ask once, save forever, auto-fill everywhere.";
 
-  const goNext = () => {
-    setError("");
-    setMessage("");
-
-    if (currentStep === 0) {
-      setCurrentStep(1);
-      return;
-    }
-
-    if (currentStep === 1) {
-      const active = PROFILE_QUESTIONS[profileQuestionIndex];
-      const issue = validateProfileQuestion(active.key);
-      if (issue) {
-        setError(issue);
-        return;
-      }
-      if (profileQuestionIndex < PROFILE_QUESTIONS.length - 1) {
-        setProfileQuestionIndex((prev) => prev + 1);
-        return;
-      }
-      setCurrentStep(2);
-      return;
-    }
-
-    if (currentStep === 2) {
-      setCurrentStep(3);
-      return;
-    }
-
-    if (currentStep === 3) {
-      if (!preferencesComplete) {
-        setError(preferenceError || "Please complete required auto-fill preferences.");
-        return;
-      }
-      setCurrentStep(4);
-    }
-  };
-
-  const canGoBack = currentStep > 0 || profileQuestionIndex > 0;
-
-  const activeProfileQuestion = PROFILE_QUESTIONS[profileQuestionIndex];
-  const activeProfileError = validateProfileQuestion(activeProfileQuestion.key);
-
-  const profileProgress = Math.round(((profileQuestionIndex + 1) / PROFILE_QUESTIONS.length) * 100);
-  const stepProgress = Math.round(((currentStep + 1) / WIZARD_STEPS.length) * 100);
+  if (loading) {
+    return (
+      <div className="min-h-[420px] flex items-center justify-center">
+        <div className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading onboarding profile...
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Complete Your Onboarding</h1>
-        <p className="text-gray-600 mt-1">Step-by-step setup with one question at a time.</p>
-      </div>
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Onboarding Setup</h1>
+          <p className="text-gray-600 mt-1">{onboardingHeaderDescription}</p>
+        </div>
 
-      <div className="bg-white border-2 border-gray-200 rounded-2xl p-4 space-y-3">
-        <div className="flex items-center justify-between text-xs text-gray-600">
-          <span>Step {currentStep + 1} of {WIZARD_STEPS.length}</span>
-          <span>{WIZARD_STEPS[currentStep]}</span>
-        </div>
-        <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-indigo-600" style={{ width: `${stepProgress}%` }} />
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-          {WIZARD_STEPS.map((label, idx) => (
-            <div
-              key={label}
-              className={`rounded-lg border px-2 py-1 text-center ${
-                idx === currentStep
-                  ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                  : idx < currentStep
-                  ? "border-green-200 bg-green-50 text-green-700"
-                  : "border-gray-200 bg-gray-50 text-gray-500"
-              }`}
-            >
-              {label}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
-      {message && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{message}</div>}
-      {draftStatus !== "idle" ? (
-        <div className="text-xs text-gray-500">
-          {draftStatus === "saving" ? "Saving draft..." : null}
-          {draftStatus === "saved"
-            ? `Draft saved${draftSavedAt ? ` at ${new Date(draftSavedAt).toLocaleTimeString()}` : ""}`
-            : null}
-          {draftStatus === "error" ? "Draft autosave failed. Keep this tab open and retry." : null}
-        </div>
-      ) : null}
-
-      {currentStep === 0 ? (
-        <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Resume Setup</h2>
-          <p className="text-sm text-gray-700">
-            Please upload your CV directly in LinkedIn Easy Apply profile. AutoApply CV copilot will automatically use
-            the latest resume attached on LinkedIn while applying.
-          </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void checkExtensionStatus()}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            {checkingExtension ? "Checking Extension..." : "Check Extension"}
+          </button>
           <a
-            href="https://www.linkedin.com/jobs/"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50"
+            href="/dashboard/resume"
+            className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
           >
-            Open LinkedIn Jobs
+            <UploadCloud className="h-4 w-4" />
+            Resume
           </a>
-          <p className="text-xs text-gray-500">
-            After uploading resume on LinkedIn, continue to next step.
-          </p>
-        </div>
-      ) : null}
-
-      {currentStep === 1 ? (
-        <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>Question {profileQuestionIndex + 1} of {PROFILE_QUESTIONS.length}</span>
-            <span>{profileProgress}%</span>
-          </div>
-          <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-indigo-600" style={{ width: `${profileProgress}%` }} />
-          </div>
-
-          <div className="rounded-xl border border-gray-200 p-4 space-y-3">
-            <h3 className="text-lg font-semibold text-gray-900">{activeProfileQuestion.label}</h3>
-            <p className="text-sm text-gray-600">{activeProfileQuestion.description}</p>
-
-            {activeProfileQuestion.type === "select" ? (
-              <select
-                value={String(getQuestionValue(activeProfileQuestion.key))}
-                onChange={(e) => setQuestionValue(activeProfileQuestion.key, e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300"
-              >
-                {(activeProfileQuestion.options || []).map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type={activeProfileQuestion.inputType || "text"}
-                value={String(getQuestionValue(activeProfileQuestion.key))}
-                onChange={(e) => setQuestionValue(activeProfileQuestion.key, e.target.value)}
-                placeholder={activeProfileQuestion.placeholder || ""}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300"
-              />
-            )}
-
-            {activeProfileError ? <p className="text-xs text-red-600">{activeProfileError}</p> : null}
-          </div>
-        </div>
-      ) : null}
-
-      {currentStep === 2 ? (
-        <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Install AutoApply CV Chrome Extension</h2>
-          <p className="text-sm text-gray-600">Download, load, and check detection.</p>
-
-          <div
-            className={`rounded-lg border px-3 py-2 text-sm ${
-              extensionStatus.installed
-                ? "bg-green-50 border-green-200 text-green-800"
-                : "bg-amber-50 border-amber-200 text-amber-800"
-            }`}
+          <button
+            type="button"
+            onClick={() => void persistAll()}
+            disabled={saving}
+            className="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2"
           >
-            {extensionStatus.installed
-              ? "Extension detected on dashboard."
-              : "Extension not detected. Install/reload it, then click Check Extension."}
-          </div>
-          <p className="text-xs text-gray-500">
-            If you just installed or removed the extension, refresh this page once before checking again.
-          </p>
+            <Save className="h-4 w-4" />
+            {saving ? "Saving..." : "Save & Finish"}
+          </button>
+        </div>
+      </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void checkExtensionStatus()}
-              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50"
-            >
-              {checkingExtension ? "Checking..." : "Check Extension"}
-            </button>
-            {showExtensionDebug ? (
-              <button
-                type="button"
-                onClick={() => void copyExtensionDebug()}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50"
-              >
-                Copy Debug
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={onInstallExtension}
-              className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
-            >
-              Download Extension ZIP
-            </button>
-            {extensionStoreUrl ? (
-              <a
-                href={extensionStoreUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50"
-              >
-                Open Chrome Web Store
-              </a>
-            ) : null}
-            {canDownloadExtensionZip ? (
-              <a
-                href={extensionZipUrl}
-                download
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50"
-              >
-                Download ZIP Only
-              </a>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void copyInstallSteps()}
-              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50"
-            >
-              Copy Setup Steps
-            </button>
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      {message ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 flex items-start gap-2">
+          <CheckCircle2 className="h-4 w-4 mt-0.5" />
+          <span>{message}</span>
+        </div>
+      ) : null}
+
+      <div className="grid lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-3 rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Profile Completion</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">{completionPercent}%</p>
+            </div>
+            <div className="rounded-xl bg-indigo-50 border border-indigo-200 px-3 py-2 text-sm text-indigo-700 font-semibold">
+              {missingItems.length ? `${missingItems.length} missing` : "All key fields filled"}
+            </div>
           </div>
 
-          <ol className="text-sm text-gray-700 list-decimal pl-5 space-y-1">
-            {canDownloadExtensionZip ? (
-              <li>Download and unzip `AutoApplyCVLinkedInExtension.zip`.</li>
-            ) : (
-              <li>Open the Chrome Web Store listing and install AutoApply CV extension.</li>
-            )}
-            <li>Open `chrome://extensions/` and ensure the extension is enabled.</li>
-            {canDownloadExtensionZip ? (
-              <li>Click Load unpacked and select the unzipped folder that contains `manifest.json`.</li>
-            ) : null}
-            <li>Refresh this onboarding page and click Check Extension.</li>
-          </ol>
+          <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500" style={{ width: `${completionPercent}%` }} />
+          </div>
 
-          {showExtensionDebug ? (
-            <details className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-gray-800">Detection Debug Details</summary>
-              <div className="mt-2 text-xs text-gray-700 space-y-1">
-                <div>Last check: {extensionDebug.lastCheckAt || "N/A"}</div>
-                <div>Last request id: {extensionDebug.lastRequestId || "N/A"}</div>
-                <div>Posted origin: {extensionDebug.postedOrigin || "N/A"}</div>
-                <div>DOM bridge marker: {extensionDebug.domBridgeReady || "No"}</div>
-                <div>DOM bridge version: {extensionDebug.domBridgeVersion || "N/A"}</div>
-                <div>DOM bridge runtime id: {extensionDebug.domBridgeRuntimeId || "N/A"}</div>
-                <div>Bridge ready seen: {extensionDebug.bridgeReadySeenAt || "No"}</div>
-                <div>Bridge runtime id: {extensionDebug.bridgeRuntimeId || "N/A"}</div>
-                <div>PONG received: {extensionDebug.pongReceived ? "Yes" : "No"}</div>
-                <div>Timed out: {extensionDebug.timedOut ? "Yes" : "No"}</div>
-                <div>Last error: {extensionDebug.lastError || "None"}</div>
+          {missingItems.length ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-semibold text-amber-900">Missing items</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {missingItems.map((item) => (
+                  <span key={item} className="px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-amber-200 text-amber-800">
+                    {item}
+                  </span>
+                ))}
               </div>
-              {extensionDebug.lastResponseJson ? (
-                <pre className="mt-2 max-h-52 overflow-auto rounded bg-white border border-gray-200 p-2 text-[11px] text-gray-700 whitespace-pre-wrap">
-                  {extensionDebug.lastResponseJson}
-                </pre>
-              ) : null}
-              {extensionDebug.events.length ? (
-                <div className="mt-2 max-h-48 overflow-auto rounded bg-white border border-gray-200 p-2 text-[11px] text-gray-700 space-y-1">
-                  {extensionDebug.events.map((line) => (
-                    <div key={line}>{line}</div>
-                  ))}
-                </div>
-              ) : null}
-            </details>
+            </div>
           ) : null}
         </div>
+
+        <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-5">
+          <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Summary</p>
+          <div className="mt-3 space-y-2 text-sm">
+            <SummaryLine label="Profile" value={`${completionPercent}% complete`} ok={completionPercent >= 80} />
+            <SummaryLine
+              label="Resume"
+              value={summaryStatus.resumeUploaded ? "Uploaded" : "Not uploaded"}
+              ok={summaryStatus.resumeUploaded}
+            />
+            <SummaryLine
+              label="LinkedIn"
+              value={summaryStatus.linkedinConnected ? "Connected" : "Missing profile URL"}
+              ok={summaryStatus.linkedinConnected}
+            />
+            <SummaryLine
+              label="Extension"
+              value={summaryStatus.extensionConnected ? "Connected" : "Not detected"}
+              ok={summaryStatus.extensionConnected}
+            />
+            <SummaryLine
+              label="Pending Questions"
+              value={`${summaryStatus.pendingCount}`}
+              ok={summaryStatus.pendingCount === 0}
+            />
+            <SummaryLine
+              label="Last Sync"
+              value={lastSyncAt ? new Date(lastSyncAt).toLocaleString() : "Not synced yet"}
+              ok={Boolean(lastSyncAt)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Complete My Profile</p>
+            <h2 className="text-lg font-semibold text-gray-900">6-step setup wizard</h2>
+          </div>
+          <div className="text-sm text-gray-600">
+            Step {wizardStep + 1} of {WIZARD_STEPS.length}
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-6 gap-2">
+          {WIZARD_STEPS.map((step, index) => (
+            <button
+              key={step.title}
+              type="button"
+              onClick={() => {
+                setWizardStep(index);
+                setActiveTab(step.tab);
+              }}
+              className={`text-left rounded-xl border px-3 py-2 transition-colors ${
+                index === wizardStep
+                  ? "border-indigo-300 bg-indigo-50"
+                  : stepComplete[index]
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+              }`}
+            >
+              <div className="text-xs font-semibold text-gray-600">{index + 1}</div>
+              <div className="text-sm font-semibold text-gray-900 mt-1">{step.title}</div>
+              <div className="text-xs text-gray-600 mt-1 line-clamp-2">{step.description}</div>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{WIZARD_STEPS[wizardStep].title}</p>
+            <p className="text-xs text-gray-600 mt-0.5">{WIZARD_STEPS[wizardStep].description}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setWizardStep((prev) => Math.max(0, prev - 1))}
+              className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-white"
+              disabled={wizardStep === 0}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const next = Math.min(WIZARD_STEPS.length - 1, wizardStep + 1);
+                setWizardStep(next);
+                setActiveTab(WIZARD_STEPS[next].tab);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 inline-flex items-center gap-1"
+              disabled={wizardStep === WIZARD_STEPS.length - 1}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {pendingQuestions.length ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
+          <div className="flex items-center gap-2 text-amber-900 font-semibold">
+            <Sparkles className="h-4 w-4" />
+            Action Needed
+          </div>
+          <p className="text-sm text-amber-800">
+            These questions were detected on LinkedIn and still need answers. Answer once and the system will reuse them everywhere.
+          </p>
+
+          <div className="space-y-3">
+            {pendingQuestions.slice(0, 6).map((item) => {
+              const draftKey = item.questionKey;
+              const draftValue = answerDrafts[draftKey] ?? "";
+              return (
+                <div key={`${item.questionKey}-${item.questionLabel}`} className="rounded-xl border border-amber-200 bg-white p-3">
+                  <div className="text-sm font-semibold text-gray-900">{item.questionLabel}</div>
+                  {item.validationMessage ? (
+                    <div className="text-xs text-amber-700 mt-1">{item.validationMessage}</div>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <input
+                      value={draftValue}
+                      onChange={(e) =>
+                        setAnswerDrafts((prev) => ({
+                          ...prev,
+                          [draftKey]: e.target.value,
+                        }))
+                      }
+                      placeholder="Answer once and save"
+                      className="min-w-[260px] flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void saveAnswer(item.questionKey, item.questionLabel, answerDrafts[draftKey] || "", inferAnswerType(answerDrafts[draftKey] || ""), "manual")
+                      }
+                      disabled={savingAnswerKey === item.questionKey || !String(answerDrafts[draftKey] || "").trim()}
+                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
+                    >
+                      {savingAnswerKey === item.questionKey ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       ) : null}
 
-      {currentStep === 3 ? (
-        <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Extension Auto-fill Setup</h2>
-            <p className="text-sm text-gray-600">
-              We only ask essential fields here. Remaining extension settings are auto-configured.
-            </p>
-          </div>
+      <div className="rounded-2xl border border-gray-200 bg-white p-2">
+        <div className="grid md:grid-cols-3 gap-2">
+          <TabButton
+            label="Profile"
+            description="Personal + professional details"
+            active={activeTab === "profile"}
+            onClick={() => setActiveTab("profile")}
+          />
+          <TabButton
+            label="Preferences"
+            description="Auto Apply / CareerPilot / LinkedIn"
+            active={activeTab === "preferences"}
+            onClick={() => setActiveTab("preferences")}
+          />
+          <TabButton
+            label="Screening Answers"
+            description="Question bank + reusable answers"
+            active={activeTab === "screening"}
+            onClick={() => setActiveTab("screening")}
+          />
+        </div>
+      </div>
 
-          <div className="grid md:grid-cols-2 gap-3">
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold text-gray-700">Search terms</label>
-              <textarea
-                value={preferences.searchTerms}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, searchTerms: e.target.value }))}
-                rows={2}
-                placeholder="Software Engineer, Full Stack Developer"
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
+      {activeTab === "profile" ? (
+        <div className="space-y-4">
+          <SectionCard title="Personal Info" subtitle="Name, email, phone, city/state/country">
+            <div className="grid md:grid-cols-2 gap-3">
+              <InputField
+                label="Full Name"
+                value={profile.fullName}
+                onChange={(value) => setProfile((prev) => ({ ...prev, fullName: value }))}
+                placeholder="e.g. Alex Johnson"
               />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Search location</label>
-              <input
-                value={preferences.searchLocation}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, searchLocation: e.target.value }))}
+              <InputField
+                label="Email"
+                value={profile.email}
+                onChange={() => {}}
+                placeholder="you@example.com"
+                disabled
+              />
+              <InputField
+                label="Phone"
+                value={profile.phone}
+                onChange={(value) => setProfile((prev) => ({ ...prev, phone: value }))}
+                placeholder="+1 5551234567"
+              />
+              <InputField
+                label="Address"
+                value={profile.addressLine}
+                onChange={(value) => setProfile((prev) => ({ ...prev, addressLine: value }))}
+                placeholder="Street and area"
+              />
+              <InputField
+                label="City"
+                value={profile.city}
+                onChange={(value) => setProfile((prev) => ({ ...prev, city: value }))}
+                placeholder="Austin"
+              />
+              <InputField
+                label="State / Region"
+                value={profile.state}
+                onChange={(value) => setProfile((prev) => ({ ...prev, state: value }))}
+                placeholder="Texas"
+              />
+              <InputField
+                label="Country"
+                value={profile.country}
+                onChange={(value) => setProfile((prev) => ({ ...prev, country: value }))}
                 placeholder="United States"
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
               />
             </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Years of experience</label>
-              <input
-                value={preferences.yearsOfExperienceAnswer}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, yearsOfExperienceAnswer: e.target.value }))}
-                placeholder="5"
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Need visa sponsorship?</label>
-              <select
-                value={preferences.requireVisa}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, requireVisa: e.target.value }))}
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-              >
-                <option value="No">No</option>
-                <option value="Yes">Yes</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Work authorization status</label>
-              <select
-                value={preferences.usCitizenship}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, usCitizenship: e.target.value }))}
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-              >
-                <option value="U.S. Citizen/Permanent Resident">U.S. Citizen/Permanent Resident</option>
-                <option value="Authorized to work in the U.S.">Authorized to work in the U.S.</option>
-                <option value="Require sponsorship">Require sponsorship</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Desired salary (annual)</label>
-              <input
-                value={preferences.desiredSalary}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, desiredSalary: e.target.value }))}
-                placeholder="120000"
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Notice period (days)</label>
-              <input
-                value={preferences.noticePeriodDays}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, noticePeriodDays: e.target.value }))}
-                placeholder="15"
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Recent employer</label>
-              <input
-                value={preferences.recentEmployer}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, recentEmployer: e.target.value }))}
-                placeholder="Acme Corp"
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Confidence level (1-10)</label>
-              <input
-                value={preferences.confidenceLevel}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, confidenceLevel: e.target.value }))}
-                placeholder="8"
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold text-gray-700">Default long-form answer (for custom required textareas)</label>
-              <textarea
-                value={preferences.coverLetter}
-                onChange={(e) => setPreferences((prev) => ({ ...prev, coverLetter: e.target.value }))}
-                rows={4}
-                placeholder="Write a reusable answer for questions like: What exceptional work have you done?"
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-              />
-            </div>
-          </div>
+          </SectionCard>
 
-          {preferenceError ? <div className="text-xs text-red-600">{preferenceError}</div> : null}
-
-          <div className="border-t border-gray-200 pt-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Custom required fields</h3>
-                <p className="text-xs text-gray-600">
-                  If a job asks a custom question, add exact question text and answer here. This prevents submit loops.
-                </p>
+          <SectionCard title="Professional Links" subtitle="LinkedIn, portfolio, and resume URL">
+            <div className="grid md:grid-cols-2 gap-3">
+              <InputField
+                label="LinkedIn URL"
+                value={profile.linkedinUrl}
+                onChange={(value) => setProfile((prev) => ({ ...prev, linkedinUrl: value }))}
+                placeholder="https://www.linkedin.com/in/your-profile"
+              />
+              <InputField
+                label="Portfolio URL"
+                value={profile.portfolioUrl}
+                onChange={(value) => setProfile((prev) => ({ ...prev, portfolioUrl: value }))}
+                placeholder="https://github.com/yourname"
+              />
+              <InputField
+                label="Resume URL (optional)"
+                value={profile.resumeUrl}
+                onChange={(value) => setProfile((prev) => ({ ...prev, resumeUrl: value }))}
+                placeholder="https://..."
+              />
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                <div className="font-semibold text-gray-900">Resume Upload Status</div>
+                <div className="mt-1">{user?.resumeFileName ? `Uploaded: ${user.resumeFileName}` : "No uploaded resume yet"}</div>
+                <a href="/dashboard/resume" className="mt-2 inline-flex text-indigo-600 hover:text-indigo-700 font-medium">
+                  Open Resume Section
+                </a>
               </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Work Eligibility" subtitle="Visa sponsorship and work authorization">
+            <div className="grid md:grid-cols-2 gap-3">
+              <SelectField
+                label="U.S. Work Authorization"
+                value={profile.workAuthorizationUS}
+                onChange={(value) => setProfile((prev) => ({ ...prev, workAuthorizationUS: value }))}
+                options={[
+                  "U.S. Citizen/Permanent Resident",
+                  "Authorized to work in the U.S.",
+                  "Require sponsorship",
+                  "Not authorized",
+                ]}
+              />
+              <SelectField
+                label="Need Visa Sponsorship"
+                value={profile.visaSponsorship}
+                onChange={(value) => setProfile((prev) => ({ ...prev, visaSponsorship: value }))}
+                options={["No", "Yes"]}
+              />
+              <SelectField
+                label="Remote / Onsite / Hybrid"
+                value={profile.workModePreference}
+                onChange={(value) => {
+                  setProfile((prev) => ({ ...prev, workModePreference: value }));
+                  setPreferences((prev) => ({ ...prev, workMode: value }));
+                }}
+                options={WORK_MODE_OPTIONS}
+              />
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Experience & Education" subtitle="Years, degree, and communication level">
+            <div className="grid md:grid-cols-2 gap-3">
+              <InputField
+                label="Years of Experience"
+                value={profile.yearsOfExperience}
+                onChange={(value) => {
+                  setProfile((prev) => ({ ...prev, yearsOfExperience: value }));
+                  setPreferences((prev) => ({ ...prev, yearsOfExperience: value }));
+                }}
+                placeholder="e.g. 5"
+              />
+              <SelectField
+                label="Education Level"
+                value={profile.educationLevel}
+                onChange={(value) => setProfile((prev) => ({ ...prev, educationLevel: value }))}
+                options={EDUCATION_LEVEL_OPTIONS}
+              />
+              <SelectField
+                label="English Proficiency"
+                value={profile.englishProficiency}
+                onChange={(value) => setProfile((prev) => ({ ...prev, englishProficiency: value }))}
+                options={ENGLISH_PROFICIENCY_OPTIONS}
+              />
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Preferred Roles & Locations" subtitle="Used to prefill job preferences and screening answers">
+            <div className="grid md:grid-cols-2 gap-4">
+              <TagInput
+                label="Preferred Job Titles"
+                values={profile.preferredJobTitles}
+                onChange={(values) => {
+                  setProfile((prev) => ({ ...prev, preferredJobTitles: values }));
+                  setPreferences((prev) => ({ ...prev, searchTerms: values }));
+                }}
+                placeholder="Add role and press Enter"
+              />
+              <TagInput
+                label="Preferred Locations"
+                values={profile.preferredLocations}
+                onChange={(values) => {
+                  setProfile((prev) => ({ ...prev, preferredLocations: values }));
+                  setPreferences((prev) => ({ ...prev, searchLocations: values }));
+                }}
+                placeholder="Add location and press Enter"
+              />
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {activeTab === "preferences" ? (
+        <div className="space-y-4">
+          <SectionCard
+            title="Auto Apply Preferences"
+            subtitle="Search terms, locations, confidence, and fit criteria"
+          >
+            <div className="grid md:grid-cols-2 gap-4">
+              <TagInput
+                label="Search Terms"
+                values={preferences.searchTerms}
+                onChange={(values) => setPreferences((prev) => ({ ...prev, searchTerms: values }))}
+                placeholder="PHP Developer"
+              />
+              <TagInput
+                label="Search Locations"
+                values={preferences.searchLocations}
+                onChange={(values) => setPreferences((prev) => ({ ...prev, searchLocations: values }))}
+                placeholder="New York"
+              />
+              <SelectField
+                label="Remote / Onsite / Hybrid"
+                value={preferences.workMode}
+                onChange={(value) => setPreferences((prev) => ({ ...prev, workMode: value }))}
+                options={WORK_MODE_OPTIONS}
+              />
+              <InputField
+                label="Confidence Level (1-10)"
+                value={preferences.confidenceLevel}
+                onChange={(value) => setPreferences((prev) => ({ ...prev, confidenceLevel: value }))}
+                placeholder="8"
+              />
+              <InputField
+                label="Years of Experience"
+                value={preferences.yearsOfExperience}
+                onChange={(value) => setPreferences((prev) => ({ ...prev, yearsOfExperience: value }))}
+                placeholder="5"
+              />
+              <TagInput
+                label="Job Types"
+                values={preferences.jobTypes}
+                onChange={(values) => setPreferences((prev) => ({ ...prev, jobTypes: values }))}
+                placeholder="Full-time"
+                presets={JOB_TYPE_OPTIONS}
+              />
+              <InputField
+                label="Salary Min"
+                value={preferences.salaryMin}
+                onChange={(value) => setPreferences((prev) => ({ ...prev, salaryMin: value }))}
+                placeholder="80000"
+              />
+              <InputField
+                label="Salary Max"
+                value={preferences.salaryMax}
+                onChange={(value) => setPreferences((prev) => ({ ...prev, salaryMax: value }))}
+                placeholder="120000"
+              />
+              <TagInput
+                label="Preferred Countries"
+                values={preferences.preferredCountries}
+                onChange={(values) => setPreferences((prev) => ({ ...prev, preferredCountries: values }))}
+                placeholder="United States"
+              />
+              <TagInput
+                label="Excluded Companies"
+                values={preferences.excludedCompanies}
+                onChange={(values) => setPreferences((prev) => ({ ...prev, excludedCompanies: values }))}
+                placeholder="Company name"
+              />
+              <TagInput
+                label="Excluded Keywords"
+                values={preferences.excludedKeywords}
+                onChange={(values) => setPreferences((prev) => ({ ...prev, excludedKeywords: values }))}
+                placeholder="Staffing"
+              />
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="CareerPilot Preferences"
+            subtitle="Uses the same structure and values as Auto Apply Preferences"
+          >
+            <PreferenceMirror preferences={preferences} />
+          </SectionCard>
+
+          <SectionCard
+            title="LinkedIn Preferences"
+            subtitle="Same preference data synced for LinkedIn extension autofill"
+          >
+            <PreferenceMirror preferences={preferences} />
+            {canDownloadExtensionZip ? (
+              <div className="mt-3">
+                <a
+                  href={extensionZipUrl}
+                  download
+                  className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Download Extension ZIP
+                </a>
+              </div>
+            ) : null}
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {activeTab === "screening" ? (
+        <div className="space-y-4">
+          <SectionCard
+            title="Saved Answers / Question Bank"
+            subtitle="question label, normalized key, answer, answer type, source, and last used"
+            action={
               <button
                 type="button"
                 onClick={() =>
                   setScreeningRows((prev) => [
                     ...prev,
-                    { id: makeRowId(), questionKey: "", questionLabel: "", answer: "" },
+                    {
+                      id: makeId(),
+                      questionLabel: "",
+                      normalizedKey: "",
+                      answer: "",
+                      answerType: "text",
+                      source: "manual",
+                      lastUsed: "",
+                    },
                   ])
                 }
-                className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
               >
-                + Add Field
+                <Plus className="h-4 w-4" />
+                Add Answer
               </button>
-            </div>
-
-            {loadingScreening ? <p className="text-xs text-gray-500">Loading saved fields...</p> : null}
-            {!loadingScreening && screeningRows.length === 0 ? (
-              <p className="text-xs text-gray-500">No custom fields yet.</p>
-            ) : null}
-
-            {screeningRows.map((row) => (
-              <div key={row.id} className="grid md:grid-cols-3 gap-2">
-                <input
-                  value={row.questionLabel}
-                  onChange={(e) =>
-                    setScreeningRows((prev) =>
-                      prev.map((item) =>
-                        item.id === row.id
-                          ? {
-                              ...item,
-                              questionLabel: e.target.value,
-                              questionKey: toQuestionKey(e.target.value),
+            }
+          >
+            {!screeningRows.length ? (
+              <p className="text-sm text-gray-500">No saved screening answers yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {screeningRows.map((row) => {
+                  const key = toPayloadQuestionKey(row.normalizedKey || row.questionLabel);
+                  const isSavingRow = Boolean(savingAnswerKey) && savingAnswerKey === key;
+                  return (
+                    <div key={row.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
+                      <div className="grid md:grid-cols-3 gap-2">
+                        <InputField
+                          label="Question"
+                          value={row.questionLabel}
+                          onChange={(value) =>
+                            setScreeningRows((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id
+                                  ? {
+                                      ...item,
+                                      questionLabel: value,
+                                      normalizedKey: toPayloadQuestionKey(value),
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          placeholder="Are you authorized to work in the U.S.?"
+                        />
+                        <InputField
+                          label="Answer"
+                          value={row.answer}
+                          onChange={(value) =>
+                            setScreeningRows((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id
+                                  ? {
+                                      ...item,
+                                      answer: value,
+                                      answerType: inferAnswerType(value),
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          placeholder="No"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <SelectField
+                            label="Type"
+                            value={row.answerType}
+                            onChange={(value) =>
+                              setScreeningRows((prev) =>
+                                prev.map((item) =>
+                                  item.id === row.id
+                                    ? {
+                                        ...item,
+                                        answerType: value as ScreeningAnswerType,
+                                      }
+                                    : item,
+                                ),
+                              )
                             }
-                          : item,
-                      ),
-                    )
-                  }
-                  placeholder="Question label"
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-                />
-                <input
-                  value={row.answer}
-                  onChange={(e) =>
-                    setScreeningRows((prev) =>
-                      prev.map((item) => (item.id === row.id ? { ...item, answer: e.target.value } : item)),
-                    )
-                  }
-                  placeholder="Answer"
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setScreeningRows((prev) => prev.filter((item) => item.id !== row.id))}
-                  className="px-3 py-2 rounded-lg border border-red-200 text-red-700 text-sm hover:bg-red-50"
-                >
-                  Remove
-                </button>
+                            options={["text", "boolean", "number", "choice", "multiselect"]}
+                          />
+                          <SelectField
+                            label="Source"
+                            value={row.source}
+                            onChange={(value) =>
+                              setScreeningRows((prev) =>
+                                prev.map((item) =>
+                                  item.id === row.id
+                                    ? {
+                                        ...item,
+                                        source: value as ScreeningSource,
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            options={["manual", "linkedin_import", "resume_parse", "extension_capture", "system"]}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+                        <span>Mapped key is generated automatically from the question text.</span>
+                        <span>
+                          Last used: {row.lastUsed ? new Date(row.lastUsed).toLocaleString() : "Not used yet"}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void saveAnswer(
+                              row.normalizedKey || row.questionLabel,
+                              row.questionLabel,
+                              row.answer,
+                              row.answerType,
+                              row.source,
+                            )
+                          }
+                          disabled={isSavingRow || !row.questionLabel.trim() || !row.answer.trim()}
+                          className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
+                        >
+                          {isSavingRow ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScreeningRows((prev) => prev.filter((item) => item.id !== row.id))}
+                          className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-sm font-semibold hover:bg-red-50 inline-flex items-center gap-1"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            title="Pending Answers"
+            subtitle="Detected by LinkedIn forms and waiting for your input"
+          >
+            {!pendingQuestions.length ? (
+              <p className="text-sm text-emerald-700">No pending screening questions right now.</p>
+            ) : (
+              <div className="space-y-3">
+                {pendingQuestions.map((item) => {
+                  const key = item.questionKey;
+                  const draft = answerDrafts[key] || "";
+                  return (
+                    <div key={`${item.questionKey}-${item.questionLabel}`} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <div className="text-sm font-semibold text-gray-900">{item.questionLabel}</div>
+                      {item.validationMessage ? (
+                        <div className="text-xs text-amber-700 mt-1">{item.validationMessage}</div>
+                      ) : null}
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <input
+                          value={draft}
+                          onChange={(e) =>
+                            setAnswerDrafts((prev) => ({
+                              ...prev,
+                              [key]: e.target.value,
+                            }))
+                          }
+                          placeholder="Type your answer"
+                          className="min-w-[260px] flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void saveAnswer(
+                              item.questionKey,
+                              item.questionLabel,
+                              answerDrafts[key] || "",
+                              inferAnswerType(answerDrafts[key] || ""),
+                              "manual",
+                            )
+                          }
+                          disabled={savingAnswerKey === key || !String(answerDrafts[key] || "").trim()}
+                          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
+                        >
+                          {savingAnswerKey === key ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </SectionCard>
         </div>
       ) : null}
 
-      {currentStep === 4 ? (
-        <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Review & Save</h2>
-          <p className="text-sm text-gray-600">Confirm details before finishing onboarding.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">
+        <div className="text-xs text-gray-500">
+          {draftStatus === "saving" ? "Saving draft..." : null}
+          {draftStatus === "saved"
+            ? `Draft saved${draftSavedAt ? ` at ${new Date(draftSavedAt).toLocaleTimeString()}` : ""}`
+            : null}
+          {draftStatus === "error" ? "Draft autosave failed. Keep tab open and retry." : null}
+        </div>
 
-          <div className="grid md:grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="font-semibold text-gray-900">Resume</div>
-              <div className="text-gray-700 mt-1">
-                Managed on LinkedIn Easy Apply profile (latest attached resume will be used).
-              </div>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="font-semibold text-gray-900">Extension</div>
-              <div className="text-gray-700 mt-1">{extensionStatus.installed ? "Detected" : "Not detected"}</div>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3 md:col-span-2">
-              <div className="font-semibold text-gray-900">Profile</div>
-              <div className="text-gray-700 mt-1">{form.name || "-"}</div>
-              <div className="text-gray-700">{composePhone(form.phone, phoneCountryCode) || "-"}</div>
-              <div className="text-gray-700">{form.currentCity || "-"}</div>
-              <div className="text-gray-700">{form.linkedinUrl || "-"}</div>
-              <div className="text-gray-700">{form.portfolioUrl || "-"}</div>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3 md:col-span-2">
-              <div className="font-semibold text-gray-900">Auto-fill Preferences</div>
-              <div className="text-gray-700 mt-1">Search terms: {parseListInput(preferences.searchTerms).join(", ") || "-"}</div>
-              <div className="text-gray-700">Search location: {preferences.searchLocation || "-"}</div>
-              <div className="text-gray-700">Visa requirement: {preferences.requireVisa || "-"}</div>
-              <div className="text-gray-700">Authorization: {preferences.usCitizenship || "-"}</div>
-              <div className="text-gray-700">Custom fields: {screeningRows.length}</div>
-            </div>
-          </div>
-
-          {!profileComplete || !preferencesComplete ? (
-            <div className="text-xs text-red-600">
-              Some profile or preference answers are invalid. Go back and fix them before saving.
-            </div>
-          ) : null}
-
+        <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => void onSave()}
-            disabled={isSaving || !profileComplete || !preferencesComplete}
-            className="px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-60"
+            onClick={() => {
+              setError("");
+              setMessage("");
+              void loadData();
+            }}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            disabled={saving}
           >
-            {isSaving ? "Saving..." : "Save & Continue"}
+            Reload
+          </button>
+          <button
+            type="button"
+            onClick={() => void persistAll()}
+            disabled={saving}
+            className="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? "Saving..." : "Save & Finish Onboarding"}
           </button>
         </div>
-      ) : null}
-
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={goBack}
-          disabled={!canGoBack || isSaving}
-          className="px-4 py-2 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50 disabled:opacity-50"
-        >
-          Back
-        </button>
-        {currentStep < WIZARD_STEPS.length - 1 ? (
-          <button
-            type="button"
-            onClick={goNext}
-            disabled={isSaving}
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-60"
-          >
-            {currentStep === 1
-              ? profileQuestionIndex < PROFILE_QUESTIONS.length - 1
-                ? "Next Question"
-                : "Continue"
-              : "Next"}
-          </button>
-        ) : null}
       </div>
+    </div>
+  );
+}
+
+function SummaryLine({ label, value, ok }: { label: string; value: string; ok: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+      <span className="text-gray-600">{label}</span>
+      <span className={`font-semibold ${ok ? "text-emerald-700" : "text-gray-900"}`}>{value}</span>
+    </div>
+  );
+}
+
+function TabButton({
+  label,
+  description,
+  active,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+        active ? "border-indigo-300 bg-indigo-50" : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+      }`}
+    >
+      <div className="text-sm font-semibold text-gray-900">{label}</div>
+      <div className="text-xs text-gray-600 mt-1">{description}</div>
+    </button>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function InputField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold text-gray-700">{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 disabled:bg-gray-100 disabled:text-gray-500"
+      />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold text-gray-700">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+      >
+        <option value="">Select</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TagInput({
+  label,
+  values,
+  onChange,
+  placeholder,
+  presets = [],
+}: {
+  label: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+  presets?: string[];
+}) {
+  const [draft, setDraft] = useState("");
+
+  const addTag = (raw: string) => {
+    const value = String(raw || "").trim();
+    if (!value) return;
+    const exists = values.some((item) => item.toLowerCase() === value.toLowerCase());
+    if (exists) return;
+    onChange([...values, value]);
+  };
+
+  const removeTag = (value: string) => {
+    onChange(values.filter((item) => item !== value));
+  };
+
+  return (
+    <div>
+      <span className="text-xs font-semibold text-gray-700">{label}</span>
+
+      <div className="mt-1 rounded-lg border border-gray-300 bg-white p-2">
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((item) => (
+            <span
+              key={item}
+              className="inline-flex items-center gap-1 rounded-full bg-indigo-50 border border-indigo-200 px-2 py-1 text-xs font-medium text-indigo-700"
+            >
+              {item}
+              <button
+                type="button"
+                onClick={() => removeTag(item)}
+                className="text-indigo-700 hover:text-indigo-900"
+                aria-label={`Remove ${item}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                addTag(draft);
+                setDraft("");
+              }
+              if (e.key === "Backspace" && !draft && values.length) {
+                removeTag(values[values.length - 1]);
+              }
+            }}
+            onBlur={() => {
+              if (draft.trim()) {
+                addTag(draft);
+                setDraft("");
+              }
+            }}
+            placeholder={placeholder}
+            className="min-w-[180px] flex-1 px-1 py-1 text-sm outline-none"
+          />
+        </div>
+      </div>
+
+      {presets.length ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {presets.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => addTag(preset)}
+              className="px-2 py-1 rounded-full border border-gray-300 text-xs text-gray-700 hover:bg-gray-50"
+            >
+              + {preset}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PreferenceMirror({ preferences }: { preferences: JobPreferences }) {
+  return (
+    <div className="grid md:grid-cols-2 gap-2 text-sm">
+      <MirrorLine label="Search Terms" value={preferences.searchTerms.join(", ") || "-"} />
+      <MirrorLine label="Search Locations" value={preferences.searchLocations.join(", ") || "-"} />
+      <MirrorLine label="Work Mode" value={preferences.workMode || "-"} />
+      <MirrorLine label="Job Types" value={preferences.jobTypes.join(", ") || "-"} />
+      <MirrorLine label="Years of Experience" value={preferences.yearsOfExperience || "-"} />
+      <MirrorLine label="Confidence" value={preferences.confidenceLevel || "-"} />
+      <MirrorLine
+        label="Salary"
+        value={
+          preferences.salaryMin || preferences.salaryMax
+            ? `${preferences.salaryMin || "0"} - ${preferences.salaryMax || "0"}`
+            : "-"
+        }
+      />
+      <MirrorLine label="Preferred Countries" value={preferences.preferredCountries.join(", ") || "-"} />
+      <MirrorLine label="Excluded Companies" value={preferences.excludedCompanies.join(", ") || "-"} />
+      <MirrorLine label="Excluded Keywords" value={preferences.excludedKeywords.join(", ") || "-"} />
+    </div>
+  );
+}
+
+function MirrorLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-sm text-gray-800 font-medium mt-0.5">{value}</div>
     </div>
   );
 }

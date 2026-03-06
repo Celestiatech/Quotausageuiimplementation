@@ -11,6 +11,13 @@ type IncomingEntry = {
   data?: Record<string, unknown>;
 };
 
+type ImportBilling = {
+  charged: boolean;
+  consumed: number;
+  sourceBreakdown: { free: number; paid: number };
+  reason: string;
+};
+
 function parseLinkedInJobId(input: unknown) {
   const raw = String(input || "").trim();
   if (!raw) return "";
@@ -74,7 +81,22 @@ export async function POST(req: NextRequest) {
     const userId = authResult.auth.user.id;
     const seenEntryIds = new Set<string>();
 
-    const results = [];
+    const results: Array<{
+      jobId: string;
+      externalJobId: string;
+      outcomeType: string;
+      entryId: string;
+      title: string;
+      company: string;
+      billing: ImportBilling;
+    }> = [];
+    const billingTotals = {
+      chargedJobs: 0,
+      consumedTotal: 0,
+      freeConsumed: 0,
+      paidConsumed: 0,
+      chargeFailures: 0,
+    };
     for (const entry of entries.slice(0, 200)) {
       const effectiveEntryId = entry.entryId || buildEntryId(entry);
       if (seenEntryIds.has(effectiveEntryId)) continue;
@@ -180,8 +202,14 @@ export async function POST(req: NextRequest) {
       }
 
       // Charge Hires only once per successful submit.
+      let billing: ImportBilling = {
+        charged: false,
+        consumed: 0,
+        sourceBreakdown: { free: 0, paid: 0 },
+        reason: shouldCharge ? "PENDING_CHARGE" : "NOT_CHARGED_ALREADY_SUBMITTED",
+      };
       if (shouldCharge) {
-        await consumeHiresForApplies({
+        const chargeResult = await consumeHiresForApplies({
           userId,
           count: 1,
           referenceType: "extension_apply",
@@ -196,9 +224,34 @@ export async function POST(req: NextRequest) {
             title,
             company,
           },
-        }).catch(() => {
-          // Don't fail import if billing fails; UI will still show the job.
-        });
+        }).catch(() => null);
+
+        if (chargeResult && chargeResult.ok) {
+          const free = Math.max(0, Number(chargeResult.sourceBreakdown?.free || 0));
+          const paid = Math.max(0, Number(chargeResult.sourceBreakdown?.paid || 0));
+          const consumed = Math.max(0, Number(chargeResult.consumed || 0));
+          billing = {
+            charged: consumed > 0,
+            consumed,
+            sourceBreakdown: { free, paid },
+            reason: consumed > 0 ? "CHARGED" : "NO_CONSUMPTION",
+          };
+          billingTotals.consumedTotal += consumed;
+          billingTotals.freeConsumed += free;
+          billingTotals.paidConsumed += paid;
+          if (billing.charged) billingTotals.chargedJobs += 1;
+        } else {
+          const reason = chargeResult && !chargeResult.ok
+            ? String(chargeResult.reason || "CHARGE_BLOCKED")
+            : "CHARGE_FAILED";
+          billing = {
+            charged: false,
+            consumed: 0,
+            sourceBreakdown: { free: 0, paid: 0 },
+            reason,
+          };
+          billingTotals.chargeFailures += 1;
+        }
       }
 
       await prisma.autoApplyJobLog.create({
@@ -211,10 +264,22 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      results.push({ jobId: job.id, externalJobId: jobId, outcomeType: entry.outcomeType, entryId: effectiveEntryId });
+      results.push({
+        jobId: job.id,
+        externalJobId: jobId,
+        outcomeType: entry.outcomeType,
+        entryId: effectiveEntryId,
+        title,
+        company,
+        billing,
+      });
     }
 
-    return ok("Imported extension pipeline events", { imported: results.length, results });
+    return ok("Imported extension pipeline events", {
+      imported: results.length,
+      results,
+      billing: billingTotals,
+    });
   } catch (error) {
     return handleApiError(error, "Failed to import extension events");
   }

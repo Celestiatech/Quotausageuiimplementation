@@ -5,15 +5,34 @@ import { ok, handleApiError, parsePagination } from "src/lib/api";
 import { prisma } from "src/lib/prisma";
 import { writeAuditLog } from "src/lib/audit";
 
+const answerTypeSchema = z.enum(["text", "boolean", "number", "choice", "multiselect"]);
+const sourceSchema = z.enum(["manual", "linkedin_import", "resume_parse", "extension_capture", "system"]);
+
 const saveAnswerSchema = z.object({
   questionKey: z.string().trim().min(1).max(160),
   questionLabel: z.string().trim().min(1).max(500),
   answer: z.string().trim().min(1).max(1000),
+  answerType: answerTypeSchema.optional().default("text"),
+  source: sourceSchema.optional().default("manual"),
+  lastUsed: z.string().trim().max(80).optional(),
 });
+
+type AnswerType = z.infer<typeof answerTypeSchema>;
+type SourceType = z.infer<typeof sourceSchema>;
 
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+function parseAnswerType(value: unknown): AnswerType {
+  const parsed = answerTypeSchema.safeParse(value);
+  return parsed.success ? parsed.data : "text";
+}
+
+function parseSource(value: unknown): SourceType {
+  const parsed = sourceSchema.safeParse(value);
+  return parsed.success ? parsed.data : "manual";
 }
 
 export async function GET(req: Request) {
@@ -36,7 +55,19 @@ export async function GET(req: Request) {
       take: scanLimit,
     });
 
-    const latestByKey = new Map<string, { questionKey: string; questionLabel: string; answer: string; updatedAt: string }>();
+    const latestByKey = new Map<
+      string,
+      {
+        questionKey: string;
+        questionLabel: string;
+        answer: string;
+        answerType: AnswerType;
+        source: SourceType;
+        lastUsed: string;
+        updatedAt: string;
+      }
+    >();
+
     for (const log of logs) {
       const meta = asObject(log.metadataJson);
       if (!meta) continue;
@@ -49,6 +80,9 @@ export async function GET(req: Request) {
           questionKey,
           questionLabel,
           answer,
+          answerType: parseAnswerType(meta.answerType),
+          source: parseSource(meta.source),
+          lastUsed: String(meta.lastUsed || "").trim() || log.createdAt.toISOString(),
           updatedAt: log.createdAt.toISOString(),
         });
       }
@@ -82,7 +116,10 @@ export async function POST(req: NextRequest) {
       action: "user.screening_answer_saved",
       targetType: "screening_answer",
       targetId: payload.questionKey,
-      metadataJson: payload,
+      metadataJson: {
+        ...payload,
+        lastUsed: payload.lastUsed || new Date().toISOString(),
+      },
     });
 
     return ok("Screening answer saved", { answer: payload });
@@ -90,4 +127,3 @@ export async function POST(req: NextRequest) {
     return handleApiError(error, "Failed to save screening answer");
   }
 }
-

@@ -22,6 +22,7 @@ const PORTAL_FALLBACK_ORIGINS = [
   "http://localhost:3000",
 ];
 const PORTAL_ISSUE_REPORTED_KEY = "cpPortalIssueReported";
+const PORTAL_LAST_SYNC_SNAPSHOT_KEY = "cpPortalLastSyncSnapshot";
 
 // Best-effort portal sync (AutoApply CV web app). This is fed by dashboard-bridge.js running on the site origin.
 let portalQuotaCache = {
@@ -34,6 +35,19 @@ let portalOriginState = {
   origin: "",
   failureCount: 0,
   updatedAt: 0,
+};
+let lastPortalSyncSnapshot = {
+  ts: "",
+  origin: "",
+  imported: 0,
+  chargedJobs: 0,
+  consumedTotal: 0,
+  freeConsumed: 0,
+  paidConsumed: 0,
+  chargeFailures: 0,
+  lastChargedJobId: "",
+  lastChargedJobTitle: "",
+  lastChargedJobCompany: "",
 };
 
 function normalizePortalOrigin(value) {
@@ -82,16 +96,46 @@ async function markPortalOriginFailure(origin) {
   await persistPortalOriginState();
 }
 
-void chrome.storage.local.get(PORTAL_ORIGIN_STATE_KEY).then((snap) => {
-  const raw = snap?.[PORTAL_ORIGIN_STATE_KEY];
-  if (!raw || typeof raw !== "object") return;
-  const normalized = normalizePortalOrigin(raw.origin);
-  portalOriginState = {
-    origin: normalized,
-    failureCount: Math.max(0, Math.floor(Number(raw.failureCount || 0))),
-    updatedAt: Math.max(0, Number(raw.updatedAt || 0)),
+function normalizeLastPortalSyncSnapshot(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { ...lastPortalSyncSnapshot };
+  }
+  return {
+    ts: String(raw.ts || "").trim(),
+    origin: normalizePortalOrigin(raw.origin),
+    imported: Math.max(0, Math.floor(Number(raw.imported || 0))),
+    chargedJobs: Math.max(0, Math.floor(Number(raw.chargedJobs || 0))),
+    consumedTotal: Math.max(0, Math.floor(Number(raw.consumedTotal || 0))),
+    freeConsumed: Math.max(0, Math.floor(Number(raw.freeConsumed || 0))),
+    paidConsumed: Math.max(0, Math.floor(Number(raw.paidConsumed || 0))),
+    chargeFailures: Math.max(0, Math.floor(Number(raw.chargeFailures || 0))),
+    lastChargedJobId: String(raw.lastChargedJobId || "").trim(),
+    lastChargedJobTitle: String(raw.lastChargedJobTitle || "").trim(),
+    lastChargedJobCompany: String(raw.lastChargedJobCompany || "").trim(),
   };
-  if (normalized) portalOrigin = normalized;
+}
+
+function setLastPortalSyncSnapshot(raw) {
+  lastPortalSyncSnapshot = normalizeLastPortalSyncSnapshot(raw);
+  void chrome.storage.local
+    .set({ [PORTAL_LAST_SYNC_SNAPSHOT_KEY]: lastPortalSyncSnapshot })
+    .catch(() => {});
+  return lastPortalSyncSnapshot;
+}
+
+void chrome.storage.local.get([PORTAL_ORIGIN_STATE_KEY, PORTAL_LAST_SYNC_SNAPSHOT_KEY]).then((snap) => {
+  const raw = snap?.[PORTAL_ORIGIN_STATE_KEY];
+  if (raw && typeof raw === "object") {
+    const normalized = normalizePortalOrigin(raw.origin);
+    portalOriginState = {
+      origin: normalized,
+      failureCount: Math.max(0, Math.floor(Number(raw.failureCount || 0))),
+      updatedAt: Math.max(0, Number(raw.updatedAt || 0)),
+    };
+    if (normalized) portalOrigin = normalized;
+  }
+  const lastSync = normalizeLastPortalSyncSnapshot(snap?.[PORTAL_LAST_SYNC_SNAPSHOT_KEY]);
+  lastPortalSyncSnapshot = lastSync;
 }).catch(() => {});
 
 async function notifyDashboardTabs(payload) {
@@ -161,6 +205,7 @@ function getPortalOrigin() {
 function normalizeLabel(value) {
   return String(value || "")
     .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -514,12 +559,80 @@ async function flushPortalImports() {
         }
 
         // Success for this origin.
+        const imported = Math.max(0, Number(body?.data?.imported ?? batch.length));
+        const billingRaw = body?.data?.billing && typeof body.data.billing === "object" ? body.data.billing : {};
+        const resultItems = Array.isArray(body?.data?.results) ? body.data.results : [];
+        let chargedJobs = Math.max(0, Math.floor(Number(billingRaw.chargedJobs || 0)));
+        let consumedTotal = Math.max(0, Math.floor(Number(billingRaw.consumedTotal || 0)));
+        let freeConsumed = Math.max(0, Math.floor(Number(billingRaw.freeConsumed || 0)));
+        let paidConsumed = Math.max(0, Math.floor(Number(billingRaw.paidConsumed || 0)));
+        let chargeFailures = Math.max(0, Math.floor(Number(billingRaw.chargeFailures || 0)));
+        if (!chargedJobs && resultItems.length) {
+          chargedJobs = resultItems.filter((item) => Boolean(item?.billing?.charged)).length;
+        }
+        if (!consumedTotal && resultItems.length) {
+          consumedTotal = resultItems.reduce((sum, item) => sum + Math.max(0, Number(item?.billing?.consumed || 0)), 0);
+        }
+        if (!freeConsumed && resultItems.length) {
+          freeConsumed = resultItems.reduce(
+            (sum, item) => sum + Math.max(0, Number(item?.billing?.sourceBreakdown?.free || 0)),
+            0,
+          );
+        }
+        if (!paidConsumed && resultItems.length) {
+          paidConsumed = resultItems.reduce(
+            (sum, item) => sum + Math.max(0, Number(item?.billing?.sourceBreakdown?.paid || 0)),
+            0,
+          );
+        }
+        if (!chargeFailures && resultItems.length) {
+          chargeFailures = resultItems.filter((item) => {
+            const shouldCharge = String(item?.outcomeType || "").toUpperCase() === "APPLIED";
+            const reason = String(item?.billing?.reason || "").toUpperCase();
+            return shouldCharge && !item?.billing?.charged && reason && reason !== "NOT_CHARGED_ALREADY_SUBMITTED";
+          }).length;
+        }
+        const lastCharged = [...resultItems]
+          .reverse()
+          .find((item) => Boolean(item?.billing?.charged));
+        const syncSnapshot = setLastPortalSyncSnapshot({
+          ts: nowIso(),
+          origin,
+          imported,
+          chargedJobs,
+          consumedTotal,
+          freeConsumed,
+          paidConsumed,
+          chargeFailures,
+          lastChargedJobId: String(lastCharged?.externalJobId || "").trim(),
+          lastChargedJobTitle: String(lastCharged?.title || "").trim(),
+          lastChargedJobCompany: String(lastCharged?.company || "").trim(),
+        });
         setPreferredPortalOrigin(origin, { resetFailures: true });
         await setPortalQueue(queue.slice(batch.length));
         await clearPortalCooldown();
         await refreshPortalQuota();
-        await pushLog(`Synced ${batch.length} update(s) to dashboard via ${origin}.`, "info");
-        await notifyDashboardTabs({ imported: batch.length, ts: nowIso() });
+        await pushLog(
+          `Synced ${imported} update(s) to dashboard via ${origin}. Charged ${chargedJobs} (free ${freeConsumed}, paid ${paidConsumed}).`,
+          "info",
+          {
+            chargedJobs,
+            consumedTotal,
+            freeConsumed,
+            paidConsumed,
+            chargeFailures,
+          },
+        );
+        await notifyDashboardTabs({
+          imported,
+          ts: syncSnapshot.ts || nowIso(),
+          chargedJobs,
+          consumedTotal,
+          freeConsumed,
+          paidConsumed,
+          chargeFailures,
+          lastChargedJobId: syncSnapshot.lastChargedJobId || "",
+        });
         return;
       } catch {
         networkFailed = true;
@@ -740,14 +853,43 @@ function normalizeArray(value) {
 function normalizeLabel(value) {
   return String(value || "")
     .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function questionKeyFromLabel(label) {
+function hasWords(label, words) {
+  return words.every((word) => label.includes(word));
+}
+
+function canonicalScreeningKey(label) {
   const n = normalizeLabel(label);
   if (!n) return "";
+  if (
+    (hasWords(n, ["authorized", "work"]) || hasWords(n, ["eligible", "work"]) || hasWords(n, ["work", "authorization"])) &&
+    (n.includes("united states") || n.includes("u s") || n.includes("us"))
+  ) {
+    return "work_authorization_us";
+  }
+  if (hasWords(n, ["visa", "sponsorship"]) || hasWords(n, ["require", "sponsorship"])) {
+    return "visa_sponsorship_required";
+  }
+  if (n.includes("onsite") || n.includes("on site")) return "comfortable_working_onsite";
+  if (n.includes("commut")) return "comfortable_commuting";
+  if (n.includes("relocat")) return "comfortable_relocation";
+  if ((n.includes("salary") || n.includes("compensation") || n.includes("pay")) && n.includes("expect")) {
+    return "expected_salary";
+  }
+  if (n.includes("year") && n.includes("experience")) return "years_of_experience";
+  if (n.includes("bachelor") && n.includes("degree")) return "bachelors_degree_completed";
+  if (n.includes("english") && n.includes("proficiency")) return "english_proficiency";
+  if (n.includes("notice") && n.includes("period")) return "notice_period_days";
+  if (n.includes("start") && n.includes("date")) return "start_date_availability";
   return n.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
+}
+
+function questionKeyFromLabel(label) {
+  return canonicalScreeningKey(label);
 }
 
 function resolveScreeningAnswer(screeningAnswers, questionLabel) {
@@ -903,9 +1045,101 @@ async function pushLog(message, level = "info", meta = undefined) {
   return entry;
 }
 
+function summarizeHistoryForExport(histories, startedAt) {
+  const applied = Array.isArray(histories?.applied) ? histories.applied : [];
+  const skipped = Array.isArray(histories?.skipped) ? histories.skipped : [];
+  const failed = Array.isArray(histories?.failed) ? histories.failed : [];
+  const external = Array.isArray(histories?.external) ? histories.external : [];
+
+  const startMs = startedAt ? new Date(String(startedAt)).getTime() : NaN;
+  const hasStart = Number.isFinite(startMs);
+  const inRun = (entry) => {
+    if (!hasStart) return false;
+    const ts = new Date(String(entry?.ts || "")).getTime();
+    return Number.isFinite(ts) && ts >= startMs;
+  };
+
+  const reasonCounts = {};
+  const bumpReason = (entry) => {
+    const code = String(entry?.data?.reasonCode || "UNKNOWN").trim().toUpperCase();
+    if (!code) return;
+    reasonCounts[code] = Number(reasonCounts[code] || 0) + 1;
+  };
+  for (const entry of applied) bumpReason(entry);
+  for (const entry of skipped) bumpReason(entry);
+  for (const entry of failed) bumpReason(entry);
+  for (const entry of external) bumpReason(entry);
+
+  const submitted = applied.filter((entry) => String(entry?.data?.reasonCode || "").toUpperCase() === "SUBMITTED");
+  const submittedThisRun = submitted.filter((entry) => inRun(entry));
+  const lastSubmitted = submitted.length ? submitted[submitted.length - 1] : null;
+  const lastSubmittedJobId = extractLinkedInJobId(
+    lastSubmitted?.data?.jobId || lastSubmitted?.data?.jobUrl || lastSubmitted?.data?.pageUrl
+  );
+
+  return {
+    totals: {
+      applied: applied.length,
+      skipped: skipped.length,
+      failed: failed.length,
+      external: external.length,
+    },
+    submitted: {
+      total: submitted.length,
+      thisRun: submittedThisRun.length,
+      estimatedDeductionTotal: submitted.length,
+      estimatedDeductionThisRun: submittedThisRun.length,
+      last: lastSubmitted
+        ? {
+            ts: String(lastSubmitted.ts || ""),
+            jobId: lastSubmittedJobId,
+            title: String(lastSubmitted?.data?.title || "").trim(),
+            company: String(lastSubmitted?.data?.company || "").trim(),
+          }
+        : null,
+    },
+    reasonCounts,
+  };
+}
+
 async function exportLogs() {
   const state = await getState();
+  const settings = await getSettings();
+  const dailyCap = await getDailyCapState();
   const histories = await getRunHistory();
+  const queue = await getPortalQueue();
+  const cooldown = await getPortalCooldown();
+  const portalQuota = getPortalQuota();
+  const historySummary = summarizeHistoryForExport(histories, state.startedAt);
+  const syncOrigins = await detectPortalOriginsFromTabs();
+  const queueByOutcome = {};
+  for (const entry of queue) {
+    const key = String(entry?.outcomeType || "UNKNOWN").toUpperCase();
+    queueByOutcome[key] = Number(queueByOutcome[key] || 0) + 1;
+  }
+  const logs = Array.isArray(state.logs) ? state.logs : [];
+  const sync404Count = logs.filter((entry) =>
+    String(entry?.message || "").toLowerCase().includes("portal sync endpoint not found")
+  ).length;
+  const syncAuthCount = logs.filter((entry) =>
+    String(entry?.message || "").toLowerCase().includes("portal sync needs login")
+  ).length;
+  const syncNetworkCount = logs.filter((entry) =>
+    String(entry?.message || "").toLowerCase().includes("portal sync network issue")
+  ).length;
+  const q = portalQuota?.data && typeof portalQuota.data === "object" ? portalQuota.data : {};
+  const runMode = settings?.dryRun ? "dry_run" : settings?.autoSubmit ? "auto_submit" : "manual_submit";
+  const panelStatus = state.running ? "running" : state.paused ? "paused" : "idle";
+  const cooldownUntilMs = Number(cooldown?.untilMs || 0);
+  const cooldownRemainingMs = Math.max(0, cooldownUntilMs - Date.now());
+  const hiresPlan = String(q?.plan || "").toLowerCase() || "unknown";
+  const hireBalance = Math.max(0, Number(q?.hireBalance ?? 0));
+  const freeRemaining = Math.max(0, Number(q?.freeRemaining ?? 0));
+  const dailyRemaining = Math.max(0, Number(q?.dailyRemaining ?? 0));
+  const spendable = Math.max(0, Number(q?.spendable ?? (hireBalance + freeRemaining)));
+  const quotaUsed = Math.max(0, Number(q?.quotaUsed ?? 0));
+  const quotaTotal = Math.max(1, Number(q?.quotaTotal ?? dailyCap.cap ?? 3));
+
   const payload = {
     exportedAt: nowIso(),
     state: {
@@ -917,7 +1151,82 @@ async function exportLogs() {
       startedAt: state.startedAt,
       lastError: state.lastError
     },
-    logs: state.logs || [],
+    panel: {
+      status: panelStatus,
+      mode: runMode,
+      startedAt: state.startedAt,
+      counters: {
+        applied: Number(state.applied || 0),
+        skipped: Number(state.skipped || 0),
+        failed: Number(state.failed || 0),
+      },
+    },
+    hires: {
+      plan: hiresPlan,
+      total: {
+        paidBalance: hireBalance,
+        freeTodayCap: quotaTotal,
+        freeTodayUsed: quotaUsed,
+      },
+      left: {
+        spendable,
+        paidBalance: hireBalance,
+        freeTodayLeft: freeRemaining,
+        dailyRemaining,
+      },
+      deducted: {
+        estimatedFromSubmittedHistory: historySummary.submitted.estimatedDeductionTotal,
+        estimatedThisRun: historySummary.submitted.estimatedDeductionThisRun,
+        lastSynced: {
+          ts: lastPortalSyncSnapshot.ts || null,
+          chargedJobs: Number(lastPortalSyncSnapshot.chargedJobs || 0),
+          consumedTotal: Number(lastPortalSyncSnapshot.consumedTotal || 0),
+          freeConsumed: Number(lastPortalSyncSnapshot.freeConsumed || 0),
+          paidConsumed: Number(lastPortalSyncSnapshot.paidConsumed || 0),
+          chargeFailures: Number(lastPortalSyncSnapshot.chargeFailures || 0),
+        },
+      },
+      lastJobDeduction: {
+        fromSync: {
+          jobId: lastPortalSyncSnapshot.lastChargedJobId || null,
+          title: lastPortalSyncSnapshot.lastChargedJobTitle || null,
+          company: lastPortalSyncSnapshot.lastChargedJobCompany || null,
+          ts: lastPortalSyncSnapshot.ts || null,
+        },
+        fromHistory: historySummary.submitted.last,
+      },
+    },
+    sync: {
+      endpoint: "/api/extension/import",
+      preferredOrigin: getPortalOrigin() || null,
+      detectedOrigins: syncOrigins,
+      queue: {
+        pending: queue.length,
+        byOutcome: queueByOutcome,
+      },
+      cooldown: {
+        reason: String(cooldown?.reason || ""),
+        untilMs: cooldownUntilMs,
+        remainingMs: cooldownRemainingMs,
+      },
+      portalQuotaCache: {
+        ts: Number(portalQuota.ts || 0),
+        stale: Boolean(portalQuota.stale),
+      },
+      originState: {
+        origin: normalizePortalOrigin(portalOriginState.origin) || null,
+        failureCount: Number(portalOriginState.failureCount || 0),
+        updatedAt: Number(portalOriginState.updatedAt || 0),
+      },
+      issues: {
+        endpoint404: sync404Count,
+        authRequired: syncAuthCount,
+        network: syncNetworkCount,
+      },
+      lastSyncSnapshot: lastPortalSyncSnapshot,
+    },
+    historySummary,
+    logs,
     history: histories
   };
   return JSON.stringify(payload, null, 2);

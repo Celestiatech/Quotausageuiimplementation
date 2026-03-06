@@ -15,8 +15,8 @@ const onboardingDraftSchema = z.object({
   addressLine: z.string().trim().min(0).max(300).optional(),
   linkedinUrl: z.string().trim().min(0).max(300).optional(),
   portfolioUrl: z.string().trim().min(0).max(300).optional(),
-  currentStep: z.number().int().min(0).max(4).optional(),
-  profileQuestionIndex: z.number().int().min(0).max(6).optional(),
+  currentStep: z.number().int().min(0).max(5).optional(),
+  profileQuestionIndex: z.number().int().min(0).max(20).optional(),
   preferences: z
     .object({
       searchTerms: z.string().max(2000).optional(),
@@ -29,6 +29,14 @@ const onboardingDraftSchema = z.object({
       recentEmployer: z.string().max(300).optional(),
       confidenceLevel: z.string().max(10).optional(),
       coverLetter: z.string().max(4000).optional(),
+      searchLocations: z.string().max(1200).optional(),
+      workMode: z.string().max(80).optional(),
+      jobTypes: z.string().max(800).optional(),
+      salaryMin: z.string().max(80).optional(),
+      salaryMax: z.string().max(80).optional(),
+      preferredCountries: z.string().max(800).optional(),
+      excludedCompanies: z.string().max(1600).optional(),
+      excludedKeywords: z.string().max(1600).optional(),
     })
     .partial()
     .optional(),
@@ -71,12 +79,12 @@ export async function GET() {
     ? {
         currentStep:
           typeof draftMeta.currentStep === "number" && Number.isFinite(draftMeta.currentStep)
-            ? Math.max(0, Math.min(4, Math.floor(draftMeta.currentStep)))
+            ? Math.max(0, Math.min(5, Math.floor(draftMeta.currentStep)))
             : 0,
         profileQuestionIndex:
           typeof draftMeta.profileQuestionIndex === "number" &&
           Number.isFinite(draftMeta.profileQuestionIndex)
-            ? Math.max(0, Math.min(6, Math.floor(draftMeta.profileQuestionIndex)))
+            ? Math.max(0, Math.min(20, Math.floor(draftMeta.profileQuestionIndex)))
             : 0,
         preferences: asObject(draftMeta.preferences) || undefined,
         screeningRows: Array.isArray(draftMeta.screeningRows) ? draftMeta.screeningRows : undefined,
