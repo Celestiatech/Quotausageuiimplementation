@@ -72,6 +72,26 @@ type ScreeningAnswerApiItem = {
   updatedAt?: string;
 };
 
+type ScreeningFieldCategory = "profile" | "preferences" | "screening";
+
+type ScreeningCatalogField = {
+  key: string;
+  label: string;
+  category: ScreeningFieldCategory;
+  order: number;
+  aliases?: string[];
+};
+
+type ScreeningFieldView = {
+  questionKey: string;
+  questionLabel: string;
+  answer: string;
+  category: ScreeningFieldCategory;
+  order: number;
+  source: "site" | "extension" | "pending" | "merged";
+  duplicateCount: number;
+};
+
 function statusBadge(status: JobStatus) {
   if (status === "succeeded") return "bg-green-100 text-green-700";
   if (status === "running") return "bg-blue-100 text-blue-700";
@@ -162,6 +182,17 @@ function labelFromQuestionKey(questionKey: string) {
   const key = String(questionKey || "").trim();
   if (!key) return "Screening field";
   const prettyByKnownKey: Record<string, string> = {
+    full_name: "Full Name",
+    first_name: "First Name",
+    last_name: "Last Name",
+    email_address: "Email Address",
+    phone_number: "Phone Number",
+    current_city: "Current City",
+    state_region: "State / Region",
+    country: "Country",
+    address_line: "Address Line",
+    linkedin_url: "LinkedIn URL",
+    portfolio_url: "Portfolio URL",
     work_authorization_us: "U.S. Work Authorization",
     visa_sponsorship_required: "Need Visa Sponsorship",
     comfortable_working_onsite: "Comfortable Working Onsite",
@@ -171,14 +202,24 @@ function labelFromQuestionKey(questionKey: string) {
     years_of_experience: "Years of Experience",
     bachelors_degree_completed: "Bachelor's Degree Completed",
     english_proficiency: "English Proficiency",
+    education_level: "Education Level",
+    preferred_job_titles: "Preferred Job Titles / Search Terms",
+    preferred_locations: "Preferred Locations",
     cp_pref_search_terms: "Preferred Job Titles / Search Terms",
-    cp_pref_search_location: "Primary Search Location",
+    cp_pref_search_location: "Preferred Locations",
     cp_pref_search_locations: "Preferred Locations",
     cp_pref_years_of_experience: "Years of Experience",
     cp_pref_require_visa: "Need Visa Sponsorship",
     cp_pref_us_citizenship: "U.S. Work Authorization",
     cp_pref_desired_salary: "Desired Salary",
     cp_pref_confidence_level: "Confidence Level",
+    cp_pref_work_mode: "Remote / Onsite / Hybrid",
+    cp_pref_job_types: "Job Types",
+    cp_pref_salary_min: "Salary Range Min",
+    cp_pref_salary_max: "Salary Range Max",
+    cp_pref_preferred_countries: "Preferred Countries",
+    cp_pref_excluded_companies: "Excluded Companies",
+    cp_pref_excluded_keywords: "Excluded Keywords",
   };
   if (prettyByKnownKey[key]) return prettyByKnownKey[key];
   return key
@@ -207,6 +248,139 @@ function parseSearchTermsInput(value: string) {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 25);
+}
+
+const SCREENING_SECTION_META: Record<ScreeningFieldCategory, { title: string; subtitle: string }> = {
+  profile: {
+    title: "Profile Answers",
+    subtitle: "Core details from onboarding used across Easy Apply forms.",
+  },
+  preferences: {
+    title: "Job Preferences",
+    subtitle: "Search targets and AutoApply preferences synced to the extension.",
+  },
+  screening: {
+    title: "Custom Screening Answers",
+    subtitle: "Extra question/answer pairs captured from LinkedIn applications.",
+  },
+};
+
+const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
+  { key: "full_name", label: "Full Name", category: "profile", order: 10 },
+  { key: "first_name", label: "First Name", category: "profile", order: 20 },
+  { key: "last_name", label: "Last Name", category: "profile", order: 30 },
+  { key: "email_address", label: "Email Address", category: "profile", order: 40 },
+  { key: "phone_number", label: "Phone Number", category: "profile", order: 50 },
+  { key: "address_line", label: "Address Line", category: "profile", order: 60 },
+  { key: "current_city", label: "Current City", category: "profile", order: 70 },
+  { key: "state_region", label: "State / Region", category: "profile", order: 80 },
+  { key: "country", label: "Country", category: "profile", order: 90 },
+  { key: "linkedin_url", label: "LinkedIn URL", category: "profile", order: 100 },
+  { key: "portfolio_url", label: "Portfolio URL", category: "profile", order: 110 },
+  {
+    key: "work_authorization_us",
+    label: "U.S. Work Authorization",
+    category: "profile",
+    order: 120,
+    aliases: ["cp_pref_us_citizenship", "careerpilot_preference_us_work_authorization", "autoapply cv preference us work authorization", "autoapply cv preference: us work authorization"],
+  },
+  {
+    key: "visa_sponsorship_required",
+    label: "Need Visa Sponsorship",
+    category: "profile",
+    order: 130,
+    aliases: ["cp_pref_require_visa", "careerpilot_preference_need_visa_sponsorship", "careerpilot_preference_require_visa", "autoapply cv preference need visa sponsorship", "autoapply cv preference: need visa sponsorship"],
+  },
+  {
+    key: "years_of_experience",
+    label: "Years of Experience",
+    category: "profile",
+    order: 140,
+    aliases: ["cp_pref_years_of_experience", "autoapply cv preference years of experience", "autoapply cv preference: years of experience"],
+  },
+  { key: "english_proficiency", label: "English Proficiency", category: "profile", order: 150 },
+  { key: "education_level", label: "Education Level", category: "profile", order: 160 },
+  {
+    key: "cp_pref_search_terms",
+    label: "Preferred Job Titles / Search Terms",
+    category: "preferences",
+    order: 200,
+    aliases: [
+      "preferred_job_titles",
+      "preferred job titles",
+      "preferred_job_titles_search_terms",
+      "preferred job titles search terms",
+      "careerpilot_preference_search_terms",
+      "autoapply cv preference search terms",
+      "autoapply cv preference: search terms",
+    ],
+  },
+  {
+    key: "cp_pref_search_locations",
+    label: "Preferred Locations",
+    category: "preferences",
+    order: 210,
+    aliases: ["preferred_locations", "preferred locations", "cp_pref_search_location", "primary search location", "careerpilot_preference_search_location", "autoapply cv preference search location", "autoapply cv preference: search location"],
+  },
+  {
+    key: "cp_pref_work_mode",
+    label: "Remote / Onsite / Hybrid",
+    category: "preferences",
+    order: 220,
+    aliases: ["remote_onsite_hybrid", "work_mode_preference"],
+  },
+  { key: "cp_pref_job_types", label: "Job Types", category: "preferences", order: 230, aliases: ["job_types"] },
+  {
+    key: "cp_pref_preferred_countries",
+    label: "Preferred Countries",
+    category: "preferences",
+    order: 240,
+    aliases: ["preferred_countries"],
+  },
+  {
+    key: "cp_pref_confidence_level",
+    label: "Confidence Level",
+    category: "preferences",
+    order: 250,
+    aliases: ["autoapply cv preference confidence level", "autoapply cv preference: confidence level"],
+  },
+  { key: "cp_pref_salary_min", label: "Salary Range Min", category: "preferences", order: 260 },
+  { key: "cp_pref_salary_max", label: "Salary Range Max", category: "preferences", order: 270 },
+  { key: "cp_pref_desired_salary", label: "Desired Salary", category: "preferences", order: 280 },
+  { key: "cp_pref_excluded_companies", label: "Excluded Companies", category: "preferences", order: 290 },
+  { key: "cp_pref_excluded_keywords", label: "Excluded Keywords", category: "preferences", order: 300 },
+];
+
+const SCREENING_FIELD_LOOKUP = (() => {
+  const map = new Map<string, ScreeningCatalogField>();
+  for (const field of SCREENING_FIELD_CATALOG) {
+    for (const rawValue of [field.key, field.label, ...(field.aliases || [])]) {
+      const candidates = [
+        String(rawValue || "").trim(),
+        normalizeLabel(rawValue),
+        toQuestionKey(String(rawValue || "").trim()),
+      ].filter(Boolean);
+      for (const candidate of candidates) {
+        if (!map.has(candidate)) {
+          map.set(candidate, field);
+        }
+      }
+    }
+  }
+  return map;
+})();
+
+function lookupCatalogField(...values: Array<string | undefined>) {
+  for (const value of values) {
+    const raw = String(value || "").trim();
+    if (!raw) continue;
+    const candidates = [raw, normalizeLabel(raw), toQuestionKey(raw)].filter(Boolean);
+    for (const candidate of candidates) {
+      const match = SCREENING_FIELD_LOOKUP.get(candidate);
+      if (match) return match;
+    }
+  }
+  return null;
 }
 
 export default function Jobs() {
@@ -710,37 +884,125 @@ export default function Jobs() {
     });
   }, [jobs, searchQuery]);
 
-  const allScreeningFields = useMemo(() => {
-    const merged = new Map<string, { questionKey: string; questionLabel: string; answer: string }>();
-    const upsert = (rawKey: string, questionLabel: string, answer: string) => {
-      const questionKey = toQuestionKey(rawKey || questionLabel);
+  const screeningSections = useMemo(() => {
+    const merged = new Map<string, ScreeningFieldView>();
+    let customOrder = 0;
+
+    const sourceRank = (source: ScreeningFieldView["source"]) => {
+      if (source === "pending") return 4;
+      if (source === "site") return 3;
+      if (source === "extension") return 2;
+      return 1;
+    };
+
+    const upsert = (
+      rawKey: string,
+      questionLabel: string,
+      answer: string,
+      source: ScreeningFieldView["source"],
+    ) => {
+      const catalogField = lookupCatalogField(rawKey, questionLabel);
+      const questionKey = catalogField?.key || toQuestionKey(rawKey || questionLabel);
       if (!questionKey) return;
+
       const cleanAnswer = String(answer || "").trim();
-      const cleanLabel = String(questionLabel || "").trim() || siteQuestionLabels[questionKey] || labelFromQuestionKey(questionKey);
+      const cleanLabel =
+        catalogField?.label ||
+        String(questionLabel || "").trim() ||
+        siteQuestionLabels[questionKey] ||
+        labelFromQuestionKey(questionKey);
+      const category = catalogField?.category || "screening";
+      const order = catalogField?.order ?? 1000 + customOrder++;
       const existing = merged.get(questionKey);
+
+      if (!existing) {
+        merged.set(questionKey, {
+          questionKey,
+          questionLabel: cleanLabel,
+          answer: cleanAnswer,
+          category,
+          order,
+          source,
+          duplicateCount: 1,
+        });
+        return;
+      }
+
+      const shouldReplaceAnswer =
+        (!existing.answer && cleanAnswer) ||
+        (cleanAnswer && sourceRank(source) > sourceRank(existing.source));
+
       merged.set(questionKey, {
-        questionKey,
-        questionLabel: existing?.questionLabel || cleanLabel,
-        answer: cleanAnswer || existing?.answer || "",
+        ...existing,
+        questionLabel: existing.questionLabel || cleanLabel,
+        answer: shouldReplaceAnswer ? cleanAnswer : existing.answer,
+        category,
+        order: Math.min(existing.order, order),
+        source:
+          existing.source === source
+            ? existing.source
+            : sourceRank(source) === sourceRank(existing.source)
+              ? "merged"
+              : sourceRank(source) > sourceRank(existing.source)
+                ? source
+                : existing.source,
+        duplicateCount: existing.duplicateCount + 1,
       });
     };
 
     for (const [rawKey, rawAnswer] of Object.entries(siteScreeningAnswers)) {
-      const questionKey = toQuestionKey(rawKey);
-      if (!questionKey) continue;
-      upsert(questionKey, siteQuestionLabels[questionKey] || labelFromQuestionKey(questionKey), String(rawAnswer || ""));
-    }
-    for (const [rawKey, rawAnswer] of Object.entries(extensionStatus.screeningAnswers || {})) {
-      const questionKey = toQuestionKey(rawKey);
-      if (!questionKey) continue;
-      upsert(questionKey, siteQuestionLabels[questionKey] || labelFromQuestionKey(questionKey), String(rawAnswer || ""));
-    }
-    for (const pending of extensionStatus.pendingQuestions || []) {
-      upsert(pending.questionKey || pending.questionLabel, pending.questionLabel, resolveKnownAnswer(pending.questionKey, pending.questionLabel, extensionStatus.screeningAnswers || {}));
+      upsert(
+        rawKey,
+        siteQuestionLabels[toQuestionKey(rawKey)] || labelFromQuestionKey(toQuestionKey(rawKey)),
+        String(rawAnswer || ""),
+        "site",
+      );
     }
 
-    return Array.from(merged.values()).sort((a, b) => a.questionLabel.localeCompare(b.questionLabel));
-  }, [siteScreeningAnswers, siteQuestionLabels, extensionStatus.pendingQuestions, extensionStatus.screeningAnswers, answerDrafts]);
+    for (const [rawKey, rawAnswer] of Object.entries(extensionStatus.screeningAnswers || {})) {
+      upsert(
+        rawKey,
+        siteQuestionLabels[toQuestionKey(rawKey)] || labelFromQuestionKey(toQuestionKey(rawKey)),
+        String(rawAnswer || ""),
+        "extension",
+      );
+    }
+
+    for (const pending of extensionStatus.pendingQuestions || []) {
+      upsert(
+        pending.questionKey || pending.questionLabel,
+        pending.questionLabel,
+        resolveKnownAnswer(
+          pending.questionKey,
+          pending.questionLabel,
+          extensionStatus.screeningAnswers || {},
+        ),
+        "pending",
+      );
+    }
+
+    const grouped = {
+      profile: [] as ScreeningFieldView[],
+      preferences: [] as ScreeningFieldView[],
+      screening: [] as ScreeningFieldView[],
+    };
+
+    for (const field of merged.values()) {
+      grouped[field.category].push(field);
+    }
+
+    return (Object.keys(SCREENING_SECTION_META) as ScreeningFieldCategory[])
+      .map((category) => ({
+        category,
+        title: SCREENING_SECTION_META[category].title,
+        subtitle: SCREENING_SECTION_META[category].subtitle,
+        fields: grouped[category].sort((a, b) => {
+          if (a.order !== b.order) return a.order - b.order;
+          return a.questionLabel.localeCompare(b.questionLabel);
+        }),
+      }))
+      .filter((section) => section.fields.length > 0);
+  }, [siteScreeningAnswers, siteQuestionLabels, extensionStatus.pendingQuestions, extensionStatus.screeningAnswers]);
 
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || null;
 
@@ -1063,31 +1325,87 @@ export default function Jobs() {
           </div>
         ) : null}
 
-        {allScreeningFields.length > 0 ? (
-          <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
-            <h3 className="font-semibold text-gray-900">Saved Screening Answers</h3>
-            {allScreeningFields.map((field) => (
-              <div key={field.questionKey} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <div className="text-sm font-semibold text-gray-900">{field.questionLabel}</div>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={answerDrafts[field.questionKey] ?? field.answer}
-                    onChange={(e) =>
-                      setAnswerDrafts((prev) => ({
-                        ...prev,
-                        [field.questionKey]: e.target.value,
-                      }))
-                    }
-                    placeholder="Type answer and click Save"
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:border-purple-400"
-                  />
-                  <button
-                    onClick={() => void saveAnswerForQuestion(field.questionKey, field.questionLabel)}
-                    disabled={savingAnswerKey === field.questionKey}
-                    className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
-                  >
-                    {savingAnswerKey === field.questionKey ? "Saving..." : "Save"}
-                  </button>
+        {screeningSections.length > 0 ? (
+          <div className="mt-6 border-t border-gray-200 pt-5 space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-gray-900">Saved Screening Answers</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Deduped to match your onboarding fields and synced extension answers.
+                </p>
+              </div>
+              <div className="text-xs font-medium text-gray-500">
+                {screeningSections.reduce((count, section) => count + section.fields.length, 0)} unique field(s)
+              </div>
+            </div>
+
+            {screeningSections.map((section) => (
+              <div key={section.category} className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-900">{section.title}</h4>
+                    <p className="text-xs text-gray-500 mt-1">{section.subtitle}</p>
+                  </div>
+                  <div className="text-xs font-medium text-gray-500">{section.fields.length} field(s)</div>
+                </div>
+
+                <div className="grid xl:grid-cols-2 gap-3">
+                  {section.fields.map((field) => {
+                    const draftValue = answerDrafts[field.questionKey] ?? field.answer;
+                    const isPending = field.source === "pending";
+                    const sourceBadge =
+                      field.source === "site"
+                        ? "Saved on site"
+                        : field.source === "extension"
+                          ? "From extension"
+                          : field.source === "pending"
+                            ? "Needs answer"
+                            : "Merged";
+
+                    return (
+                      <div
+                        key={field.questionKey}
+                        className={`rounded-xl border p-4 ${
+                          isPending ? "border-amber-200 bg-amber-50" : "border-gray-200 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">{field.questionLabel}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                              <span className="rounded-full bg-gray-100 px-2 py-0.5">{sourceBadge}</span>
+                              {field.duplicateCount > 1 ? (
+                                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                                  merged {field.duplicateCount} duplicates
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                          <input
+                            value={draftValue}
+                            onChange={(e) =>
+                              setAnswerDrafts((prev) => ({
+                                ...prev,
+                                [field.questionKey]: e.target.value,
+                              }))
+                            }
+                            placeholder="Type answer and click Save"
+                            className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:border-purple-400"
+                          />
+                          <button
+                            onClick={() => void saveAnswerForQuestion(field.questionKey, field.questionLabel)}
+                            disabled={savingAnswerKey === field.questionKey || !String(draftValue || "").trim()}
+                            className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
+                          >
+                            {savingAnswerKey === field.questionKey ? "Saving..." : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}

@@ -5,6 +5,7 @@ import "./globals.css";
 const GOOGLE_TAG_ID = "G-L6QMNGGDVH";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://autoapplycv.in"),
   title: "AutoApply CV",
   description: "AutoApply CV - quota usage and job application UI",
 };

@@ -246,7 +246,7 @@ export function SeoManager() {
     const seo = resolveSeo(location.pathname);
     const baseUrl =
       ((import.meta as any).env?.VITE_SITE_URL as string | undefined)?.replace(/\/+$/, "") ||
-      window.location.origin;
+      "https://autoapplycv.in";
     const canonical = `${baseUrl}${location.pathname}`;
 
     document.title = seo.title;

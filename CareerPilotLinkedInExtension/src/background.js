@@ -10,16 +10,16 @@ const PORTAL_IMPORT_QUEUE_KEY = "cpPortalImportQueue";
 const PORTAL_SYNC_COOLDOWN_KEY = "cpPortalSyncCooldown";
 const PORTAL_ORIGIN_STATE_KEY = "cpPortalOriginState";
 const PORTAL_ORIGIN_FAILURE_THRESHOLD = 3;
-const PORTAL_DEFAULT_ORIGIN = "https://autoapplycv.vercel.app";
+const PORTAL_DEFAULT_ORIGIN = "https://autoapplycv.in";
 const PORTAL_REMOTE_ORIGIN_PRIORITY = [
   PORTAL_DEFAULT_ORIGIN,
-  "https://autoapplycv.in",
   "https://www.autoapplycv.in",
+  "https://autoapplycv.vercel.app",
 ];
 const PORTAL_FALLBACK_ORIGINS = [
   PORTAL_DEFAULT_ORIGIN,
-  "https://autoapplycv.in",
   "https://www.autoapplycv.in",
+  "https://autoapplycv.vercel.app",
   "http://localhost:3001",
   "http://localhost:3000",
 ];

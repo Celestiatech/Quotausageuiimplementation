@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { Upload, Target, Rocket, Check, ArrowRight, Play } from 'lucide-react';
+import { Download, Target, Rocket, Check, ArrowRight, Play } from 'lucide-react';
 
 export default function HowItWorks() {
   const navigate = useNavigate();
@@ -7,14 +7,14 @@ export default function HowItWorks() {
   const steps = [
     {
       number: '01',
-      icon: Upload,
-      title: 'Upload Your Resume',
-      description: 'Import from LinkedIn or upload your existing resume. Our AI analyzes your skills, experience, and achievements in seconds.',
+      icon: Download,
+      title: 'Install Extension',
+      description: 'Install the AutoApply CV Chrome extension, connect it to your account, and launch your LinkedIn automation flow in minutes.',
       details: [
-        'LinkedIn quick import',
-        'PDF/DOCX support',
-        'AI skill extraction',
-        'Profile completeness check'
+        'One-click Chrome extension setup',
+        'Connect directly with AutoApply CV',
+        'Sync screening answers from dashboard',
+        'Start from LinkedIn Jobs instantly'
       ],
       gradient: 'from-blue-500 to-cyan-500'
     },
@@ -135,7 +135,7 @@ export default function HowItWorks() {
 
           <div className="space-y-8">
             {[
-              { time: 'Day 1', action: 'Sign up and upload resume', result: 'Profile ready in 5 minutes' },
+              { time: 'Day 1', action: 'Install extension and connect account', result: 'Automation ready in 5 minutes' },
               { time: 'Day 2-3', action: 'Get job matches', result: 'Receive 20-50 compatible jobs' },
               { time: 'Week 1', action: 'Apply to positions', result: 'Send 10-30 tailored applications' },
               { time: 'Week 2-3', action: 'Interview invitations', result: '3-5 interview callbacks' },

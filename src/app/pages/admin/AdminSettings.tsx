@@ -284,7 +284,7 @@ export default function AdminSettings() {
           <div>
             <h2 className="font-bold text-gray-900">Extension Dashboard Origins</h2>
             <p className="text-xs text-gray-500 mt-1">
-              One origin per line. Example: `http://localhost:3000` or `https://autoapplycv.vercel.app`.
+              One origin per line. Example: `https://autoapplycv.in` or `http://localhost:3000`.
             </p>
           </div>
           <div className="text-xs text-gray-500">{originCount} origin(s)</div>
@@ -295,7 +295,7 @@ export default function AdminSettings() {
           onChange={(e) => setAllowedOriginsText(e.target.value)}
           rows={8}
           className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-mono"
-          placeholder={"http://localhost:3000\nhttp://127.0.0.1:3000\nhttps://autoapplycv.vercel.app\nhttps://autoapplycv.in"}
+          placeholder={"https://autoapplycv.in\nhttp://localhost:3000\nhttp://127.0.0.1:3000\nhttps://autoapplycv.vercel.app"}
         />
 
         <div className="flex items-center gap-2">

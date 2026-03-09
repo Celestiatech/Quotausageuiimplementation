@@ -5,12 +5,12 @@ function sendMessage(message) {
 }
 
 const JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search/?f_AL=true";
-const PROD_BASE_URL = "https://autoapplycv.vercel.app";
+const PROD_BASE_URL = "https://autoapplycv.in";
 const DEV_BASE_URL = "http://localhost:3001";
 const REMOTE_BASE_CANDIDATES = [
-  "https://autoapplycv.vercel.app",
   "https://autoapplycv.in",
   "https://www.autoapplycv.in",
+  "https://autoapplycv.vercel.app",
 ];
 let accountConnected = false;
 let portalBaseUrl = PROD_BASE_URL;
@@ -42,9 +42,9 @@ function buildPortalUrl(path) {
 async function resolvePortalBaseUrl() {
   try {
     const tabs = await chrome.tabs.query({ url: [
-      "https://autoapplycv.vercel.app/*",
       "https://autoapplycv.in/*",
       "https://www.autoapplycv.in/*",
+      "https://autoapplycv.vercel.app/*",
       "http://localhost:3001/*",
       "http://127.0.0.1:3001/*",
     ] });
@@ -86,9 +86,9 @@ function isAccountConnected(settings) {
 
 async function detectSignedInUserFromTabs() {
   const patterns = [
-    "https://autoapplycv.vercel.app/*",
     "https://autoapplycv.in/*",
     "https://www.autoapplycv.in/*",
+    "https://autoapplycv.vercel.app/*",
     "http://localhost:3001/*",
     "http://127.0.0.1:3001/*",
   ];

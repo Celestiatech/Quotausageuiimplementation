@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
+import { create } from 'zustand';
 
 interface User {
   id: string;
@@ -26,59 +27,101 @@ interface User {
   onboardingCompleted?: boolean;
 }
 
-interface AuthContextType {
+type Role = 'user' | 'admin';
+
+type AuthStore = {
   user: User | null;
-  isAuthenticated: boolean;
-  isAdmin: boolean;
   isBootstrapping: boolean;
-  login: (email: string, password: string, role?: 'user' | 'admin') => Promise<void>;
+  hasBootstrapped: boolean;
+  bootstrap: () => Promise<void>;
+  login: (email: string, password: string, role?: Role) => Promise<void>;
   logout: () => void;
   signup: (name: string, email: string, password: string) => Promise<void>;
   incrementQuota: () => void;
   refreshUser: () => Promise<void>;
-}
+};
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+type AuthContextType = {
+  user: User | null;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  isBootstrapping: boolean;
+  login: (email: string, password: string, role?: Role) => Promise<void>;
+  logout: () => void;
+  signup: (name: string, email: string, password: string) => Promise<void>;
+  incrementQuota: () => void;
+  refreshUser: () => Promise<void>;
+};
+
 const SESSION_KEY = 'user';
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
+function readStoredUser() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    const bootstrap = async () => {
-      const storedUser = localStorage.getItem(SESSION_KEY);
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-      }
-      try {
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const serverUser = (data?.data?.user || data?.user) as User | undefined;
-        if (serverUser) {
-          setUser(serverUser);
-          localStorage.setItem(SESSION_KEY, JSON.stringify(serverUser));
-        }
-      } catch {
-        // Keep local session fallback when API is unreachable.
-      } finally {
-        setIsBootstrapping(false);
-      }
-    };
-    bootstrap();
-  }, []);
-
-  const login = async (email: string, password: string, role: 'user' | 'admin' = 'user') => {
-    if (user && user.role !== role) {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
-      setUser(null);
-      localStorage.removeItem(SESSION_KEY);
+function writeStoredUser(user: User | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (user) {
+      window.localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    } else {
+      window.localStorage.removeItem(SESSION_KEY);
     }
+  } catch {
+    // ignore storage failures
+  }
+}
+
+async function fetchCurrentUser() {
+  const res = await fetch('/api/auth/me', { credentials: 'include' });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return ((data?.data?.user || data?.user) as User | undefined) || null;
+}
+
+const useAuthStore = create<AuthStore>((set, get) => ({
+  user: null,
+  isBootstrapping: true,
+  hasBootstrapped: false,
+
+  bootstrap: async () => {
+    if (get().hasBootstrapped) return;
+    set({ hasBootstrapped: true, isBootstrapping: true });
+
+    const storedUser = readStoredUser();
+    if (storedUser) {
+      set({ user: storedUser });
+    }
+
+    try {
+      const serverUser = await fetchCurrentUser();
+      if (serverUser) {
+        set({ user: serverUser });
+        writeStoredUser(serverUser);
+      }
+    } catch {
+      // Keep local session fallback when API is unreachable.
+    } finally {
+      set({ isBootstrapping: false });
+    }
+  },
+
+  login: async (email: string, password: string, role: Role = 'user') => {
+    const currentUser = get().user;
+    if (currentUser && currentUser.role !== role) {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+      set({ user: null });
+      writeStoredUser(null);
+    }
+
     const endpoint = role === 'admin' ? '/api/auth/admin/login' : '/api/auth/login';
-    const payload = role === 'admin'
-      ? { email, password }
-      : { email, password, role };
+    const payload = role === 'admin' ? { email, password } : { email, password, role };
     const res = await fetch(endpoint, {
       method: 'POST',
       credentials: 'include',
@@ -90,11 +133,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(data?.message || 'Invalid email or password');
     }
     const sessionUser = (data?.data?.user || data?.user) as User;
-    setUser(sessionUser);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
-  };
+    set({ user: sessionUser });
+    writeStoredUser(sessionUser);
+  },
 
-  const signup = async (name: string, email: string, password: string) => {
+  signup: async (name: string, email: string, password: string) => {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
       credentials: 'include',
@@ -106,20 +149,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(data?.message || 'Failed to create account');
     }
     const sessionUser = (data?.data?.user || data?.user) as User;
-    setUser(sessionUser);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
-  };
+    set({ user: sessionUser });
+    writeStoredUser(sessionUser);
+  },
 
-  const logout = () => {
+  logout: () => {
     fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
-    setUser(null);
-    localStorage.removeItem(SESSION_KEY);
-  };
+    set({ user: null });
+    writeStoredUser(null);
+  },
 
-  const incrementQuota = () => {
+  incrementQuota: () => {
+    const user = get().user;
     if (!user) return;
     if (user.dailyHireUsed >= user.dailyHireCap) return;
     if (user.hireBalance <= 0) return;
+
     const updatedUser: User = {
       ...user,
       quotaUsed: user.quotaUsed + 1,
@@ -127,53 +172,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hireBalance: Math.max(0, user.hireBalance - 1),
       hireSpent: user.hireSpent + 1,
     };
-    setUser(updatedUser);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser));
-  };
+    set({ user: updatedUser });
+    writeStoredUser(updatedUser);
+  },
 
-  const refreshUser = async () => {
-    const res = await fetch('/api/auth/me', { credentials: 'include' });
-    if (!res.ok) return;
-    const data = await res.json();
-    const serverUser = (data?.data?.user || data?.user) as User | undefined;
+  refreshUser: async () => {
+    const serverUser = await fetchCurrentUser();
     if (!serverUser) return;
-    setUser(serverUser);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(serverUser));
-  };
+    set({ user: serverUser });
+    writeStoredUser(serverUser);
+  },
+}));
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user,
-        isAdmin: user?.role === 'admin',
-        isBootstrapping,
-        login,
-        logout,
-        signup,
-        incrementQuota,
-        refreshUser
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const bootstrap = useAuthStore((state) => state.bootstrap);
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
+
+  return <>{children}</>;
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    return {
-      user: null,
-      isAuthenticated: false,
-      isAdmin: false,
-      isBootstrapping: true,
-      login: async () => {},
-      logout: () => {},
-      signup: async () => {},
-      incrementQuota: () => {},
-      refreshUser: async () => {}
-    };
-  }
-  return context;
+export function useAuth(): AuthContextType {
+  const user = useAuthStore((state) => state.user);
+  const isBootstrapping = useAuthStore((state) => state.isBootstrapping);
+  const login = useAuthStore((state) => state.login);
+  const logout = useAuthStore((state) => state.logout);
+  const signup = useAuthStore((state) => state.signup);
+  const incrementQuota = useAuthStore((state) => state.incrementQuota);
+  const refreshUser = useAuthStore((state) => state.refreshUser);
+
+  return {
+    user,
+    isAuthenticated: !!user,
+    isAdmin: user?.role === 'admin',
+    isBootstrapping,
+    login,
+    logout,
+    signup,
+    incrementQuota,
+    refreshUser,
+  };
 }
