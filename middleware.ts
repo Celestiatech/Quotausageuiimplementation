@@ -61,13 +61,13 @@ export function middleware(req: NextRequest) {
   res.headers.set("cross-origin-opener-policy", "same-origin");
   res.headers.set("cross-origin-resource-policy", "same-origin");
   res.headers.set("origin-agent-cluster", "?1");
-  res.headers.set("x-robots-tag", "noindex, nofollow, noarchive");
   if (isProd) {
     res.headers.set("strict-transport-security", "max-age=31536000; includeSubDomains; preload");
   }
   res.headers.set("content-security-policy", csp);
 
   if (path.startsWith("/api/")) {
+    res.headers.set("x-robots-tag", "noindex, nofollow, noarchive");
     res.headers.set("cache-control", "no-store");
   }
 

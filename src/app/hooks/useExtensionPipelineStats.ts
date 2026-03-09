@@ -10,6 +10,62 @@ export type ExtensionPipelineStats = {
   loaded: boolean;
 };
 
+function normalizeCount(value: unknown) {
+  return Math.max(0, Math.floor(Number(value || 0)));
+}
+
+function isSameLocalDay(value: unknown, now: Date) {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) return false;
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
+function buildFallbackSummary(history: Record<string, unknown>) {
+  const now = new Date();
+  const appliedItems = Array.isArray(history?.applied) ? history.applied : [];
+  const skippedItems = Array.isArray(history?.skipped) ? history.skipped : [];
+  const failedItems = Array.isArray(history?.failed) ? history.failed : [];
+  const externalItems = Array.isArray(history?.external) ? history.external : [];
+
+  return {
+    totals: {
+      applied: appliedItems.length,
+      skipped: skippedItems.length,
+      failed: failedItems.length,
+      external: externalItems.length,
+    },
+    today: {
+      applied: appliedItems.filter((item: any) => isSameLocalDay(item?.ts, now)).length,
+      skipped: skippedItems.filter((item: any) => isSameLocalDay(item?.ts, now)).length,
+      failed: failedItems.filter((item: any) => isSameLocalDay(item?.ts, now)).length,
+      external: externalItems.filter((item: any) => isSameLocalDay(item?.ts, now)).length,
+    },
+  };
+}
+
+function normalizeImportEntry(entry: any, outcomeType: string) {
+  return {
+    ts: String(entry?.ts || ""),
+    entryId: String(entry?.entryId || "").trim(),
+    runId: String(entry?.runId || "").trim(),
+    outcomeType: String(outcomeType || entry?.outcomeType || "").trim().toUpperCase(),
+    data: entry?.data && typeof entry.data === "object" ? entry.data : {},
+  };
+}
+
+function importKeyForEntry(entry: ReturnType<typeof normalizeImportEntry>) {
+  if (entry.entryId) return entry.entryId;
+  const data = entry.data && typeof entry.data === "object" ? entry.data : {};
+  const jobId = String(data?.jobId || data?.externalJobId || "");
+  const jobUrl = String(data?.jobUrl || "");
+  const reasonCode = String(data?.reasonCode || "").toUpperCase();
+  return `${entry.outcomeType}:${jobId || jobUrl}:${reasonCode}:${entry.ts}`;
+}
+
 export function useExtensionPipelineStats() {
   const [stats, setStats] = useState<ExtensionPipelineStats>({
     applied: 0,
@@ -25,120 +81,122 @@ export function useExtensionPipelineStats() {
     if (typeof window === "undefined") return;
 
     let active = true;
-    const requestId = `cp_pipe_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const timeoutMs = 6000;
     const timer = window.setTimeout(() => {
       if (!active) return;
       setStats((prev) => ({ ...prev, loaded: true }));
-      window.removeEventListener("message", onMessage);
     }, timeoutMs);
-    const pingInterval = window.setInterval(() => {
+    const requestPrefix = `cp_pipe_${Date.now()}_`;
+
+    const requestSnapshot = () => {
       if (!active) return;
       try {
-        window.postMessage({ type: "CP_WEB_PING", requestId }, window.location.origin);
+        window.postMessage(
+          {
+            type: "CP_WEB_PING",
+            requestId: `${requestPrefix}${Math.random().toString(36).slice(2, 8)}`,
+          },
+          window.location.origin,
+        );
       } catch {
         // ignore
       }
-    }, 500);
+    };
+
+    const pingInterval = window.setInterval(() => {
+      requestSnapshot();
+    }, 10000);
 
     function onMessage(event: MessageEvent) {
       if (!active || event.source !== window) return;
       const data = event.data as any;
-      if (!data || data.type !== "CP_WEB_PONG" || data.requestId !== requestId) return;
+      if (!data || data.type !== "CP_WEB_PONG") return;
+      if (!String(data.requestId || "").startsWith(requestPrefix)) return;
+
       const history = data.history || {};
-      const appliedItems = Array.isArray(history.applied) ? history.applied : [];
-      const skippedItems = Array.isArray(history.skipped) ? history.skipped : [];
-      const failedItems = Array.isArray(history.failed) ? history.failed : [];
-      const applied = Math.max(appliedItems.length, Number(data?.state?.applied || 0));
-      const skipped = Math.max(skippedItems.length, Number(data?.state?.skipped || 0));
-      const failed = Math.max(failedItems.length, Number(data?.state?.failed || 0));
-      const now = new Date();
-      const isSameLocalDay = (value: unknown) => {
-        const date = new Date(String(value || ""));
-        if (Number.isNaN(date.getTime())) return false;
-        return (
-          date.getFullYear() === now.getFullYear() &&
-          date.getMonth() === now.getMonth() &&
-          date.getDate() === now.getDate()
-        );
-      };
-      const appliedTodayFromHistory = appliedItems.filter((item: any) => isSameLocalDay(item?.ts)).length;
-      const skippedToday = skippedItems.filter((item: any) => isSameLocalDay(item?.ts)).length;
-      const failedToday = failedItems.filter((item: any) => isSameLocalDay(item?.ts)).length;
-      const appliedTodayFromCap = Number(data?.dailyCap?.used ?? NaN);
-      const appliedToday = Number.isFinite(appliedTodayFromCap)
-        ? Math.max(0, Math.max(appliedTodayFromHistory, appliedTodayFromCap))
-        : Math.max(0, appliedTodayFromHistory);
+      const historySummary =
+        data.historySummary && typeof data.historySummary === "object"
+          ? data.historySummary
+          : buildFallbackSummary(history);
+      const totals =
+        historySummary?.totals && typeof historySummary.totals === "object"
+          ? historySummary.totals
+          : buildFallbackSummary(history).totals;
+      const today =
+        historySummary?.today && typeof historySummary.today === "object"
+          ? historySummary.today
+          : buildFallbackSummary(history).today;
 
       // Best-effort: import extension outcomes into the web DB so dashboard pages can show recent activity.
-      // This runs on the dashboard origin using cookies (no extension token needed).
+      // Use stable entry ids first so refreshes do not rebase the import window.
       try {
-        const importedKey = "cpExtImportedOutcomeKeys";
+        const importedKey = "cpExtImportedOutcomeIdsV2";
         const raw = localStorage.getItem(importedKey) || "[]";
         const seen = new Set<string>(Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : []);
-        const toEntry = (x: any) => ({
-          ts: String(x?.ts || ""),
-          outcomeType: String(x?.outcomeType || ""),
-          data: x?.data && typeof x.data === "object" ? x.data : {},
-        });
         const candidates = [
-          ...appliedItems.map(toEntry),
-          ...skippedItems.map(toEntry),
-          ...failedItems.map(toEntry),
+          ...(Array.isArray(history.applied) ? history.applied : []).map((item: any) => normalizeImportEntry(item, "APPLIED")),
+          ...(Array.isArray(history.skipped) ? history.skipped : []).map((item: any) => normalizeImportEntry(item, "SKIPPED")),
+          ...(Array.isArray(history.failed) ? history.failed : []).map((item: any) => normalizeImportEntry(item, "FAILED")),
+          ...(Array.isArray(history.external) ? history.external : []).map((item: any) => normalizeImportEntry(item, "EXTERNAL")),
         ]
-          .filter((e) => e.ts && e.outcomeType)
-          .slice(-120);
-        const keyFor = (e: any) => {
-          const jobId = String(e?.data?.jobId || "");
-          const jobUrl = String(e?.data?.jobUrl || "");
-          return `${String(e.outcomeType || "")}:${jobId || jobUrl}:${String(e.ts || "")}`;
-        };
-        const delta = candidates.filter((e) => !seen.has(keyFor(e))).slice(0, 60);
+          .filter((entry) => entry.ts && entry.outcomeType)
+          .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+          .slice(-160);
+        const delta = candidates.filter((entry) => !seen.has(importKeyForEntry(entry))).slice(0, 80);
         if (delta.length) {
           void fetch("/api/extension/import", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ entries: delta }),
+            body: JSON.stringify({ entries: delta, limit: 80 }),
             credentials: "include",
-          }).then(() => {
-            try {
-              window.dispatchEvent(new Event("cp:extensionImported"));
-            } catch {
-              // ignore
-            }
-            for (const e of delta) seen.add(keyFor(e));
-            const next = Array.from(seen).slice(-3000);
-            localStorage.setItem(importedKey, JSON.stringify(next));
-          }).catch(() => {
-            // ignore import failures
-          });
+          })
+            .then(() => {
+              for (const entry of delta) seen.add(importKeyForEntry(entry));
+              const next = Array.from(seen).slice(-5000);
+              localStorage.setItem(importedKey, JSON.stringify(next));
+              try {
+                window.dispatchEvent(new Event("cp:extensionImported"));
+              } catch {
+                // ignore
+              }
+            })
+            .catch(() => {
+              // ignore import failures
+            });
         }
       } catch {
         // ignore import failures
       }
 
       setStats({
-        applied: Math.max(0, applied),
-        skipped: Math.max(0, skipped),
-        failed: Math.max(0, failed),
-        appliedToday: Math.max(0, appliedToday),
-        skippedToday: Math.max(0, skippedToday),
-        failedToday: Math.max(0, failedToday),
+        applied: normalizeCount(totals.applied),
+        skipped: normalizeCount(totals.skipped) + normalizeCount(totals.external),
+        failed: normalizeCount(totals.failed),
+        appliedToday: Math.max(normalizeCount(today.applied), normalizeCount(data?.dailyCap?.used)),
+        skippedToday: normalizeCount(today.skipped) + normalizeCount(today.external),
+        failedToday: normalizeCount(today.failed),
         loaded: true,
       });
       window.clearTimeout(timer);
-      window.clearInterval(pingInterval);
-      window.removeEventListener("message", onMessage);
     }
 
+    const onImported = () => requestSnapshot();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") requestSnapshot();
+    };
+
     window.addEventListener("message", onMessage);
-    window.postMessage({ type: "CP_WEB_PING", requestId }, window.location.origin);
+    window.addEventListener("cp:extensionImported", onImported as EventListener);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    requestSnapshot();
 
     return () => {
       active = false;
       window.clearTimeout(timer);
       window.clearInterval(pingInterval);
       window.removeEventListener("message", onMessage);
+      window.removeEventListener("cp:extensionImported", onImported as EventListener);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 

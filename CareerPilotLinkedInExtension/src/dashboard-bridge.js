@@ -233,6 +233,8 @@ window.addEventListener("message", async (event) => {
     runtimeId: chrome?.runtime?.id || "",
     state: null,
     dailyCap: null,
+    historySummary: null,
+    currentRunSummary: null,
     linkedIn: {
       hasLinkedInTab: false,
       hasJobsTab: false
@@ -266,6 +268,8 @@ window.addEventListener("message", async (event) => {
     if (bootstrap && bootstrap.ok) {
       response.state = bootstrap.state || null;
       response.dailyCap = bootstrap.dailyCap || null;
+      response.historySummary = bootstrap.historySummary || null;
+      response.currentRunSummary = bootstrap.currentRunSummary || null;
       response.portalQuota = bootstrap.portalQuota || null;
       response.installed = true;
       response.runtimeBootstrapOk = true;

@@ -8,6 +8,7 @@ type IncomingEntry = {
   ts: string;
   outcomeType: string;
   entryId?: string;
+  runId?: string;
   data?: Record<string, unknown>;
 };
 
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
         ts: String(e?.ts || ""),
         outcomeType: normalizeOutcome(e?.outcomeType),
         entryId: String(e?.entryId || "").trim(),
+        runId: String(e?.runId || "").trim(),
         data: e?.data && typeof e.data === "object" ? (e.data as Record<string, unknown>) : {},
       }))
       .filter((e) => Boolean(e.ts));
@@ -133,11 +135,13 @@ export async function POST(req: NextRequest) {
       const company = String(data.company || "").trim();
       const workLocation = String(data.workLocation || "").trim();
       const reasonCode = String(data.reasonCode || "").trim();
+      const runId = String(entry.runId || "").trim();
 
       const status = toJobStatus(entry.outcomeType);
       const criteriaJson = {
         source: "linkedin_extension",
         entryId: effectiveEntryId,
+        runId,
         jobId,
         jobUrl,
         pageUrl,
@@ -189,6 +193,7 @@ export async function POST(req: NextRequest) {
             metadataJson: {
               source: "linkedin_extension",
               entryId: effectiveEntryId,
+              runId,
               reasonCode,
               jobUrl,
               pageUrl,
@@ -208,6 +213,7 @@ export async function POST(req: NextRequest) {
               ...(typeof existingApp.metadataJson === "object" && existingApp.metadataJson ? (existingApp.metadataJson as any) : {}),
               source: "linkedin_extension",
               entryId: effectiveEntryId,
+              runId,
               reasonCode,
               jobUrl,
               pageUrl,
@@ -236,6 +242,7 @@ export async function POST(req: NextRequest) {
           metadataJson: {
             source: "linkedin_extension",
             entryId: effectiveEntryId,
+            runId,
             externalJobId: jobId,
             jobUrl,
             pageUrl,

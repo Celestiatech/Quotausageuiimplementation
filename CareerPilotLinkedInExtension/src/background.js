@@ -1,8 +1,10 @@
 const MAX_LOG_ENTRIES = 500;
 const MAX_HISTORY_ENTRIES = 1000;
+const MAX_RUN_SUMMARIES = 50;
 const API_TIMEOUT_MS = 8000;
 const EXT_DAILY_CAP = 3;
 const DAILY_CAP_STORAGE_KEY = "cpDailyCapState";
+const RUN_SUMMARY_STORAGE_KEY = "cpRunSummaries";
 const SETTINGS_SCHEMA_VERSION = 2;
 const PORTAL_IMPORT_QUEUE_KEY = "cpPortalImportQueue";
 const PORTAL_SYNC_COOLDOWN_KEY = "cpPortalSyncCooldown";
@@ -679,6 +681,192 @@ const HISTORY_KEY_MAP = {
   SKIPPED: "cpSkippedHistory"
 };
 
+function emptyRunCounts() {
+  return {
+    applied: 0,
+    skipped: 0,
+    failed: 0,
+    external: 0,
+    submitted: 0,
+  };
+}
+
+function normalizeCount(value) {
+  return Math.max(0, Math.floor(Number(value || 0)));
+}
+
+function normalizeRunCounts(raw) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  return {
+    applied: normalizeCount(source.applied),
+    skipped: normalizeCount(source.skipped),
+    failed: normalizeCount(source.failed),
+    external: normalizeCount(source.external),
+    submitted: normalizeCount(source.submitted),
+  };
+}
+
+function normalizeRunOutcome(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    ts: String(raw.ts || ""),
+    outcomeType: String(raw.outcomeType || "").toUpperCase(),
+    reasonCode: String(raw.reasonCode || "").toUpperCase(),
+    jobId: String(raw.jobId || ""),
+    title: String(raw.title || "").trim(),
+    company: String(raw.company || "").trim(),
+    entryId: String(raw.entryId || "").trim(),
+  };
+}
+
+function normalizeRunSummary(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const runId = String(raw.runId || raw.startedAt || "").trim();
+  if (!runId) return null;
+  const startedAt = String(raw.startedAt || runId).trim() || runId;
+  return {
+    runId,
+    startedAt,
+    endedAt: raw.endedAt ? String(raw.endedAt) : null,
+    lastUpdatedAt: String(raw.lastUpdatedAt || startedAt || nowIso()),
+    counts: normalizeRunCounts(raw.counts),
+    lastOutcome: normalizeRunOutcome(raw.lastOutcome),
+  };
+}
+
+function sortRunSummaries(runs) {
+  return [...runs].sort((a, b) => {
+    const aTime = new Date(String(a?.startedAt || a?.runId || 0)).getTime();
+    const bTime = new Date(String(b?.startedAt || b?.runId || 0)).getTime();
+    return aTime - bTime;
+  });
+}
+
+async function getRunSummariesState() {
+  const snapshot = await chrome.storage.local.get(RUN_SUMMARY_STORAGE_KEY);
+  const raw = snapshot?.[RUN_SUMMARY_STORAGE_KEY] || {};
+  const runs = sortRunSummaries(
+    (Array.isArray(raw.runs) ? raw.runs : [])
+      .map((entry) => normalizeRunSummary(entry))
+      .filter(Boolean)
+      .slice(-MAX_RUN_SUMMARIES)
+  );
+  const currentRunId = String(raw.currentRunId || "").trim();
+  return {
+    currentRunId: currentRunId && runs.some((entry) => entry.runId === currentRunId) ? currentRunId : null,
+    runs,
+    updatedAt: String(raw.updatedAt || ""),
+  };
+}
+
+async function setRunSummariesState(next) {
+  const runs = sortRunSummaries(
+    (Array.isArray(next?.runs) ? next.runs : [])
+      .map((entry) => normalizeRunSummary(entry))
+      .filter(Boolean)
+      .slice(-MAX_RUN_SUMMARIES)
+  );
+  const payload = {
+    currentRunId: String(next?.currentRunId || "").trim() || null,
+    runs,
+    updatedAt: String(next?.updatedAt || nowIso()),
+  };
+  if (payload.currentRunId && !runs.some((entry) => entry.runId === payload.currentRunId)) {
+    payload.currentRunId = null;
+  }
+  await chrome.storage.local.set({ [RUN_SUMMARY_STORAGE_KEY]: payload });
+  return payload;
+}
+
+function findRunSummary(store, runId) {
+  const key = String(runId || "").trim();
+  if (!key) return null;
+  return (Array.isArray(store?.runs) ? store.runs : []).find((entry) => entry.runId === key) || null;
+}
+
+async function upsertRunSummary(runId, updater) {
+  const key = String(runId || "").trim();
+  if (!key) return null;
+  const store = await getRunSummariesState();
+  const existing = findRunSummary(store, key) || {
+    runId: key,
+    startedAt: key,
+    endedAt: null,
+    lastUpdatedAt: key,
+    counts: emptyRunCounts(),
+    lastOutcome: null,
+  };
+  const nextSummary = normalizeRunSummary(
+    typeof updater === "function" ? updater(existing, store) : existing
+  );
+  if (!nextSummary) return null;
+  const nextRuns = [...store.runs.filter((entry) => entry.runId !== key), nextSummary];
+  const nextStore = await setRunSummariesState({
+    ...store,
+    runs: nextRuns,
+    updatedAt: nowIso(),
+  });
+  return findRunSummary(nextStore, key);
+}
+
+async function activateRunSummary(runId, startedAt = runId) {
+  const key = String(runId || "").trim();
+  if (!key) return null;
+  const summary = await upsertRunSummary(key, (existing) => ({
+    ...existing,
+    runId: key,
+    startedAt: String(startedAt || key).trim() || key,
+    endedAt: null,
+    lastUpdatedAt: nowIso(),
+  }));
+  const store = await getRunSummariesState();
+  await setRunSummariesState({
+    ...store,
+    currentRunId: key,
+    updatedAt: nowIso(),
+  });
+  return summary;
+}
+
+async function finishRunSummary(runId, endedAt = nowIso()) {
+  const key = String(runId || "").trim();
+  if (!key) return null;
+  const summary = await upsertRunSummary(key, (existing) => ({
+    ...existing,
+    endedAt: String(endedAt || nowIso()),
+    lastUpdatedAt: nowIso(),
+  }));
+  const store = await getRunSummariesState();
+  if (store.currentRunId === key) {
+    await setRunSummariesState({
+      ...store,
+      currentRunId: null,
+      updatedAt: nowIso(),
+    });
+  }
+  return summary;
+}
+
+function getCurrentRunSummary(store, state) {
+  const startedAt = String(state?.startedAt || "").trim();
+  if (startedAt) return findRunSummary(store, startedAt);
+  if (store?.currentRunId) return findRunSummary(store, store.currentRunId);
+  return null;
+}
+
+function withDurableRunCounts(state, runSummary) {
+  const next = { ...(state || {}) };
+  const counts = runSummary?.counts;
+  if (!counts) return next;
+  next.applied = Math.max(normalizeCount(next.applied), normalizeCount(counts.applied));
+  next.skipped = Math.max(
+    normalizeCount(next.skipped),
+    normalizeCount(counts.skipped) + normalizeCount(counts.external)
+  );
+  next.failed = Math.max(normalizeCount(next.failed), normalizeCount(counts.failed));
+  return next;
+}
+
 const DEFAULT_STATE = {
   running: false,
   paused: false,
@@ -1045,7 +1233,7 @@ async function pushLog(message, level = "info", meta = undefined) {
   return entry;
 }
 
-function summarizeHistoryForExport(histories, startedAt) {
+function summarizeHistoryForExport(histories, startedAt, currentRunSummary = null) {
   const applied = Array.isArray(histories?.applied) ? histories.applied : [];
   const skipped = Array.isArray(histories?.skipped) ? histories.skipped : [];
   const failed = Array.isArray(histories?.failed) ? histories.failed : [];
@@ -1057,6 +1245,16 @@ function summarizeHistoryForExport(histories, startedAt) {
     if (!hasStart) return false;
     const ts = new Date(String(entry?.ts || "")).getTime();
     return Number.isFinite(ts) && ts >= startMs;
+  };
+  const now = new Date();
+  const isSameLocalDay = (entry) => {
+    const ts = new Date(String(entry?.ts || ""));
+    if (Number.isNaN(ts.getTime())) return false;
+    return (
+      ts.getFullYear() === now.getFullYear() &&
+      ts.getMonth() === now.getMonth() &&
+      ts.getDate() === now.getDate()
+    );
   };
 
   const reasonCounts = {};
@@ -1084,6 +1282,36 @@ function summarizeHistoryForExport(histories, startedAt) {
       failed: failed.length,
       external: external.length,
     },
+    today: {
+      applied: applied.filter((entry) => isSameLocalDay(entry)).length,
+      skipped: skipped.filter((entry) => isSameLocalDay(entry)).length,
+      failed: failed.filter((entry) => isSameLocalDay(entry)).length,
+      external: external.filter((entry) => isSameLocalDay(entry)).length,
+      submitted: submitted.filter((entry) => isSameLocalDay(entry)).length,
+    },
+    currentRun: currentRunSummary
+      ? {
+          runId: String(currentRunSummary.runId || ""),
+          startedAt: String(currentRunSummary.startedAt || ""),
+          endedAt: currentRunSummary.endedAt ? String(currentRunSummary.endedAt) : null,
+          counts: normalizeRunCounts(currentRunSummary.counts),
+          lastOutcome: normalizeRunOutcome(currentRunSummary.lastOutcome),
+        }
+      : hasStart
+      ? {
+          runId: String(startedAt || ""),
+          startedAt: String(startedAt || ""),
+          endedAt: null,
+          counts: {
+            applied: applied.filter((entry) => inRun(entry)).length,
+            skipped: skipped.filter((entry) => inRun(entry)).length,
+            failed: failed.filter((entry) => inRun(entry)).length,
+            external: external.filter((entry) => inRun(entry)).length,
+            submitted: submittedThisRun.length,
+          },
+          lastOutcome: null,
+        }
+      : null,
     submitted: {
       total: submitted.length,
       thisRun: submittedThisRun.length,
@@ -1107,10 +1335,12 @@ async function exportLogs() {
   const settings = await getSettings();
   const dailyCap = await getDailyCapState();
   const histories = await getRunHistory();
+  const runStore = await getRunSummariesState();
+  const currentRunSummary = getCurrentRunSummary(runStore, state);
   const queue = await getPortalQueue();
   const cooldown = await getPortalCooldown();
   const portalQuota = getPortalQuota();
-  let historySummary = summarizeHistoryForExport(histories, state.startedAt);
+  let historySummary = summarizeHistoryForExport(histories, state.startedAt, currentRunSummary);
   const historyTotalsCount =
     Number(historySummary?.totals?.applied || 0) +
     Number(historySummary?.totals?.skipped || 0) +
@@ -1257,6 +1487,7 @@ async function exportLogs() {
       lastSyncSnapshot: lastPortalSyncSnapshot,
     },
     historySummary,
+    runSummaries: runStore,
     logs,
     history: histories
   };
@@ -1389,12 +1620,47 @@ async function getKnownAppliedJobIds(limit = 5000) {
   return Array.from(set).slice(-Math.max(1, Number(limit || 5000)));
 }
 
-async function appendRunHistory(outcomeType, data = {}) {
+function buildHistoryEntryId(outcomeType, ts, data = {}) {
+  const payload = data && typeof data === "object" ? data : {};
+  const jobKey =
+    extractLinkedInJobId(payload.jobUrl) ||
+    extractLinkedInJobId(payload.pageUrl) ||
+    extractLinkedInJobId(payload.jobId) ||
+    String(payload.jobId || payload.externalJobId || "").trim() ||
+    "unknown";
+  const reasonCode = String(payload.reasonCode || "").trim().toUpperCase() || "NA";
+  return `${String(outcomeType || "SKIPPED").toUpperCase()}:${jobKey}:${reasonCode}:${String(ts || "").trim()}`;
+}
+
+function buildRunOutcomeSnapshot(entry) {
+  const data = entry?.data && typeof entry.data === "object" ? entry.data : {};
+  return {
+    ts: String(entry?.ts || ""),
+    outcomeType: String(entry?.outcomeType || "").toUpperCase(),
+    reasonCode: String(data.reasonCode || "").trim().toUpperCase(),
+    jobId: String(
+      extractLinkedInJobId(data.jobUrl) ||
+      extractLinkedInJobId(data.pageUrl) ||
+      data.jobId ||
+      data.externalJobId ||
+      ""
+    ),
+    title: String(data.title || "").trim(),
+    company: String(data.company || "").trim(),
+    entryId: String(entry?.entryId || "").trim(),
+  };
+}
+
+async function appendRunHistory(outcomeType, data = {}, opts = {}) {
   const key = HISTORY_KEY_MAP[String(outcomeType || "").toUpperCase()] || HISTORY_KEY_MAP.SKIPPED;
   const current = await chrome.storage.local.get(key);
   const list = Array.isArray(current[key]) ? current[key] : [];
+  const ts = String(opts.ts || nowIso());
+  const runId = String(opts.runId || "").trim();
   const entry = {
-    ts: nowIso(),
+    ts,
+    entryId: String(opts.entryId || buildHistoryEntryId(outcomeType, ts, data)).trim(),
+    runId: runId || null,
     outcomeType: String(outcomeType || "SKIPPED").toUpperCase(),
     data
   };
@@ -1408,12 +1674,45 @@ async function appendRunHistory(outcomeType, data = {}) {
 
 async function persistProgress(applied, skipped, failed) {
   const state = await getState();
+  const runStore = await getRunSummariesState();
+  const currentRun = getCurrentRunSummary(runStore, state);
+  const currentCounts = currentRun?.counts || emptyRunCounts();
+  const nextApplied = Math.max(
+    normalizeCount(state.applied),
+    normalizeCount(currentCounts.applied),
+    normalizeCount(applied ?? state.applied)
+  );
+  const nextSkipped = Math.max(
+    normalizeCount(state.skipped),
+    normalizeCount(currentCounts.skipped) + normalizeCount(currentCounts.external),
+    normalizeCount(skipped ?? state.skipped)
+  );
+  const nextFailed = Math.max(
+    normalizeCount(state.failed),
+    normalizeCount(currentCounts.failed),
+    normalizeCount(failed ?? state.failed)
+  );
   const next = await setState({
     ...state,
-    applied: Number(applied ?? state.applied),
-    skipped: Number(skipped ?? state.skipped),
-    failed: Number(failed ?? state.failed)
+    applied: nextApplied,
+    skipped: nextSkipped,
+    failed: nextFailed
   });
+  if (currentRun?.runId) {
+    await upsertRunSummary(currentRun.runId, (existing) => ({
+      ...existing,
+      lastUpdatedAt: nowIso(),
+      counts: {
+        ...existing.counts,
+        applied: Math.max(normalizeCount(existing.counts?.applied), nextApplied),
+        skipped: Math.max(
+          normalizeCount(existing.counts?.skipped),
+          Math.max(0, nextSkipped - normalizeCount(existing.counts?.external))
+        ),
+        failed: Math.max(normalizeCount(existing.counts?.failed), nextFailed),
+      },
+    }));
+  }
   const settings = await getSettings();
   void postToApi(settings, "/extension/progress", {
     ts: nowIso(),
@@ -1472,6 +1771,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     "cpFailedHistory",
     "cpExternalHistory",
     "cpSkippedHistory",
+    RUN_SUMMARY_STORAGE_KEY,
   ]);
   await chrome.storage.local.set({
     cpSettings: settings,
@@ -1481,6 +1781,10 @@ chrome.runtime.onInstalled.addListener(async () => {
     cpFailedHistory: Array.isArray(existing.cpFailedHistory) ? existing.cpFailedHistory : [],
     cpExternalHistory: Array.isArray(existing.cpExternalHistory) ? existing.cpExternalHistory : [],
     cpSkippedHistory: Array.isArray(existing.cpSkippedHistory) ? existing.cpSkippedHistory : [],
+    [RUN_SUMMARY_STORAGE_KEY]:
+      existing?.[RUN_SUMMARY_STORAGE_KEY] && typeof existing[RUN_SUMMARY_STORAGE_KEY] === "object"
+        ? existing[RUN_SUMMARY_STORAGE_KEY]
+        : { currentRunId: null, runs: [], updatedAt: nowIso() },
     [DAILY_CAP_STORAGE_KEY]: capState,
   });
 });
@@ -1491,9 +1795,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "CP_GET_BOOTSTRAP") {
       const dailyCap = await getDailyCapState();
+      const state = await getState();
+      const runStore = await getRunSummariesState();
+      const currentRunSummary = getCurrentRunSummary(runStore, state);
+      const durableState = withDurableRunCounts(state, currentRunSummary);
+      const history = await getRunHistory();
+      const historySummary = summarizeHistoryForExport(history, durableState.startedAt, currentRunSummary);
       sendResponse({
         ok: true,
-        state: await getState(),
+        state: durableState,
         settings: await getSettings(),
         dailyCap: {
           cap: dailyCap.cap,
@@ -1501,6 +1811,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           remaining: Math.max(0, dailyCap.cap - dailyCap.used),
           resetAt: dailyCap.resetAt,
         },
+        currentRunSummary,
+        runSummaries: runStore,
+        historySummary,
         portalQuota: getPortalQuota(),
       });
       return;
@@ -1564,6 +1877,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         : "manual submit (no auto-submit)";
       if (state.running && !state.paused) {
         if (forceRestart) {
+          if (state.startedAt) {
+            await finishRunSummary(state.startedAt, nowIso());
+          }
+          const nextRunId = nowIso();
           const reset = await setState({
             ...state,
             running: false,
@@ -1579,24 +1896,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             ...reset,
             running: true,
             paused: false,
-            startedAt: nowIso(),
+            startedAt: nextRunId,
             lastError: null
           });
-          await pushLog(`Run started: ${modeText}`, "info");
-          sendResponse({ ok: true, state: next });
-          return;
-        }
-        await pushLog("Start ignored (already running)", "warn");
-        sendResponse({ ok: true, state });
+          await activateRunSummary(nextRunId, nextRunId);
+        await pushLog(`Run started: ${modeText}`, "info");
+        sendResponse({ ok: true, state: next });
         return;
       }
+      await pushLog("Start ignored (already running)", "warn");
+      sendResponse({ ok: true, state: withDurableRunCounts(state, getCurrentRunSummary(await getRunSummariesState(), state)) });
+      return;
+    }
+      const nextRunId = String(state.startedAt || "").trim() || nowIso();
       const next = await setState({
         ...state,
         running: true,
         paused: false,
-        startedAt: state.startedAt || nowIso(),
+        startedAt: nextRunId,
         lastError: null
       });
+      await activateRunSummary(nextRunId, nextRunId);
       await pushLog(`Run started: ${modeText}`, "info");
       sendResponse({ ok: true, state: next });
       return;
@@ -1609,6 +1929,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         paused: true,
         running: false
       });
+      if (state.startedAt) {
+        await activateRunSummary(state.startedAt, state.startedAt);
+      }
       await pushLog("Run paused", "warn");
       sendResponse({ ok: true, state: next });
       return;
@@ -1638,17 +1961,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       const state = await getState();
+      const nextRunId = String(state.startedAt || "").trim() || nowIso();
       const next = await setState({
         ...state,
+        startedAt: nextRunId,
         paused: false,
         running: true
       });
+      await activateRunSummary(nextRunId, nextRunId);
       await pushLog("Run resumed", "info");
       sendResponse({ ok: true, state: next });
       return;
     }
 
     if (message.type === "CP_STOP") {
+      const state = await getState();
+      if (state.startedAt) {
+        await finishRunSummary(state.startedAt, nowIso());
+      }
       const next = await resetRunState();
       await pushLog("Run stopped", "warn");
       sendResponse({ ok: true, state: next });
@@ -1662,7 +1992,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === "CP_PROGRESS") {
-      const state = await getState();
+      const rawState = await getState();
+      const runStore = await getRunSummariesState();
+      const currentRunSummary = getCurrentRunSummary(runStore, rawState);
+      const state = withDurableRunCounts(rawState, currentRunSummary);
       const incomingApplied = Math.max(0, Number(message.applied ?? state.applied ?? 0));
       const appliedDelta = Math.max(0, incomingApplied - Number(state.applied || 0));
 
@@ -1676,7 +2009,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         if (remaining <= 0 && spendable <= 0) {
           const blocked = await setState({
-            ...state,
+            ...rawState,
+            applied: state.applied,
+            skipped: state.skipped,
+            failed: state.failed,
             running: false,
             paused: true,
             lastError: "Daily application cap reached (3/day)",
@@ -1706,7 +2042,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         spendable = portalSpendable();
       }
       if (dailyCap.used >= dailyCap.cap && next.running && spendable <= 0) {
-        const blocked = await setState({
+          const blocked = await setState({
           ...next,
           running: false,
           paused: true,
@@ -1742,7 +2078,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "CP_RECORD_OUTCOME") {
       const outcomeType = String(message.outcomeType || "SKIPPED").toUpperCase();
       const data = message.data || {};
-      const entry = await appendRunHistory(outcomeType, message.data || {});
+      const state = await getState();
+      const runStore = await getRunSummariesState();
+      const runId =
+        String(state.startedAt || "").trim() ||
+        String(runStore.currentRunId || "").trim() ||
+        nowIso();
+      if (runId) {
+        await activateRunSummary(runId, runId);
+      }
+      const entry = await appendRunHistory(outcomeType, message.data || {}, { runId });
+      await upsertRunSummary(runId, (existing) => {
+        const counts = normalizeRunCounts(existing.counts);
+        if (outcomeType === "APPLIED") counts.applied += 1;
+        else if (outcomeType === "FAILED") counts.failed += 1;
+        else if (outcomeType === "EXTERNAL") counts.external += 1;
+        else counts.skipped += 1;
+        if (outcomeType === "APPLIED" && String(data.reasonCode || "").toUpperCase() === "SUBMITTED") {
+          counts.submitted += 1;
+        }
+        return {
+          ...existing,
+          runId,
+          startedAt: String(existing.startedAt || runId || "").trim() || runId,
+          lastUpdatedAt: nowIso(),
+          counts,
+          lastOutcome: buildRunOutcomeSnapshot(entry),
+        };
+      });
 
       // Always enqueue outcome for portal import so Hires deduction stays in sync even if the dashboard isn't open.
       try {
@@ -1750,7 +2113,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           ts: String(entry?.ts || nowIso()),
           outcomeType,
           data,
-          entryId: buildPortalImportEntryId({ ts: entry?.ts || nowIso(), outcomeType, data }),
+          entryId: String(entry?.entryId || buildPortalImportEntryId({ ts: entry?.ts || nowIso(), outcomeType, data })),
         });
       } catch {
         // ignore enqueue failures
@@ -1803,7 +2166,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         cpAppliedHistory: [],
         cpFailedHistory: [],
         cpExternalHistory: [],
-        cpSkippedHistory: []
+        cpSkippedHistory: [],
+        [RUN_SUMMARY_STORAGE_KEY]: { currentRunId: null, runs: [], updatedAt: nowIso() },
       });
       sendResponse({ ok: true });
       return;

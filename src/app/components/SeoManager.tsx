@@ -165,17 +165,17 @@ const SEO_BY_PATH: Record<string, SeoEntry> = {
   "/login": {
     title: "Login | AutoApply CV",
     description: "Login to your AutoApply CV account.",
-    index: false,
+    index: true,
   },
   "/signup": {
     title: "Sign Up | AutoApply CV",
     description: "Create your AutoApply CV account.",
-    index: false,
+    index: true,
   },
   "/admin/login": {
     title: "Admin Login | AutoApply CV",
     description: "Admin access portal for AutoApply CV platform operations.",
-    index: false,
+    index: true,
   },
 };
 
@@ -233,7 +233,7 @@ function resolveSeo(pathname: string): SeoEntry {
     return {
       title: "AutoApply CV Dashboard",
       description: "Private dashboard area.",
-      index: false,
+      index: true,
     };
   }
   return DEFAULT_SEO;
@@ -265,4 +265,3 @@ export function SeoManager() {
 
   return null;
 }
-
