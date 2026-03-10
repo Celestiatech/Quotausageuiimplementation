@@ -592,10 +592,10 @@ export default function Jobs() {
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
   const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
-    version: "1.1.1",
+    version: "1.1.2",
     displayName: "AutoApply CV LinkedIn Copilot",
-    downloadFileName: formatExtensionPackageFileName("1.1.1"),
-    downloadBaseName: formatExtensionPackageName("1.1.1"),
+    downloadFileName: formatExtensionPackageFileName("1.1.2"),
+    downloadBaseName: formatExtensionPackageName("1.1.2"),
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -611,9 +611,9 @@ export default function Jobs() {
     installed: false,
   });
   const currentPackageBaseName =
-    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.1");
+    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.2");
   const currentPackageFileName =
-    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.1");
+    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.2");
   const installedPackageName =
     extensionStatus.installed && extensionStatus.version ? formatExtensionPackageName(extensionStatus.version) : "";
   const versionBadgeRef = useRef<HTMLSpanElement | null>(null);

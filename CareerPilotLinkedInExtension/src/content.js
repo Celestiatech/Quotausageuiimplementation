@@ -18,6 +18,17 @@ const NO_APPLY_TTL_MS = 35 * 60 * 1000;
 const GENERIC_SKIP_TTL_MS = 20 * 60 * 1000;
 const MAX_JOB_OUTCOME_CACHE_ITEMS = 8000;
 const KNOWN_APPLIED_REFRESH_MS = 30 * 1000;
+const REMOTE_LOCATION_KEYWORDS = [
+  "Remote",
+  "Work from home",
+  "WFH",
+  "Telecommute",
+  "Distributed",
+  "Virtual",
+  "Anywhere",
+  "100% Remote",
+  "Telework",
+];
 
 let panelEl = null;
 let runningLoop = false;
@@ -29,6 +40,7 @@ let debugUiEnabled = false;
 let runSeenJobKeys = new Set();
 let runSearchTermCursor = 0;
 let runSearchTermSuccessCount = 0;
+let runRemoteLocationKeywordCursor = 0;
 let lastRunStartedAt = null;
 let dailyLimitHandledRunId = "";
 let resumeChoiceCache = new Map();
@@ -610,7 +622,7 @@ function isJobsPage() {
 }
 
 function isJobsSearchPage() {
-  return window.location.pathname.startsWith("/jobs/search");
+  return window.location.pathname.startsWith("/jobs/search") && !isPostApplySearchPage();
 }
 
 function isJobsViewPage() {
@@ -944,14 +956,46 @@ function getApplyButtonFromDetailPane() {
   return { type: "none", button: null };
 }
 
+function isDetailPaneStillLoading() {
+  const detailRoot = getBySelectorList([
+    ".jobs-search__job-details",
+    ".jobs-details",
+    ".jobs-unified-top-card",
+    ".jobs-details-top-card",
+    ".scaffold-layout__detail"
+  ]);
+  if (!detailRoot) return false;
+  if (detailRoot.matches?.("[aria-busy='true']")) return true;
+
+  const loadingSelectors = [
+    "[aria-busy='true']",
+    ".artdeco-loader",
+    ".artdeco-loader__bar",
+    "[class*='skeleton']",
+    "[class*='loading']",
+    "[data-test-loading]"
+  ];
+  for (const selector of loadingSelectors) {
+    const matches = safeQuerySelectorAll(detailRoot, selector, null, "detail pane loading check");
+    if (matches.some((node) => isVisibleElement(node))) return true;
+  }
+  return false;
+}
+
 async function waitForApplyButtonFromDetailPane(settings, timeoutMs = 7000, context = "detail pane") {
   const timeout = Math.max(1000, Number(timeoutMs || 7000));
   const start = Date.now();
+  let deadline = start + timeout;
   let polls = 0;
-  while (Date.now() - start < timeout) {
+  let extendedForLoading = false;
+  let extendedForExternal = false;
+  let firstExternalSeenAt = 0;
+  let lastExternalAction = null;
+  while (Date.now() < deadline) {
     polls += 1;
     const action = getApplyButtonFromDetailPane();
-    if (action.button) {
+    const detailLoading = isDetailPaneStillLoading();
+    if (action.type === "easy" && action.button) {
       if (polls > 1) {
         await debugLog(settings, "Apply button appeared after wait", {
           context,
@@ -961,6 +1005,25 @@ async function waitForApplyButtonFromDetailPane(settings, timeoutMs = 7000, cont
         });
       }
       return action;
+    }
+
+    if (action.type === "external" && action.button) {
+      lastExternalAction = action;
+      if (!firstExternalSeenAt) firstExternalSeenAt = Date.now();
+      const externalVisibleForMs = Date.now() - firstExternalSeenAt;
+      const minimumDecisionMs = 1400;
+      const stableExternalMs = 1200;
+      if (!detailLoading && Date.now() - start >= minimumDecisionMs && externalVisibleForMs >= stableExternalMs) {
+        await debugLog(settings, "External apply button confirmed after settle wait", {
+          context,
+          polls,
+          elapsedMs: Date.now() - start,
+          externalVisibleForMs
+        });
+        return action;
+      }
+    } else if (action.type === "none") {
+      firstExternalSeenAt = 0;
     }
 
     if (polls % 5 === 0) {
@@ -975,7 +1038,35 @@ async function waitForApplyButtonFromDetailPane(settings, timeoutMs = 7000, cont
         detailRoot.scrollBy({ top: 120, behavior: "smooth" });
       }
     }
+
+    if (Date.now() + 220 >= deadline) {
+      if (!extendedForLoading && detailLoading) {
+        extendedForLoading = true;
+        deadline += 2200;
+        await debugLog(settings, "Extending apply button wait because detail pane is still loading", {
+          context,
+          polls,
+          elapsedMs: Date.now() - start
+        });
+      } else if (!extendedForExternal && lastExternalAction?.button) {
+        extendedForExternal = true;
+        deadline += 1500;
+        await debugLog(settings, "Extending apply button wait to confirm external apply state", {
+          context,
+          polls,
+          elapsedMs: Date.now() - start
+        });
+      }
+    }
     await sleep(220);
+  }
+  if (lastExternalAction?.button) {
+    await debugLog(settings, "Returning external apply after full wait window", {
+      context,
+      polls,
+      elapsedMs: Date.now() - start
+    });
+    return lastExternalAction;
   }
   await debugLog(settings, "Apply button wait timed out", {
     context,
@@ -1030,6 +1121,25 @@ function extractLinkedInJobIdFromUrl(url) {
   return "";
 }
 
+function extractLinkedInViewJobIdFromUrl(url) {
+  const raw = String(url || "");
+  if (!raw) return "";
+  const viewMatch = raw.match(/\/jobs\/view\/(\d+)/);
+  return viewMatch?.[1] ? String(viewMatch[1]) : "";
+}
+
+function buildCanonicalLinkedInJobUrl(jobId, fallbackUrl = "") {
+  const normalizedJobId = String(jobId || "").trim();
+  if (/^\d+$/.test(normalizedJobId)) {
+    return `https://www.linkedin.com/jobs/view/${normalizedJobId}/`;
+  }
+  const fallbackJobId = extractLinkedInViewJobIdFromUrl(fallbackUrl) || extractLinkedInJobIdFromUrl(fallbackUrl);
+  if (/^\d+$/.test(fallbackJobId)) {
+    return `https://www.linkedin.com/jobs/view/${fallbackJobId}/`;
+  }
+  return String(fallbackUrl || "");
+}
+
 function extractLinkedInJobIdFromEntityUrn(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -1043,31 +1153,39 @@ function extractLinkedInJobIdFromEntityUrn(value) {
 
 function getJobKeyFromCard(card) {
   // Prefer stable LinkedIn job IDs; do not fall back to title (causes duplicate opens).
-  const anchor = getCardAnchor(card);
-  const href = String(anchor?.href || "");
-  const fromHref = extractLinkedInJobIdFromUrl(href);
-  if (fromHref) return fromHref;
-
-  const anyViewAnchor = card?.querySelector?.("a[href*='/jobs/view/']");
-  const anyHref = String(anyViewAnchor?.href || "");
-  const fromAnyHref = extractLinkedInJobIdFromUrl(anyHref);
-  if (fromAnyHref) return fromAnyHref;
-
-  const urnCandidates = [
-    anchor?.getAttribute?.("data-entity-urn"),
-    card?.getAttribute?.("data-entity-urn"),
-    card?.querySelector?.("[data-entity-urn]")?.getAttribute?.("data-entity-urn"),
+  const explicitCandidates = [
+    card?.getAttribute?.("data-occludable-job-id"),
+    card?.closest?.("[data-occludable-job-id]")?.getAttribute?.("data-occludable-job-id"),
     card?.getAttribute?.("data-job-id"),
     card?.querySelector?.("[data-job-id]")?.getAttribute?.("data-job-id"),
+  ].filter(Boolean);
+  for (const candidate of explicitCandidates) {
+    const explicit = String(candidate || "").trim();
+    if (explicit && /^\d+$/.test(explicit)) return explicit;
+  }
+
+  const urnCandidates = [
+    getCardAnchor(card)?.getAttribute?.("data-entity-urn"),
+    card?.getAttribute?.("data-entity-urn"),
+    card?.querySelector?.("[data-entity-urn]")?.getAttribute?.("data-entity-urn"),
   ].filter(Boolean);
   for (const urn of urnCandidates) {
     const id = extractLinkedInJobIdFromEntityUrn(urn) || extractLinkedInJobIdFromUrl(urn);
     if (id) return id;
   }
 
-  const idHolder = card?.closest?.("[data-occludable-job-id]") || card;
-  const explicit = String(idHolder?.getAttribute?.("data-occludable-job-id") || "").trim();
-  if (explicit && /^\d+$/.test(explicit)) return explicit;
+  const hrefCandidates = [
+    String(getCardAnchor(card)?.href || ""),
+    String(card?.querySelector?.("a[href*='/jobs/view/']")?.href || ""),
+  ].filter(Boolean);
+  for (const href of hrefCandidates) {
+    const fromViewHref = extractLinkedInViewJobIdFromUrl(href);
+    if (fromViewHref) return fromViewHref;
+  }
+  for (const href of hrefCandidates) {
+    const fromHref = extractLinkedInJobIdFromUrl(href);
+    if (fromHref) return fromHref;
+  }
 
   return "";
 }
@@ -1137,6 +1255,82 @@ function getJobDescriptionText() {
   ]);
   const text = String(el?.textContent || "").trim();
   return text || "";
+}
+
+function getDetailPaneTitleText() {
+  const el = getBySelectorList([
+    ".job-details-jobs-unified-top-card__job-title",
+    ".jobs-unified-top-card h1",
+    ".jobs-unified-top-card__job-title",
+    ".jobs-details-top-card__job-title",
+    ".jobs-details__main-content h1",
+  ]);
+  return cleanQuestionLabel(el?.textContent || "");
+}
+
+function getDetailPaneCompanyText() {
+  const el = getBySelectorList([
+    ".job-details-jobs-unified-top-card__company-name",
+    ".jobs-unified-top-card__company-name",
+    ".jobs-details-top-card__company-url",
+    ".jobs-unified-top-card__subtitle-primary-grouping a",
+  ]);
+  return cleanQuestionLabel(el?.textContent || "");
+}
+
+function getDetailPaneSnapshot() {
+  return {
+    jobId: extractLinkedInJobIdFromUrl(window.location.href),
+    url: window.location.href,
+    title: getDetailPaneTitleText(),
+    company: getDetailPaneCompanyText(),
+    description: getJobDescriptionText(),
+    aboutCompany: getAboutCompanyText(),
+  };
+}
+
+function textLooselyMatches(value, target) {
+  const left = normalizeLabel(value);
+  const right = normalizeLabel(target);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  return left.includes(right) || right.includes(left);
+}
+
+function didDetailPaneRefreshForCard(snapshot, cardMeta, previousContext = {}) {
+  const targetTitle = String(cardMeta?.titleRaw || cardMeta?.title || "").trim();
+  const targetCompany = String(cardMeta?.companyRaw || cardMeta?.company || "").trim();
+  const previousTitle = String(previousContext?.title || "").trim();
+  const previousDescription = normalizeLabel(String(previousContext?.description || "").slice(0, 500));
+  const currentDescription = normalizeLabel(String(snapshot?.description || "").slice(0, 500));
+  const descriptionChanged = Boolean(currentDescription) && currentDescription !== previousDescription;
+
+  const titleMatches = textLooselyMatches(snapshot?.title || "", targetTitle);
+  const companyMatches = textLooselyMatches(snapshot?.company || "", targetCompany);
+  const movedAwayFromPreviousTitle =
+    Boolean(snapshot?.title) &&
+    (!previousTitle || !textLooselyMatches(snapshot.title, previousTitle));
+
+  if (titleMatches && (companyMatches || !targetCompany || descriptionChanged)) return true;
+  if (companyMatches && descriptionChanged) return true;
+  if (movedAwayFromPreviousTitle && descriptionChanged) return true;
+  if (Boolean(snapshot?.jobId) && snapshot.jobId !== String(previousContext?.jobId || "").trim()) return true;
+  return false;
+}
+
+async function waitForDetailPaneRefresh(cardMeta, previousContext = {}, timeoutMs = 5000) {
+  const timeout = Math.max(800, Number(timeoutMs || 5000));
+  const start = Date.now();
+  let snapshot = getDetailPaneSnapshot();
+  if (didDetailPaneRefreshForCard(snapshot, cardMeta, previousContext)) return snapshot;
+
+  while (Date.now() - start < timeout) {
+    await sleep(180);
+    snapshot = getDetailPaneSnapshot();
+    if (didDetailPaneRefreshForCard(snapshot, cardMeta, previousContext)) return snapshot;
+  }
+
+  return snapshot;
 }
 
 function shouldSkipByDescription(description, settings) {
@@ -1602,6 +1796,51 @@ function clearSearchLocationQueryParams(url) {
   }
 }
 
+function resetRemoteLocationKeywordCursor() {
+  runRemoteLocationKeywordCursor = 0;
+}
+
+function getRemoteLocationKeywordPool(settings) {
+  const deduped = new Set();
+  const merged = [
+    String(settings?.searchLocation || "").trim(),
+    ...parseListSetting(settings?.filterLocations).filter((value) => isRemoteLikeSearchValue(value)),
+    ...REMOTE_LOCATION_KEYWORDS,
+  ];
+  const values = [];
+  for (const rawValue of merged) {
+    const value = String(rawValue || "").trim();
+    if (!value || !isRemoteLikeSearchValue(value)) continue;
+    const normalized = normalizeLabel(value);
+    if (!normalized || deduped.has(normalized)) continue;
+    deduped.add(normalized);
+    values.push(value);
+  }
+  return values;
+}
+
+function shouldUseRemoteLocationKeywords(settings) {
+  if (!isRemoteModeSelected(settings)) return false;
+  const searchLocation = String(settings?.searchLocation || "").trim();
+  const filterLocations = parseListSetting(settings?.filterLocations);
+  if (searchLocation && !isRemoteLikeSearchValue(searchLocation)) return false;
+  return filterLocations.every((value) => !value || isRemoteLikeSearchValue(value));
+}
+
+function getEffectiveSearchLocation(settings, locationOverride = "") {
+  const override = String(locationOverride || "").trim();
+  if (override) return override;
+  if (shouldUseRemoteLocationKeywords(settings)) {
+    const pool = getRemoteLocationKeywordPool(settings);
+    if (!pool.length) return "";
+    if (runRemoteLocationKeywordCursor < 0 || runRemoteLocationKeywordCursor >= pool.length) {
+      runRemoteLocationKeywordCursor = 0;
+    }
+    return pool[runRemoteLocationKeywordCursor] || "";
+  }
+  return String(settings?.searchLocation || "").trim();
+}
+
 function shouldClearStaleLocationQueryParams(settings, url) {
   if (!url) return false;
   const hasLocationParams = SEARCH_LOCATION_QUERY_PARAM_KEYS.some((key) => url.searchParams.has(key));
@@ -1632,8 +1871,10 @@ function getActiveRunSearchUrl(settings) {
   const url = new URL(buildJobsSearchUrl(term));
   const dateParam = datePostedToLinkedInParam(settings?.datePosted || "");
   const sortParam = sortByToLinkedInParam(settings?.sortBy || "");
+  const workplaceParam = onSiteToLinkedInParam(settings?.onSite || "");
   if (dateParam) url.searchParams.set("f_TPR", dateParam);
   if (sortParam) url.searchParams.set("sortBy", sortParam);
+  if (workplaceParam) url.searchParams.set("f_WT", workplaceParam);
   return url.toString();
 }
 
@@ -1643,6 +1884,21 @@ function datePostedToLinkedInParam(value) {
   if (v === "past week") return "r604800";
   if (v === "past month") return "r2592000";
   return "";
+}
+
+function workModeValueToLinkedInCode(value) {
+  const normalized = normalizeLabel(value);
+  if (normalized === "on site" || normalized === "onsite") return "1";
+  if (normalized === "remote") return "2";
+  if (normalized === "hybrid") return "3";
+  return "";
+}
+
+function onSiteToLinkedInParam(value) {
+  const codes = parseListSetting(value)
+    .map((item) => workModeValueToLinkedInCode(item))
+    .filter(Boolean);
+  return Array.from(new Set(codes)).join(",");
 }
 
 function getBroaderDatePostedValue(currentValue) {
@@ -1678,13 +1934,68 @@ function getAlternateSortValue(currentValue) {
   return normalizeLabel(currentValue) === "most recent" ? "Most relevant" : "Most recent";
 }
 
+const TRANSIENT_SEARCH_QUERY_PARAM_KEYS = ["currentJobId", "jobId", "postApplyJobId", "refresh", "origin"];
+
+function clearTransientSearchQueryParams(url) {
+  for (const key of TRANSIENT_SEARCH_QUERY_PARAM_KEYS) {
+    url.searchParams.delete(key);
+  }
+}
+
+function hasTransientSearchQueryParams(url) {
+  try {
+    const parsed = url instanceof URL ? url : new URL(String(url || window.location.href));
+    return TRANSIENT_SEARCH_QUERY_PARAM_KEYS.some((key) => parsed.searchParams.has(key));
+  } catch {
+    return false;
+  }
+}
+
+function hasSearchLocationQueryParams(url) {
+  try {
+    const parsed = url instanceof URL ? url : new URL(String(url || window.location.href));
+    return SEARCH_LOCATION_QUERY_PARAM_KEYS.some((key) => parsed.searchParams.has(key));
+  } catch {
+    return false;
+  }
+}
+
+function getResumableSearchUrl(settings, options = {}) {
+  const preserveStart = options?.preserveStart !== false;
+  const resumeUrl = new URL(getActiveRunSearchUrl(settings));
+  try {
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.pathname.startsWith("/jobs/search")) {
+      if (preserveStart) {
+        const currentStart = String(currentUrl.searchParams.get("start") || "").trim();
+        if (/^\d+$/.test(currentStart) && Number(currentStart) > 0) {
+          resumeUrl.searchParams.set("start", currentStart);
+        }
+      }
+      if (!shouldClearStaleLocationQueryParams(settings, currentUrl)) {
+        for (const key of SEARCH_LOCATION_QUERY_PARAM_KEYS) {
+          const value = String(currentUrl.searchParams.get(key) || "").trim();
+          if (value) resumeUrl.searchParams.set(key, value);
+        }
+      }
+    }
+  } catch {
+    // fall back to the active run search URL
+  }
+  clearTransientSearchQueryParams(resumeUrl);
+  return resumeUrl.toString();
+}
+
 async function ensureSearchQueryParams(settings) {
   if (!isJobsSearchPage()) return true;
   try {
     const url = new URL(window.location.href);
     const before = url.toString();
+    const transientOnlyUrl = new URL(before);
+    clearTransientSearchQueryParams(transientOnlyUrl);
     const dateParam = datePostedToLinkedInParam(settings.datePosted || "");
     const sortParam = sortByToLinkedInParam(settings.sortBy || "");
+    const workplaceParam = onSiteToLinkedInParam(settings.onSite || "");
 
     if (dateParam) url.searchParams.set("f_TPR", dateParam);
     else url.searchParams.delete("f_TPR");
@@ -1692,13 +2003,23 @@ async function ensureSearchQueryParams(settings) {
     if (sortParam) url.searchParams.set("sortBy", sortParam);
     else url.searchParams.delete("sortBy");
 
+    if (workplaceParam) url.searchParams.set("f_WT", workplaceParam);
+    else url.searchParams.delete("f_WT");
+
     if (shouldClearStaleLocationQueryParams(settings, url)) {
       clearSearchLocationQueryParams(url);
     }
 
+    clearTransientSearchQueryParams(url);
+
     const after = url.toString();
     if (after !== before) {
-      await logLine("Applied search query preferences (date/sort)", "info");
+      if (after === transientOnlyUrl.toString()) {
+        window.history.replaceState(null, "", after);
+        await debugLog(settings, "Normalized search URL without reload", { before, after });
+        return true;
+      }
+      await logLine("Applied search query preferences (date/sort/work mode)", "info");
       window.location.href = after;
       return false;
     }
@@ -1722,6 +2043,7 @@ async function relaxDatePostedForEmptyResults(settings) {
   if (!nextUrl) return false;
 
   await logLine(`No jobs with "${currentDatePosted}". Trying "${nextDatePosted}".`, "info");
+  resetRemoteLocationKeywordCursor();
   window.location.href = nextUrl;
   return true;
 }
@@ -1737,7 +2059,8 @@ async function ensureSearchTermIfNeeded(settings) {
   const currentKeyword = getCurrentSearchKeyword();
   if (normalizeLabel(currentKeyword) === normalizeLabel(selected)) return true;
   await logLine(`Switching search term: ${selected}`);
-  window.location.href = buildJobsSearchUrl(selected);
+  resetRemoteLocationKeywordCursor();
+  window.location.href = getActiveRunSearchUrl(settings);
   return false;
 }
 
@@ -1746,15 +2069,17 @@ async function rotateSearchTerm(settings) {
   if (terms.length <= 1) return false;
   runSearchTermCursor = (runSearchTermCursor + 1) % terms.length;
   runSearchTermSuccessCount = 0;
+  resetRemoteLocationKeywordCursor();
   const nextTerm = terms[runSearchTermCursor];
   await logLine(`Moving to next search term: ${nextTerm}`, "info");
-  window.location.href = buildJobsSearchUrl(nextTerm);
+  window.location.href = getActiveRunSearchUrl(settings);
   return true;
 }
 
 function buildNextPageUrlByStart(currentUrl, step = 25) {
   try {
     const url = new URL(String(currentUrl || window.location.href));
+    clearTransientSearchQueryParams(url);
     const currentStartRaw = String(url.searchParams.get("start") || "0").trim();
     const currentStart = Number.isFinite(Number(currentStartRaw)) ? Number(currentStartRaw) : 0;
     const nextStart = Math.max(0, currentStart + Math.max(1, Number(step || 25)));
@@ -1766,6 +2091,12 @@ function buildNextPageUrlByStart(currentUrl, step = 25) {
 }
 
 async function gotoNextResultsPage(settings) {
+  const fallbackNextUrl = buildNextPageUrlByStart(window.location.href, 25);
+  if (fallbackNextUrl && fallbackNextUrl !== window.location.href && hasTransientSearchQueryParams(window.location.href)) {
+    await logLine("Moving to next results page using clean URL offset.", "info");
+    window.location.href = fallbackNextUrl;
+    return true;
+  }
   // Pagination is often not clickable until scrolled into view.
   try {
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
@@ -1800,7 +2131,6 @@ async function gotoNextResultsPage(settings) {
       disabled: Boolean(nextButton?.disabled),
       url: window.location.href
     });
-    const fallbackNextUrl = buildNextPageUrlByStart(window.location.href, 25);
     if (fallbackNextUrl && fallbackNextUrl !== window.location.href) {
       await logLine("Next page button missing. Moving using URL offset.", "info");
       window.location.href = fallbackNextUrl;
@@ -1812,14 +2142,30 @@ async function gotoNextResultsPage(settings) {
   const clicked = await resilientClick(nextButton, "Next page");
   if (!clicked) return false;
   await sleep(1400);
+  if (fallbackNextUrl && fallbackNextUrl !== window.location.href && hasTransientSearchQueryParams(window.location.href)) {
+    await logLine("Pagination kept sticky job selection. Moving using clean URL offset.", "info");
+    window.location.href = fallbackNextUrl;
+    return true;
+  }
   await waitForJobsToRender(settings, 5000);
   await logLine("Navigated to next results page", "info");
   return true;
 }
 
-async function setSearchLocationIfNeeded(settings) {
-  const location = String(settings.searchLocation || "").trim();
+async function setSearchLocationIfNeeded(settings, locationOverride = "") {
+  const location = getEffectiveSearchLocation(settings, locationOverride);
   if (!location) return;
+  if (!locationOverride) {
+    try {
+      const currentUrl = new URL(window.location.href);
+      if (hasSearchLocationQueryParams(currentUrl) && !shouldClearStaleLocationQueryParams(settings, currentUrl)) {
+        await debugLog(settings, "Search location already represented in URL", { location, url: currentUrl.toString() });
+        return;
+      }
+    } catch {
+      // ignore URL parsing issues and fall through to input-based location setting
+    }
+  }
   const input = getBySelectorList([
     "input[aria-label*='City, state, or zip code']",
     "input[placeholder*='City, state, or zip code']",
@@ -1827,6 +2173,10 @@ async function setSearchLocationIfNeeded(settings) {
   ]);
   if (!input) {
     await debugLog(settings, "Search location input not found", { url: window.location.href });
+    return;
+  }
+  if (normalizeLabel(input.value || "") === normalizeLabel(location)) {
+    await debugLog(settings, "Search location already set", { location, url: window.location.href });
     return;
   }
   input.focus();
@@ -1838,6 +2188,19 @@ async function setSearchLocationIfNeeded(settings) {
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   await logLine(`Search location set: ${location}`);
   await sleep(800);
+}
+
+async function rotateRemoteLocationKeyword(settings) {
+  if (!shouldUseRemoteLocationKeywords(settings)) return false;
+  const pool = getRemoteLocationKeywordPool(settings);
+  if (pool.length <= 1) return false;
+  if (runRemoteLocationKeywordCursor >= pool.length - 1) return false;
+  runRemoteLocationKeywordCursor += 1;
+  const nextKeyword = pool[runRemoteLocationKeywordCursor] || "";
+  if (!nextKeyword) return false;
+  await logLine(`No jobs. Trying remote location keyword: ${nextKeyword}.`, "info");
+  await setSearchLocationIfNeeded(settings, nextKeyword);
+  return true;
 }
 
 async function applyEasyApplyFilterIfNeeded(settings) {
@@ -2116,21 +2479,21 @@ async function prepareRun(settings) {
     await pauseRunForDailyEasyApplyLimit(settings, "LinkedIn daily submission limit reached before run preparation");
     return false;
   }
+  if (isPostApplySearchPage()) {
+    await logLine("Returning to Jobs Search after previous submission.", "info");
+    await debugLog(settings, "Redirecting out of post-apply page", { path: window.location.pathname });
+    resetRemoteLocationKeywordCursor();
+    window.location.href = getResumableSearchUrl(settings);
+    return false;
+  }
   if (!isJobsPage()) {
     await logLine("Not on Jobs page. Redirecting to LinkedIn Jobs Search.", "warn");
     await debugLog(settings, "Redirecting to jobs search (not jobs path)", { url: window.location.href });
-    const initialTerm = getConfiguredSearchTerms(settings)[runSearchTermCursor] || "";
-    window.location.href = buildJobsSearchUrl(initialTerm);
+    resetRemoteLocationKeywordCursor();
+    window.location.href = getActiveRunSearchUrl(settings);
     return false;
   }
   if (!isJobsSearchPage()) {
-    if (isPostApplySearchPage()) {
-      await logLine("Returning to Jobs Search after previous submission.", "info");
-      await debugLog(settings, "Redirecting out of post-apply page", { path: window.location.pathname });
-      const initialTerm = getConfiguredSearchTerms(settings)[runSearchTermCursor] || "";
-      window.location.href = buildJobsSearchUrl(initialTerm);
-      return false;
-    }
     if (isJobsViewPage()) {
       await debugLog(settings, "On jobs view page; continuing without redirect", { url: window.location.href });
       preparedRun = true;
@@ -2138,8 +2501,8 @@ async function prepareRun(settings) {
     }
     await logLine("Opening Jobs Search results page.", "info");
     await debugLog(settings, "Redirecting to jobs search (landing page)", { url: window.location.href });
-    const initialTerm = getConfiguredSearchTerms(settings)[runSearchTermCursor] || "";
-    window.location.href = buildJobsSearchUrl(initialTerm);
+    resetRemoteLocationKeywordCursor();
+    window.location.href = getActiveRunSearchUrl(settings);
     return false;
   }
   await debugLog(settings, "Preparing run", { url: window.location.href });
@@ -2810,7 +3173,16 @@ function hasEasyApplySignalOnCard(card) {
 }
 
 function getCardAnchor(card) {
-  return card.querySelector("a[href*='/jobs/view/']") || card.querySelector("a");
+  return getBySelectorList(
+    [
+      "a[href*='/jobs/view/']",
+      "a.job-card-container__link",
+      "a.job-card-list__title--link",
+      "a[data-control-name*='job_card']",
+      "a"
+    ],
+    card
+  );
 }
 
 async function waitForJobsToRender(settings, timeoutMs = 6000) {
@@ -3256,6 +3628,7 @@ function findSubmitButton(modal) {
   const buttons = Array.from(modal.querySelectorAll("button")).filter((b) => !b.disabled && isVisibleElement(b));
   return (
     buttons.find((b) => normalizeLabel(b.getAttribute("aria-label")).includes("submit application")) ||
+    buttons.find((b) => normalizeLabel(b.getAttribute("aria-label")).includes("submit")) ||
     buttons.find((b) => normalizeLabel(b.textContent).includes("submit application")) ||
     buttons.find((b) => normalizeLabel(b.textContent) === "submit")
   );
@@ -3345,14 +3718,22 @@ async function closePostSubmitUi(settings, options = {}) {
   }
 }
 
-function findNextOrReviewButton(modal) {
-  const buttons = Array.from(modal.querySelectorAll("button")).filter((b) => !b.disabled && isVisibleElement(b));
-  return (
-    buttons.find((b) => normalizeLabel(b.getAttribute("aria-label")).includes("next")) ||
-    buttons.find((b) => normalizeLabel(b.getAttribute("aria-label")).includes("review")) ||
-    buttons.find((b) => normalizeLabel(b.textContent).includes("next")) ||
-    buttons.find((b) => normalizeLabel(b.textContent).includes("review"))
-  );
+function findNextOrReviewButton(modal, options = {}) {
+  const includeDisabled = Boolean(options?.includeDisabled);
+  const buttons = Array.from(modal.querySelectorAll("button")).filter((b) => isVisibleElement(b) && (includeDisabled || !b.disabled));
+  const needles = [
+    "continue to next step",
+    "continue",
+    "next",
+    "review your application",
+    "review application",
+    "review",
+    "save and continue",
+  ];
+  return buttons.find((button) => {
+    const text = normalizeLabel(`${button.getAttribute("aria-label") || ""} ${button.textContent || ""}`);
+    return needles.some((needle) => text.includes(needle));
+  });
 }
 
 function didSubmitComplete(modal) {
@@ -4077,7 +4458,7 @@ async function processEasyApplyModal(settings) {
     const stepState = stepStateBySignature.get(stepSignature) || { preflightAttempts: 0, nextClicks: 0, manualAnswerWaits: 0 };
     const modalValidationBeforeAction = getModalValidationMessage(modal);
     const hasVisibleSubmit = Boolean(findSubmitButton(modal));
-    const hasVisibleNext = Boolean(findNextOrReviewButton(modal));
+    const hasVisibleNext = Boolean(findNextOrReviewButton(modal, { includeDisabled: true }));
     const hasVisibleDone = Boolean(findDoneOrCloseButton(modal));
 
     await debugLog(settings, "Modal step plan", {
@@ -4265,6 +4646,24 @@ async function processEasyApplyModal(settings) {
 
     const nextBtn = findNextOrReviewButton(modal);
     if (!nextBtn) {
+      const blockedNextBtn = findNextOrReviewButton(modal, { includeDisabled: true });
+      if (blockedNextBtn) {
+        const validation = getModalValidationMessage(modal);
+        const blockedFixedValidation = await attemptValidationAutoFix(modal, activeSettings);
+        const blockedForcedAnswers = await forceAnswerModalQuestions(modal, activeSettings);
+        if (blockedFixedValidation || blockedForcedAnswers) {
+          await logLine("Next step was blocked. Filled remaining fields and retrying.", "warn");
+          stagnantSteps = 0;
+          previousSignature = getModalSignature(modal);
+          continue;
+        }
+        return {
+          submitted: false,
+          skipped: true,
+          reachedSubmit: false,
+          reason: validation || "Next/review button is disabled"
+        };
+      }
       const doneBtn = findDoneOrCloseButton(modal);
       if (doneBtn) {
         await resilientClick(doneBtn, "Done/Close");
@@ -4389,13 +4788,15 @@ async function runCycle(settings) {
   }
   if (isPostApplySearchPage()) {
     await debugLog(settings, "Detected post-apply page during run cycle; redirecting", { path: window.location.pathname });
-    window.location.href = JOBS_SEARCH_URL;
+    resetRemoteLocationKeywordCursor();
+    window.location.href = getResumableSearchUrl(settings);
     return false;
   }
 
   await refreshKnownAppliedJobIds(false);
 
   if (isJobsViewPage()) {
+    const resumeSearchUrl = getResumableSearchUrl(settings);
     await debugLog(settings, "Running from jobs view page");
     const viewDescription = getJobDescriptionText();
     const aboutCompany = getAboutCompanyText();
@@ -4405,13 +4806,16 @@ async function runCycle(settings) {
       company: String(document.querySelector(".jobs-unified-top-card__company-name, .jobs-details-top-card__company-url")?.textContent || "").trim(),
       description: viewDescription,
       aboutCompany,
-      jobUrl: window.location.href,
+      jobUrl: buildCanonicalLinkedInJobUrl(
+        window.location.href.match(/\/jobs\/view\/(\d+)/)?.[1] || extractLinkedInJobIdFromUrl(window.location.href),
+        window.location.href
+      ),
       jobId: (window.location.href.match(/\/jobs\/view\/(\d+)/)?.[1] || "")
     };
     const viewJobKey = String(currentJobContext.jobId || "").trim();
     if (viewJobKey && runSeenJobKeys.has(viewJobKey)) {
       await debugLog(settings, "Skipping already-seen jobs view in this run", { jobKey: viewJobKey });
-      window.location.href = getActiveRunSearchUrl(settings);
+      window.location.href = resumeSearchUrl;
       return false;
     }
     if (viewJobKey && knownAppliedJobIds.has(viewJobKey)) {
@@ -4427,7 +4831,7 @@ async function runCycle(settings) {
       markKnownApplied(viewJobKey);
       await reportProgress();
       markJobSeen(viewJobKey);
-      window.location.href = getActiveRunSearchUrl(settings);
+      window.location.href = resumeSearchUrl;
       return true;
     }
     const cachedViewOutcome = getCachedJobOutcome(viewJobKey);
@@ -4444,7 +4848,7 @@ async function runCycle(settings) {
       markKnownApplied(viewJobKey);
       await reportProgress();
       markJobSeen(viewJobKey);
-      window.location.href = getActiveRunSearchUrl(settings);
+      window.location.href = resumeSearchUrl;
       return true;
     }
     if (cachedViewOutcome && isTransientSkipCooldownOutcome(cachedViewOutcome)) {
@@ -4454,7 +4858,7 @@ async function runCycle(settings) {
       });
       await logLine("Deferred retry for recently attempted job (cooldown active).", "info");
       markJobSeen(viewJobKey);
-      window.location.href = getActiveRunSearchUrl(settings);
+      window.location.href = resumeSearchUrl;
       return true;
     }
     const viewAboutCompanyDecision = shouldSkipByAboutCompany(currentJobContext.aboutCompany, settings);
@@ -4469,7 +4873,7 @@ async function runCycle(settings) {
       recordJobOutcomeCache(viewJobKey, "SKIPPED", viewAboutCompanyDecision.reasonCode);
       await reportProgress();
       markJobSeen(viewJobKey);
-      window.location.href = getActiveRunSearchUrl(settings);
+      window.location.href = resumeSearchUrl;
       return true;
     }
     const viewDescriptionDecision = shouldSkipByDescription(currentJobContext.description, settings);
@@ -4484,7 +4888,7 @@ async function runCycle(settings) {
       recordJobOutcomeCache(viewJobKey, "SKIPPED", viewDescriptionDecision.reasonCode);
       await reportProgress();
       markJobSeen(viewJobKey);
-      window.location.href = getActiveRunSearchUrl(settings);
+      window.location.href = resumeSearchUrl;
       return true;
     }
     let applyAction = await waitForApplyButtonFromDetailPane(settings, 9000, "jobs view");
@@ -4506,7 +4910,7 @@ async function runCycle(settings) {
         markKnownApplied(viewJobKey);
         await reportProgress();
         markJobSeen(viewJobKey);
-        window.location.href = getActiveRunSearchUrl(settings);
+        window.location.href = resumeSearchUrl;
         return true;
       }
       if (hasDailyEasyApplyLimitSignal()) {
@@ -4525,9 +4929,9 @@ async function runCycle(settings) {
       markJobSeen(viewJobKey);
       await debugLog(settings, "Recovering from jobs view without apply button", {
         jobKey: viewJobKey || undefined,
-        redirectUrl: getActiveRunSearchUrl(settings)
+        redirectUrl: resumeSearchUrl
       });
-      window.location.href = getActiveRunSearchUrl(settings);
+      window.location.href = resumeSearchUrl;
       return true;
     }
     if (applyAction.type === "external") {
@@ -4573,7 +4977,7 @@ async function runCycle(settings) {
       recordJobOutcomeCache(viewJobKey, "SKIPPED", "MODAL_NOT_FOUND");
       await reportProgress();
       markJobSeen(viewJobKey);
-      window.location.href = getActiveRunSearchUrl(settings);
+      window.location.href = resumeSearchUrl;
       return true;
     }
     await sleep(400);
@@ -4631,6 +5035,8 @@ async function runCycle(settings) {
   });
   if (!cards.length) {
     await logLine("No jobs found on current page", "warn");
+    const rotatedRemoteLocation = await rotateRemoteLocationKeyword(settings);
+    if (rotatedRemoteLocation) return true;
     const broadenedDate = await relaxDatePostedForEmptyResults(settings);
     if (broadenedDate) return true;
     const scrollRoot =
@@ -4755,7 +5161,7 @@ async function runCycle(settings) {
       continue;
     }
     if (isAlreadyAppliedCard(card)) {
-      const stableJobId = extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || jobKey || "";
+      const stableJobId = jobKey || extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || "";
       if (stableJobId) jobAliasKeys.add(stableJobId);
       runStats.skipped += 1;
       await logOutcome("info", "Skipped (already applied)", "ALREADY_APPLIED");
@@ -4773,7 +5179,7 @@ async function runCycle(settings) {
     }
     const ruleDecision = shouldSkipByRules(card, settings);
     if (ruleDecision.skip) {
-      const stableJobId = extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || jobKey || "";
+      const stableJobId = jobKey || extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || "";
       if (stableJobId) jobAliasKeys.add(stableJobId);
       runStats.skipped += 1;
       await logOutcome("warn", `Skipped: ${ruleDecision.reason}`, ruleDecision.reasonCode);
@@ -4792,26 +5198,28 @@ async function runCycle(settings) {
     const cardMeta = extractCardMeta(card);
     const anchor = getCardAnchor(card);
     const title = cardMeta.titleRaw || anchor?.textContent?.trim() || card.textContent?.trim()?.slice(0, 80) || "Job";
+    const previousJobContext = { ...currentJobContext };
     await debugLog(settings, "Processing card", { title, company: cardMeta.companyRaw || cardMeta.company || "" });
     await logLine(`Opening: ${title}`);
     await resilientClick(card, "Job card");
     await sleep(1200);
+    const detailSnapshot = await waitForDetailPaneRefresh(cardMeta, previousJobContext, 4800);
 
     // After navigation/selection, re-derive a stable LinkedIn job id from the current URL.
-    const resolvedJobId = extractLinkedInJobIdFromUrl(window.location.href);
+    const resolvedJobId = detailSnapshot.jobId || extractLinkedInJobIdFromUrl(window.location.href);
     if (resolvedJobId && resolvedJobId !== jobKey) {
       await debugLog(settings, "Resolved job id differs from card key", { from: jobKey, to: resolvedJobId });
       jobAliasKeys.add(resolvedJobId);
       jobKey = resolvedJobId;
     }
 
-    const description = getJobDescriptionText();
-    const aboutCompany = getAboutCompanyText();
-    const detailUrl = window.location.href;
-    const canonicalJobUrl = extractLinkedInJobIdFromUrl(detailUrl) ? detailUrl : (anchor?.href || detailUrl);
+    const description = detailSnapshot.description || "";
+    const aboutCompany = detailSnapshot.aboutCompany || "";
+    const detailUrl = detailSnapshot.url || window.location.href;
+    const canonicalJobUrl = buildCanonicalLinkedInJobUrl(resolvedJobId || jobKey, anchor?.href || detailUrl);
     currentJobContext = {
-      title,
-      company: cardMeta.companyRaw || cardMeta.company || "",
+      title: detailSnapshot.title || title,
+      company: detailSnapshot.company || cardMeta.companyRaw || cardMeta.company || "",
       workLocation: cardMeta.workLocationRaw || cardMeta.workLocation || "",
       description,
       aboutCompany,
@@ -5014,8 +5422,11 @@ async function runCycle(settings) {
   }
   const movedToNextPage = await gotoNextResultsPage(settings);
   if (movedToNextPage) return true;
-  await rotateSearchTerm(settings);
-  return true;
+  const movedToNextTerm = await rotateSearchTerm(settings);
+  if (movedToNextTerm) return true;
+  await logLine("No more result pages for the current search. Stopping run.", "info");
+  await sendMessage({ type: "CP_STOP" });
+  return false;
 }
 
 async function runAutomationLoop() {
@@ -5050,6 +5461,7 @@ async function runAutomationLoop() {
         await refreshKnownAppliedJobIds(true);
         resumeChoiceCache.clear();
         runSearchTermSuccessCount = 0;
+        resetRemoteLocationKeywordCursor();
         currentJobContext = {
           title: "",
           company: "",
@@ -5096,6 +5508,7 @@ async function runAutomationLoop() {
           clearSeenJobsForRun(lastRunStartedAt);
           resumeChoiceCache.clear();
           runSearchTermSuccessCount = 0;
+          resetRemoteLocationKeywordCursor();
           preparedRun = false;
           await reportProgress();
           continue;
@@ -5140,10 +5553,9 @@ async function runAutomationLoop() {
         // 3) Rotate search term.
         // 4) As a last resort, reload the current page.
         try {
-          const terms = getConfiguredSearchTerms(settings);
-          const term = terms[runSearchTermCursor] || "";
           if (!isJobsSearchPage()) {
-            window.location.href = buildJobsSearchUrl(term);
+            resetRemoteLocationKeywordCursor();
+            window.location.href = getResumableSearchUrl(settings);
             return;
           }
           // Ensure pagination is in view.
@@ -5205,6 +5617,7 @@ async function startStatePolling() {
       preparedRun = false;
       lastRunStartedAt = null;
       runSearchTermSuccessCount = 0;
+      resetRemoteLocationKeywordCursor();
       clearSeenJobsForRun();
       resumeChoiceCache.clear();
     }

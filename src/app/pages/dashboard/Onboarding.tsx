@@ -607,15 +607,15 @@ export default function Onboarding() {
   const [checkingExtension, setCheckingExtension] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({ installed: false });
   const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
-    version: "1.1.1",
+    version: "1.1.2",
     displayName: "AutoApply CV LinkedIn Copilot",
-    downloadFileName: formatExtensionPackageFileName("1.1.1"),
-    downloadBaseName: formatExtensionPackageName("1.1.1"),
+    downloadFileName: formatExtensionPackageFileName("1.1.2"),
+    downloadBaseName: formatExtensionPackageName("1.1.2"),
   });
   const currentPackageBaseName =
-    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.1");
+    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.2");
   const currentPackageFileName =
-    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.1");
+    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.2");
   const installedPackageName =
     extensionStatus.installed && extensionStatus.version ? formatExtensionPackageName(extensionStatus.version) : "";
   const checkExtensionButtonRef = useRef<HTMLButtonElement | null>(null);
