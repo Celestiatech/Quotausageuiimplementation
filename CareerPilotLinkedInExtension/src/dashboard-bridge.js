@@ -192,26 +192,63 @@ if (BRIDGE_ENABLED) {
 
 // Allow the extension service worker to notify the dashboard tab that it just synced/charged.
 try {
-  chrome.runtime.onMessage.addListener((message) => {
-    if (!message || message.type !== "CP_PORTAL_SYNCED") return;
-    try {
-      // Trigger React listeners (DashboardLayout listens for this to refresh the user wallet immediately).
-      window.dispatchEvent(new CustomEvent("cp:extensionImported", { detail: message }));
-    } catch {
-      // ignore
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (!message) return;
+    if (message.type === "CP_PORTAL_SYNCED") {
+      try {
+        // Trigger React listeners (DashboardLayout listens for this to refresh the user wallet immediately).
+        window.dispatchEvent(new CustomEvent("cp:extensionImported", { detail: message }));
+      } catch {
+        // ignore
+      }
+      safePost({
+        type: "CP_WEB_PORTAL_SYNCED",
+        imported: Number(message.imported || 0),
+        ts: message.ts || nowIso(),
+        chargedJobs: Number(message.chargedJobs || 0),
+        consumedTotal: Number(message.consumedTotal || 0),
+        freeConsumed: Number(message.freeConsumed || 0),
+        paidConsumed: Number(message.paidConsumed || 0),
+        chargeFailures: Number(message.chargeFailures || 0),
+        lastChargedJobId: String(message.lastChargedJobId || ""),
+        bridge: bridgeMeta(),
+      });
+      return;
     }
-    safePost({
-      type: "CP_WEB_PORTAL_SYNCED",
-      imported: Number(message.imported || 0),
-      ts: message.ts || nowIso(),
-      chargedJobs: Number(message.chargedJobs || 0),
-      consumedTotal: Number(message.consumedTotal || 0),
-      freeConsumed: Number(message.freeConsumed || 0),
-      paidConsumed: Number(message.paidConsumed || 0),
-      chargeFailures: Number(message.chargeFailures || 0),
-      lastChargedJobId: String(message.lastChargedJobId || ""),
-      bridge: bridgeMeta(),
-    });
+    if (message.type === "CP_WEB_IMPORT_OUTCOMES") {
+      (async () => {
+        try {
+          const entries = Array.isArray(message.entries) ? message.entries : [];
+          if (!entries.length) {
+            sendResponse({ attempted: true, status: 400, body: { success: false, message: "No entries to import" } });
+            return;
+          }
+          const res = await fetch(`${window.location.origin}/api/extension/import`, {
+            method: "POST",
+            cache: "no-store",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ entries }),
+          });
+          const body = await res.json().catch(() => null);
+          if (res.ok && body?.success) {
+            try {
+              window.dispatchEvent(new Event("cp:extensionImported"));
+            } catch {
+              // ignore
+            }
+          }
+          sendResponse({ attempted: true, status: res.status, body });
+        } catch (error) {
+          sendResponse({
+            attempted: true,
+            status: 0,
+            body: { success: false, message: String(error?.message || error || "Import failed") },
+          });
+        }
+      })();
+      return true;
+    }
   });
 } catch {
   // ignore
@@ -231,6 +268,7 @@ window.addEventListener("message", async (event) => {
     requestId,
     installed: false,
     runtimeId: chrome?.runtime?.id || "",
+    extensionVersion: chrome?.runtime?.getManifest?.()?.version || "",
     state: null,
     dailyCap: null,
     historySummary: null,
@@ -360,6 +398,7 @@ window.addEventListener("message", async (event) => {
     installed: response.installed,
     runtimeBootstrapOk: response.runtimeBootstrapOk,
     runtimeId: response.runtimeId,
+    extensionVersion: response.extensionVersion,
     linkedIn: response.linkedIn,
     error: response.error,
   });

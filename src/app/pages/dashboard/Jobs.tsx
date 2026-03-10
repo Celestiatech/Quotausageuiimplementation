@@ -18,6 +18,12 @@ import {
   Copy,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
+import {
+  DASHBOARD_TOUR_EVENT_NAME,
+  DASHBOARD_TOUR_JOBS_EXTENSION,
+  consumeDashboardTourRequest,
+} from "src/lib/dashboard-tour";
 
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
 
@@ -41,9 +47,13 @@ type AutoApplyJob = {
   logs?: JobLog[];
 };
 
+type ScreeningAnswerType = "text" | "boolean" | "number" | "choice" | "multiselect";
+type ScreeningAnswerSource = "manual" | "linkedin_import" | "resume_parse" | "extension_capture" | "system";
+
 type ExtensionStatus = {
   installed: boolean;
   runtimeId?: string;
+  version?: string;
   linkedIn?: {
     hasLinkedInTab: boolean;
     hasJobsTab: boolean;
@@ -69,7 +79,16 @@ type ScreeningAnswerApiItem = {
   questionKey: string;
   questionLabel: string;
   answer: string;
+  answerType?: ScreeningAnswerType;
+  source?: ScreeningAnswerSource;
   updatedAt?: string;
+};
+
+type ExtensionReleaseMeta = {
+  version: string;
+  displayName: string;
+  downloadFileName: string;
+  downloadBaseName: string;
 };
 
 type ScreeningFieldCategory = "profile" | "preferences" | "screening";
@@ -79,6 +98,9 @@ type ScreeningCatalogField = {
   label: string;
   category: ScreeningFieldCategory;
   order: number;
+  answerType?: ScreeningAnswerType;
+  options?: string[];
+  presets?: string[];
   aliases?: string[];
 };
 
@@ -86,8 +108,11 @@ type ScreeningFieldView = {
   questionKey: string;
   questionLabel: string;
   answer: string;
+  answerType: ScreeningAnswerType;
   category: ScreeningFieldCategory;
   order: number;
+  options?: string[];
+  presets?: string[];
   source: "site" | "extension" | "pending" | "merged";
 };
 
@@ -108,6 +133,34 @@ const JOB_REASON_CODE_LABELS: Record<string, string> = {
 };
 const EXT_BRIDGE_PING_TIMEOUT_MS = 4500;
 const EXT_BRIDGE_ACK_TIMEOUT_MS = 5000;
+const EXTENSION_PACKAGE_PREFIX = "AutoApplyCVExtensionVersion";
+const YES_NO_OPTIONS = ["No", "Yes"];
+const WORK_MODE_OPTIONS = ["Remote", "Hybrid", "Onsite", "Flexible"];
+const JOB_TYPE_OPTIONS = ["Full-time", "Part-time", "Contract", "Internship", "Temporary"];
+const ENGLISH_PROFICIENCY_OPTIONS = ["Native or bilingual", "Professional", "Limited", "Basic"];
+const EDUCATION_LEVEL_OPTIONS = [
+  "High School",
+  "Associate Degree",
+  "Bachelor's Degree",
+  "Master's Degree",
+  "Doctorate",
+  "Diploma / Certificate",
+];
+const WORK_AUTHORIZATION_OPTIONS = [
+  "U.S. Citizen/Permanent Resident",
+  "Authorized to work in the U.S.",
+  "Require sponsorship",
+  "Not authorized",
+];
+
+function formatExtensionPackageName(version: string) {
+  const normalized = String(version || "").trim();
+  return normalized ? `${EXTENSION_PACKAGE_PREFIX}${normalized}` : EXTENSION_PACKAGE_PREFIX;
+}
+
+function formatExtensionPackageFileName(version: string) {
+  return `${formatExtensionPackageName(version)}.zip`;
+}
 
 function formatReasonCode(value: unknown) {
   const raw = String(value || "").trim();
@@ -308,6 +361,57 @@ function parsePreferenceListInput(value: string) {
     .slice(0, 25);
 }
 
+function isRemoteLikeValue(value: string) {
+  const normalized = normalizeLabel(value);
+  return (
+    normalized === "remote" ||
+    normalized === "work from home" ||
+    normalized === "wfh" ||
+    normalized === "anywhere" ||
+    normalized === "worldwide"
+  );
+}
+
+function isRemoteWorkModeSelected(value: string) {
+  return parsePreferenceListInput(value).some((item) => normalizeLabel(item) === "remote");
+}
+
+function sanitizeLocationFilterValues(values: string[]) {
+  const seen = new Set<string>();
+  return values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value) => !isRemoteLikeValue(value))
+    .filter((value) => {
+      const normalized = normalizeLabel(value);
+      if (!normalized || seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    })
+    .slice(0, 25);
+}
+
+function stringifyPreferenceList(values: string[]) {
+  return values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+function compactAnswer(value: string, max = 1000) {
+  return String(value || "").trim().slice(0, max);
+}
+
+function inferAnswerType(answer: string): ScreeningAnswerType {
+  const value = String(answer || "").trim();
+  if (!value) return "text";
+  const lower = value.toLowerCase();
+  if (lower === "yes" || lower === "no") return "boolean";
+  if (/^\d+(\.\d+)?$/.test(value)) return "number";
+  if (value.includes(",")) return "multiselect";
+  return "text";
+}
+
 const SCREENING_SECTION_META: Record<ScreeningFieldCategory, { title: string; subtitle: string }> = {
   profile: {
     title: "Profile Answers",
@@ -340,6 +444,8 @@ const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
     label: "U.S. Work Authorization",
     category: "profile",
     order: 120,
+    answerType: "choice",
+    options: WORK_AUTHORIZATION_OPTIONS,
     aliases: ["cp_pref_us_citizenship", "careerpilot_preference_us_work_authorization", "autoapply cv preference us work authorization", "autoapply cv preference: us work authorization"],
   },
   {
@@ -347,6 +453,8 @@ const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
     label: "Need Visa Sponsorship",
     category: "profile",
     order: 130,
+    answerType: "boolean",
+    options: YES_NO_OPTIONS,
     aliases: ["cp_pref_require_visa", "careerpilot_preference_need_visa_sponsorship", "careerpilot_preference_require_visa", "autoapply cv preference need visa sponsorship", "autoapply cv preference: need visa sponsorship"],
   },
   {
@@ -354,15 +462,31 @@ const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
     label: "Years of Experience",
     category: "profile",
     order: 140,
+    answerType: "number",
     aliases: ["cp_pref_years_of_experience", "autoapply cv preference years of experience", "autoapply cv preference: years of experience"],
   },
-  { key: "english_proficiency", label: "English Proficiency", category: "profile", order: 150 },
-  { key: "education_level", label: "Education Level", category: "profile", order: 160 },
+  {
+    key: "english_proficiency",
+    label: "English Proficiency",
+    category: "profile",
+    order: 150,
+    answerType: "choice",
+    options: ENGLISH_PROFICIENCY_OPTIONS,
+  },
+  {
+    key: "education_level",
+    label: "Education Level",
+    category: "profile",
+    order: 160,
+    answerType: "choice",
+    options: EDUCATION_LEVEL_OPTIONS,
+  },
   {
     key: "cp_pref_search_terms",
     label: "Preferred Job Titles / Search Terms",
     category: "preferences",
     order: 200,
+    answerType: "multiselect",
     aliases: [
       "preferred_job_titles",
       "preferred job titles",
@@ -378,6 +502,7 @@ const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
     label: "Preferred Locations",
     category: "preferences",
     order: 210,
+    answerType: "multiselect",
     aliases: ["preferred_locations", "preferred locations", "cp_pref_search_location", "primary search location", "careerpilot_preference_search_location", "autoapply cv preference search location", "autoapply cv preference: search location"],
   },
   {
@@ -385,14 +510,25 @@ const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
     label: "Remote / Onsite / Hybrid",
     category: "preferences",
     order: 220,
+    answerType: "choice",
+    options: WORK_MODE_OPTIONS,
     aliases: ["remote_onsite_hybrid", "work_mode_preference"],
   },
-  { key: "cp_pref_job_types", label: "Job Types", category: "preferences", order: 230, aliases: ["job_types"] },
+  {
+    key: "cp_pref_job_types",
+    label: "Job Types",
+    category: "preferences",
+    order: 230,
+    answerType: "multiselect",
+    presets: JOB_TYPE_OPTIONS,
+    aliases: ["job_types"],
+  },
   {
     key: "cp_pref_preferred_countries",
     label: "Preferred Countries",
     category: "preferences",
     order: 240,
+    answerType: "multiselect",
     aliases: ["preferred_countries"],
   },
   {
@@ -400,6 +536,7 @@ const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
     label: "Confidence Level",
     category: "preferences",
     order: 250,
+    answerType: "number",
     aliases: [
       "autoapply cv preference confidence level",
       "autoapply cv preference: confidence level",
@@ -407,11 +544,15 @@ const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
       "careerpilot preference: confidence level",
     ],
   },
-  { key: "cp_pref_salary_min", label: "Salary Range Min", category: "preferences", order: 260 },
-  { key: "cp_pref_salary_max", label: "Salary Range Max", category: "preferences", order: 270 },
+  { key: "cp_pref_salary_min", label: "Salary Range Min", category: "preferences", order: 260, answerType: "number" },
+  { key: "cp_pref_salary_max", label: "Salary Range Max", category: "preferences", order: 270, answerType: "number" },
   { key: "cp_pref_desired_salary", label: "Desired Salary", category: "preferences", order: 280 },
-  { key: "cp_pref_excluded_companies", label: "Excluded Companies", category: "preferences", order: 290 },
-  { key: "cp_pref_excluded_keywords", label: "Excluded Keywords", category: "preferences", order: 300 },
+  { key: "cp_pref_excluded_companies", label: "Excluded Companies", category: "preferences", order: 290, answerType: "multiselect" },
+  { key: "cp_pref_excluded_keywords", label: "Excluded Keywords", category: "preferences", order: 300, answerType: "multiselect" },
+  { key: "comfortable_working_onsite", label: "Comfortable Working Onsite", category: "screening", order: 500, answerType: "boolean", options: YES_NO_OPTIONS },
+  { key: "comfortable_commuting", label: "Comfortable Commuting", category: "screening", order: 510, answerType: "boolean", options: YES_NO_OPTIONS },
+  { key: "comfortable_relocation", label: "Comfortable Relocation", category: "screening", order: 520, answerType: "boolean", options: YES_NO_OPTIONS },
+  { key: "bachelors_degree_completed", label: "Bachelor's Degree Completed", category: "screening", order: 530, answerType: "boolean", options: YES_NO_OPTIONS },
 ];
 
 const SCREENING_FIELD_LOOKUP = (() => {
@@ -450,6 +591,12 @@ export default function Jobs() {
   const { user } = useAuth();
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
+  const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
+    version: "1.1.1",
+    displayName: "AutoApply CV LinkedIn Copilot",
+    downloadFileName: formatExtensionPackageFileName("1.1.1"),
+    downloadBaseName: formatExtensionPackageName("1.1.1"),
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [jobs, setJobs] = useState<AutoApplyJob[]>([]);
@@ -463,9 +610,25 @@ export default function Jobs() {
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({
     installed: false,
   });
+  const currentPackageBaseName =
+    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.1");
+  const currentPackageFileName =
+    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.1");
+  const installedPackageName =
+    extensionStatus.installed && extensionStatus.version ? formatExtensionPackageName(extensionStatus.version) : "";
+  const versionBadgeRef = useRef<HTMLSpanElement | null>(null);
+  const checkExtensionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const openLinkedInJobsButtonRef = useRef<HTMLAnchorElement | null>(null);
+  const downloadOpenButtonRef = useRef<HTMLButtonElement | null>(null);
+  const downloadZipButtonRef = useRef<HTMLAnchorElement | null>(null);
+  const syncProfileButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [installGuideOpen, setInstallGuideOpen] = useState(false);
+  const [installGuideStepIndex, setInstallGuideStepIndex] = useState(0);
+  const [installGuideCompletedIds, setInstallGuideCompletedIds] = useState<string[]>([]);
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const [siteScreeningAnswers, setSiteScreeningAnswers] = useState<Record<string, string>>({});
   const [siteQuestionLabels, setSiteQuestionLabels] = useState<Record<string, string>>({});
+  const [siteAnswerTypes, setSiteAnswerTypes] = useState<Record<string, ScreeningAnswerType>>({});
   const [savingAnswerKey, setSavingAnswerKey] = useState<string | null>(null);
   const [syncingSettings, setSyncingSettings] = useState(false);
   const syncedAnswerRef = useRef<Record<string, string>>({});
@@ -493,11 +656,78 @@ export default function Jobs() {
     );
   };
 
-  const saveAnswerToSite = async (questionKey: string, questionLabel: string, answer: string) => {
+  const remoteWorkModeSelected = useMemo(() => {
+    const mergedAnswers: Record<string, string> = {
+      ...(extensionStatus.screeningAnswers || {}),
+      ...siteScreeningAnswers,
+    };
+    for (const [rawKey, rawValue] of Object.entries(answerDrafts)) {
+      const answer = String(rawValue || "").trim();
+      if (!answer) continue;
+      mergedAnswers[rawKey] = answer;
+    }
+    const workModeAnswer = pickFirstNonEmpty(mergedAnswers, [
+      "cp_pref_work_mode",
+      "remote_onsite_hybrid",
+      "work_mode_preference",
+    ]);
+    return isRemoteWorkModeSelected(workModeAnswer);
+  }, [answerDrafts, extensionStatus.screeningAnswers, siteScreeningAnswers]);
+
+  const installGuideSteps = useMemo<ExtensionInstallGuideStep[]>(
+    () => [
+      {
+        id: "download-zip",
+        title: "Download extension",
+        body: `Download ${currentPackageFileName} from this page.`,
+        note: "This is the ZIP file you will extract in the next step.",
+        actionLabel: "Download current ZIP",
+        targetRef: downloadZipButtonRef,
+      },
+      {
+        id: "extract-folder",
+        title: "Extract folder",
+        body: "Extract the ZIP after downloading it.",
+        note: `The extracted folder should look like ${currentPackageBaseName} and contain manifest.json.`,
+        targetRef: versionBadgeRef,
+      },
+      {
+        id: "open-chrome-extensions",
+        title: "Load unpacked",
+        body: "Open Chrome menu (three dots) > Extensions > Manage Extensions. Turn on Developer mode on the top-right, then click Load unpacked on the top-left.",
+        note: `Select the extracted folder ${currentPackageBaseName}. This matches the screenshot: Developer mode on the right, Load unpacked on the left.`,
+        actionLabel: "Download + Open Extensions",
+        targetRef: downloadOpenButtonRef,
+      },
+      {
+        id: "verify-install",
+        title: "Check extension",
+        body: "After the extension card appears in Chrome, click the extension icon, make sure you are signed in to LinkedIn, then come back here and click Check Extension.",
+        note: installedPackageName
+          ? `Detected right now: ${installedPackageName}. If this is the new version, click Step done.`
+          : "If detection still fails, refresh this page and click Check Extension again, then click Step done.",
+        actionLabel: checkingExtension ? "Checking..." : "Check extension",
+        actionDisabled: checkingExtension,
+        targetRef: checkExtensionButtonRef,
+      },
+    ],
+    [checkingExtension, currentPackageBaseName, currentPackageFileName, installedPackageName],
+  );
+
+  const saveAnswerToSite = async (
+    questionKey: string,
+    questionLabel: string,
+    answer: string,
+    answerType: ScreeningAnswerType = inferAnswerType(answer),
+    source: ScreeningAnswerSource = "manual",
+  ) => {
     const payload = {
       questionKey: String(questionKey || "").trim(),
       questionLabel: String(questionLabel || "").trim() || labelFromQuestionKey(questionKey),
-      answer: String(answer || "").trim(),
+      answer: compactAnswer(answer),
+      answerType,
+      source,
+      lastUsed: new Date().toISOString(),
     };
     if (!payload.questionKey || !payload.answer) return;
 
@@ -527,6 +757,10 @@ export default function Jobs() {
       ...prev,
       [payload.questionKey]: payload.questionLabel,
     }));
+    setSiteAnswerTypes((prev) => ({
+      ...prev,
+      [payload.questionKey]: payload.answerType,
+    }));
     syncedAnswerRef.current[payload.questionKey] = payload.answer;
   };
 
@@ -538,12 +772,14 @@ export default function Jobs() {
       const answers = Array.isArray(data?.data?.answers) ? (data.data.answers as ScreeningAnswerApiItem[]) : [];
       const answerMap: Record<string, string> = {};
       const labelMap: Record<string, string> = {};
+      const typeMap: Record<string, ScreeningAnswerType> = {};
       for (const item of answers) {
         const questionKey = String(item?.questionKey || "").trim();
         const questionLabel = String(item?.questionLabel || "").trim();
         const answer = String(item?.answer || "").trim();
         if (!questionKey || !answer) continue;
         answerMap[questionKey] = answer;
+        typeMap[questionKey] = item?.answerType || inferAnswerType(answer);
         if (questionLabel) {
           answerMap[normalizeLabel(questionLabel)] = answer;
           labelMap[questionKey] = questionLabel;
@@ -552,6 +788,7 @@ export default function Jobs() {
       }
       setSiteScreeningAnswers(answerMap);
       setSiteQuestionLabels(labelMap);
+      setSiteAnswerTypes(typeMap);
       setAnswerDrafts((prev) => {
         const next = { ...prev };
         let changed = false;
@@ -591,8 +828,10 @@ export default function Jobs() {
         pendingLabelMap.get(canonicalKey) ||
         siteQuestionLabels[canonicalKey] ||
         labelFromQuestionKey(canonicalKey);
+      const catalogField = lookupCatalogField(canonicalKey, rawKey, questionLabel);
+      const answerType = catalogField?.answerType || siteAnswerTypes[canonicalKey] || inferAnswerType(answer);
       try {
-        await saveAnswerToSite(canonicalKey, questionLabel, answer);
+        await saveAnswerToSite(canonicalKey, questionLabel, answer, answerType, "extension_capture");
       } catch {
         // Keep running if one answer fails to sync.
       }
@@ -630,6 +869,7 @@ export default function Jobs() {
             resolve({
               installed,
               runtimeId: data.runtimeId || undefined,
+              version: String(data.extensionVersion || "").trim() || undefined,
               linkedIn: data.linkedIn || undefined,
               state: data.state || null,
               pendingQuestions: Array.isArray(data.pendingQuestions) ? data.pendingQuestions : [],
@@ -719,52 +959,64 @@ export default function Jobs() {
       setSyncingSettings(true);
       setError("");
 
+      const mergedAnswers: Record<string, string> = {
+        ...(extensionStatus.screeningAnswers || {}),
+        ...siteScreeningAnswers,
+      };
+      for (const [rawKey, rawValue] of Object.entries(answerDrafts)) {
+        const answer = String(rawValue || "").trim();
+        if (!answer) continue;
+        mergedAnswers[rawKey] = answer;
+      }
+
       // These preferences are stored as screening answers on the site, but the extension expects them as settings.
-      const preferredSearchLocation = pickFirstNonEmpty(siteScreeningAnswers, [
+      const preferredSearchLocation = pickFirstNonEmpty(mergedAnswers, [
         "cp_pref_search_location",
         "careerpilot_preference_search_location",
       ]);
-      const preferredSearchTermsRaw = pickFirstNonEmpty(siteScreeningAnswers, [
+      const preferredSearchTermsRaw = pickFirstNonEmpty(mergedAnswers, [
         "cp_pref_search_terms",
+        "preferred_job_titles",
         "careerpilot_preference_search_terms",
       ]);
       const preferredSearchTerms = parseSearchTermsInput(preferredSearchTermsRaw);
       const preferredLocations = parsePreferenceListInput(
-        pickFirstNonEmpty(siteScreeningAnswers, [
+        pickFirstNonEmpty(mergedAnswers, [
           "cp_pref_search_locations",
           "cp_pref_search_location",
           "preferred_locations",
         ]),
       );
       const preferredJobTypes = parsePreferenceListInput(
-        pickFirstNonEmpty(siteScreeningAnswers, ["cp_pref_job_types", "job_types"]),
+        pickFirstNonEmpty(mergedAnswers, ["cp_pref_job_types", "job_types"]),
       );
       const preferredCountries = parsePreferenceListInput(
-        pickFirstNonEmpty(siteScreeningAnswers, ["cp_pref_preferred_countries", "preferred_countries"]),
+        pickFirstNonEmpty(mergedAnswers, ["cp_pref_preferred_countries", "preferred_countries"]),
       );
       const preferredWorkMode = parsePreferenceListInput(
-        pickFirstNonEmpty(siteScreeningAnswers, ["cp_pref_work_mode", "remote_onsite_hybrid", "work_mode_preference"]),
+        pickFirstNonEmpty(mergedAnswers, ["cp_pref_work_mode", "remote_onsite_hybrid", "work_mode_preference"]),
       );
-      const preferredYearsOfExperience = pickFirstNonEmpty(siteScreeningAnswers, [
+      const remoteModeSelected = preferredWorkMode.some((value) => normalizeLabel(value) === "remote");
+      const preferredYearsOfExperience = pickFirstNonEmpty(mergedAnswers, [
         "cp_pref_years_of_experience",
         "careerpilot_preference_years_of_experience",
       ]);
-      const preferredConfidenceLevel = pickFirstNonEmpty(siteScreeningAnswers, [
+      const preferredConfidenceLevel = pickFirstNonEmpty(mergedAnswers, [
         "cp_pref_confidence_level",
         "careerpilot_preference_confidence_level",
       ]);
-      const preferredRequireVisa = pickFirstNonEmpty(siteScreeningAnswers, [
+      const preferredRequireVisa = pickFirstNonEmpty(mergedAnswers, [
         "cp_pref_require_visa",
         "careerpilot_preference_need_visa_sponsorship",
         "careerpilot_preference_require_visa",
       ]);
-      const preferredUsCitizenship = pickFirstNonEmpty(siteScreeningAnswers, [
+      const preferredUsCitizenship = pickFirstNonEmpty(mergedAnswers, [
         "cp_pref_us_citizenship",
         "careerpilot_preference_us_work_authorization",
       ]);
 
       const screeningAnswersForSync: Record<string, string> = {};
-      for (const [rawKey, rawValue] of Object.entries(siteScreeningAnswers)) {
+      for (const [rawKey, rawValue] of Object.entries(mergedAnswers)) {
         const answer = String(rawValue || "").trim();
         if (!answer) continue;
         const canonicalKey = toQuestionKey(rawKey);
@@ -773,26 +1025,33 @@ export default function Jobs() {
       }
 
       const fullName =
-        pickFirstNonEmpty(siteScreeningAnswers, ["full_name", "full legal name"]) ||
+        pickFirstNonEmpty(mergedAnswers, ["full_name", "full legal name"]) ||
         String(user?.name || "").trim();
       const { firstName, lastName } = splitFullName(
-        pickFirstNonEmpty(siteScreeningAnswers, ["first_name"])
-          ? `${pickFirstNonEmpty(siteScreeningAnswers, ["first_name"])} ${pickFirstNonEmpty(siteScreeningAnswers, ["last_name"])}`
+        pickFirstNonEmpty(mergedAnswers, ["first_name"])
+          ? `${pickFirstNonEmpty(mergedAnswers, ["first_name"])} ${pickFirstNonEmpty(mergedAnswers, ["last_name"])}`
           : fullName,
       );
-      const phoneAnswer = pickFirstNonEmpty(siteScreeningAnswers, ["phone_number", "phone", "mobile_phone_number"]);
-      const currentCity = pickFirstNonEmpty(siteScreeningAnswers, ["current_city", "your_location_city_state"]) || user?.currentCity || "";
-      const linkedinUrl = pickFirstNonEmpty(siteScreeningAnswers, ["linkedin_url", "linkedin_profile"]) || user?.linkedinUrl || "";
-      const websiteUrl = pickFirstNonEmpty(siteScreeningAnswers, ["portfolio_url"]) || user?.portfolioUrl || "";
-      const streetAddress = pickFirstNonEmpty(siteScreeningAnswers, ["address_line"]) || user?.addressLine || "";
-      const stateRegion = pickFirstNonEmpty(siteScreeningAnswers, ["state_region"]);
-      const country = pickFirstNonEmpty(siteScreeningAnswers, ["country"]);
+      const phoneAnswer = pickFirstNonEmpty(mergedAnswers, ["phone_number", "phone", "mobile_phone_number"]);
+      const currentCity = pickFirstNonEmpty(mergedAnswers, ["current_city", "your_location_city_state"]) || user?.currentCity || "";
+      const linkedinUrl = pickFirstNonEmpty(mergedAnswers, ["linkedin_url", "linkedin_profile"]) || user?.linkedinUrl || "";
+      const websiteUrl = pickFirstNonEmpty(mergedAnswers, ["portfolio_url"]) || user?.portfolioUrl || "";
+      const streetAddress = pickFirstNonEmpty(mergedAnswers, ["address_line"]) || user?.addressLine || "";
+      const stateRegion = pickFirstNonEmpty(mergedAnswers, ["state_region"]);
+      const country = pickFirstNonEmpty(mergedAnswers, ["country"]);
+      const resolvedSearchLocation =
+        preferredSearchLocation ||
+        preferredLocations[0] ||
+        (!remoteModeSelected ? preferredCountries[0] || currentCity : "");
+      const filterLocations = sanitizeLocationFilterValues(
+        remoteModeSelected ? preferredLocations : [...preferredLocations, ...preferredCountries],
+      );
 
       const settingsPayload = {
         currentCity,
-        searchLocation: preferredSearchLocation || currentCity,
+        searchLocation: resolvedSearchLocation,
         searchTerms: preferredSearchTerms,
-        filterLocations: Array.from(new Set([...preferredLocations, ...preferredCountries])),
+        filterLocations,
         jobType: preferredJobTypes,
         onSite: preferredWorkMode,
         contactEmail: user?.email || "",
@@ -864,10 +1123,19 @@ export default function Jobs() {
     }
   };
 
-  const saveAnswerForQuestion = async (questionKey: string, questionLabel: string) => {
+  const saveAnswerForQuestion = async (
+    questionKey: string,
+    questionLabel: string,
+    answerType?: ScreeningAnswerType,
+  ) => {
     const canonicalKey = toQuestionKey(questionKey || questionLabel);
     const label = String(questionLabel || "").trim() || labelFromQuestionKey(canonicalKey);
-    const answer = (answerDrafts[canonicalKey] || answerDrafts[questionKey] || "").trim();
+    const answer = compactAnswer(answerDrafts[canonicalKey] || answerDrafts[questionKey] || "");
+    const resolvedAnswerType =
+      answerType ||
+      lookupCatalogField(canonicalKey, questionLabel)?.answerType ||
+      siteAnswerTypes[canonicalKey] ||
+      inferAnswerType(answer);
     if (!answer) {
       setError("Answer cannot be empty.");
       return;
@@ -880,7 +1148,7 @@ export default function Jobs() {
       setSavingAnswerKey(canonicalKey);
       setError("");
 
-      await saveAnswerToSite(canonicalKey, label, answer);
+      await saveAnswerToSite(canonicalKey, label, answer, resolvedAnswerType, "manual");
 
       const ack = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
         const requestId = `cp_save_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -950,6 +1218,27 @@ export default function Jobs() {
   };
 
   useEffect(() => {
+    let active = true;
+    const loadExtensionMeta = async () => {
+      try {
+        const res = await fetch("/api/public/extension-meta", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data?.success || !active) return;
+        setExtensionRelease((prev) => ({
+          ...prev,
+          ...(data.data || {}),
+        }));
+      } catch {
+        // Best effort.
+      }
+    };
+    void loadExtensionMeta();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     void loadJobs();
     void loadSiteScreeningAnswers();
     void checkExtensionStatus();
@@ -977,7 +1266,7 @@ export default function Jobs() {
     // Best-effort auto-sync once extension is detected.
     void syncProfileToExtension();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extensionStatus.installed, user?.id, Object.keys(siteScreeningAnswers).length]);
+  }, [extensionStatus.installed, user?.id, Object.keys(siteScreeningAnswers).length, Object.keys(extensionStatus.screeningAnswers || {}).length]);
 
   const filteredJobs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -1012,12 +1301,14 @@ export default function Jobs() {
       questionLabel: string,
       answer: string,
       source: ScreeningFieldView["source"],
+      explicitAnswerType?: ScreeningAnswerType,
     ) => {
       const catalogField = lookupCatalogField(rawKey, questionLabel);
       const questionKey = catalogField?.key || toQuestionKey(rawKey || questionLabel);
       if (!questionKey) return;
 
       const cleanAnswer = String(answer || "").trim();
+      const resolvedAnswerType = catalogField?.answerType || explicitAnswerType || inferAnswerType(cleanAnswer);
       const cleanLabel =
         catalogField?.label ||
         String(questionLabel || "").trim() ||
@@ -1032,8 +1323,11 @@ export default function Jobs() {
           questionKey,
           questionLabel: cleanLabel,
           answer: cleanAnswer,
+          answerType: resolvedAnswerType,
           category,
           order,
+          options: catalogField?.options,
+          presets: catalogField?.presets,
           source,
         });
         return;
@@ -1047,8 +1341,11 @@ export default function Jobs() {
         ...existing,
         questionLabel: existing.questionLabel || cleanLabel,
         answer: shouldReplaceAnswer ? cleanAnswer : existing.answer,
+        answerType: catalogField?.answerType || existing.answerType || resolvedAnswerType,
         category,
         order: Math.min(existing.order, order),
+        options: catalogField?.options || existing.options,
+        presets: catalogField?.presets || existing.presets,
         source:
           existing.source === source
             ? existing.source
@@ -1061,20 +1358,24 @@ export default function Jobs() {
     };
 
     for (const [rawKey, rawAnswer] of Object.entries(siteScreeningAnswers)) {
+      const questionKey = toQuestionKey(rawKey);
       upsert(
         rawKey,
-        siteQuestionLabels[toQuestionKey(rawKey)] || labelFromQuestionKey(toQuestionKey(rawKey)),
+        siteQuestionLabels[questionKey] || labelFromQuestionKey(questionKey),
         String(rawAnswer || ""),
         "site",
+        siteAnswerTypes[questionKey],
       );
     }
 
     for (const [rawKey, rawAnswer] of Object.entries(extensionStatus.screeningAnswers || {})) {
+      const questionKey = toQuestionKey(rawKey);
       upsert(
         rawKey,
-        siteQuestionLabels[toQuestionKey(rawKey)] || labelFromQuestionKey(toQuestionKey(rawKey)),
+        siteQuestionLabels[questionKey] || labelFromQuestionKey(questionKey),
         String(rawAnswer || ""),
         "extension",
+        lookupCatalogField(questionKey, rawKey)?.answerType,
       );
     }
 
@@ -1088,6 +1389,7 @@ export default function Jobs() {
           extensionStatus.screeningAnswers || {},
         ),
         "pending",
+        lookupCatalogField(pending.questionKey || pending.questionLabel, pending.questionLabel)?.answerType,
       );
     }
 
@@ -1106,13 +1408,15 @@ export default function Jobs() {
         category,
         title: SCREENING_SECTION_META[category].title,
         subtitle: SCREENING_SECTION_META[category].subtitle,
-        fields: grouped[category].sort((a, b) => {
-          if (a.order !== b.order) return a.order - b.order;
-          return a.questionLabel.localeCompare(b.questionLabel);
-        }),
+        fields: grouped[category]
+          .filter((field) => !(remoteWorkModeSelected && field.questionKey === "cp_pref_preferred_countries"))
+          .sort((a, b) => {
+            if (a.order !== b.order) return a.order - b.order;
+            return a.questionLabel.localeCompare(b.questionLabel);
+          }),
       }))
       .filter((section) => section.fields.length > 0);
-  }, [siteScreeningAnswers, siteQuestionLabels, extensionStatus.pendingQuestions, extensionStatus.screeningAnswers]);
+  }, [remoteWorkModeSelected, siteScreeningAnswers, siteQuestionLabels, siteAnswerTypes, extensionStatus.pendingQuestions, extensionStatus.screeningAnswers]);
 
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || null;
 
@@ -1185,6 +1489,7 @@ export default function Jobs() {
     if (typeof window === "undefined") return;
     setError("");
     setInstallMessage("");
+    const downloadFileName = currentPackageFileName;
     try {
       const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
         method: "GET",
@@ -1195,7 +1500,7 @@ export default function Jobs() {
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
-      anchor.download = "AutoApplyCVLinkedInExtension.zip";
+      anchor.download = downloadFileName;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -1203,17 +1508,55 @@ export default function Jobs() {
     } catch {
       const anchor = document.createElement("a");
       anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
-      anchor.download = "AutoApplyCVLinkedInExtension.zip";
+      anchor.download = downloadFileName;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
     }
     setInstallMessage(
-      "ZIP downloaded. Next: unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, then pick the unzipped folder that contains manifest.json.",
+      `ZIP downloaded: ${downloadFileName}. Extract it, open Manage Extensions, turn on Developer mode, then click Load unpacked and choose the extracted folder.`,
     );
     window.setTimeout(() => {
       window.open("chrome://extensions/", "_blank");
     }, 160);
+  };
+
+  const downloadCurrentZipOnly = async () => {
+    if (typeof window === "undefined") return;
+    setError("");
+    const downloadFileName = currentPackageFileName;
+    try {
+      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = downloadFileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch {
+      const anchor = document.createElement("a");
+      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
+      anchor.download = downloadFileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }
+    setInstallMessage(`ZIP downloaded: ${downloadFileName}. Unzip it before the next step.`);
+  };
+
+  const openLinkedInJobsTab = () => {
+    if (typeof window === "undefined") return;
+    const opened = window.open("https://www.linkedin.com/jobs/", "_blank", "noopener,noreferrer");
+    if (opened) {
+      opened.opener = null;
+    }
   };
 
   const copyLoadUnpackedSteps = async () => {
@@ -1221,17 +1564,15 @@ export default function Jobs() {
       setError("Clipboard is not available in this browser.");
       return;
     }
+    const downloadFileName = currentPackageFileName;
     try {
       await window.navigator.clipboard.writeText(
         [
           "AutoApply CV Extension Setup (Load Unpacked)",
-          "1) Download AutoApplyCVLinkedInExtension.zip from dashboard and unzip it.",
-          "2) Open chrome://extensions/",
-          "3) Turn ON Developer mode (top-right).",
-          "4) Click Load unpacked.",
-          "5) Select the unzipped folder that contains manifest.json.",
-          "6) Refresh dashboard and click Check Extension.",
-          "7) Open https://www.linkedin.com/jobs/ and click Start in extension popup.",
+          `1) Download ${downloadFileName}.`,
+          `2) Extract it. The folder should look like ${currentPackageBaseName} and contain manifest.json.`,
+          "3) In Chrome click three dots > Extensions > Manage Extensions. Turn ON Developer mode on the top-right, then click Load unpacked on the top-left.",
+          `4) Select the extracted folder, make sure LinkedIn is signed in, then return here and click Check Extension.`,
         ].join("\n"),
       );
       setInstallMessage("Install steps copied. Share them with users directly.");
@@ -1240,12 +1581,106 @@ export default function Jobs() {
     }
   };
 
+  const openInstallGuide = () => {
+    setError("");
+    setInstallMessage("");
+    setInstallGuideCompletedIds([]);
+    setInstallGuideStepIndex(0);
+    setInstallGuideOpen(true);
+  };
+
+  const closeInstallGuide = () => {
+    setInstallGuideOpen(false);
+  };
+
+  const jumpToInstallGuideStep = (index: number) => {
+    setInstallGuideStepIndex(Math.max(0, Math.min(installGuideSteps.length - 1, index)));
+  };
+
+  const previousInstallGuideStep = () => {
+    setInstallGuideStepIndex((prev) => Math.max(0, prev - 1));
+  };
+
+  const nextInstallGuideStep = () => {
+    setInstallGuideStepIndex((prev) => Math.min(installGuideSteps.length - 1, prev + 1));
+  };
+
+  const markInstallGuideStepDone = () => {
+    const currentStep = installGuideSteps[installGuideStepIndex];
+    if (!currentStep) return;
+
+    setInstallGuideCompletedIds((prev) => (prev.includes(currentStep.id) ? prev : [...prev, currentStep.id]));
+
+    if (currentStep.id === "verify-install") {
+      void checkExtensionStatus();
+    }
+
+    if (installGuideStepIndex >= installGuideSteps.length - 1) {
+      setInstallGuideOpen(false);
+      setInstallMessage("Guided install completed. If the version still looks old, reload the unpacked extension once in chrome://extensions.");
+      return;
+    }
+
+    setInstallGuideStepIndex((prev) => Math.min(installGuideSteps.length - 1, prev + 1));
+  };
+
+  const runInstallGuideStepAction = (step: ExtensionInstallGuideStep) => {
+    if (step.id === "download-zip") {
+      void downloadCurrentZipOnly();
+      return;
+    }
+    if (step.id === "open-chrome-extensions") {
+      void onInstallOrReloadExtension();
+      return;
+    }
+    if (step.id === "verify-install") {
+      void checkExtensionStatus();
+      return;
+    }
+    if (step.id === "sync-profile") {
+      void syncProfileToExtension();
+      return;
+    }
+    if (step.id === "open-linkedin-jobs") {
+      openLinkedInJobsTab();
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const maybeOpenQueuedTour = () => {
+      if (!consumeDashboardTourRequest(DASHBOARD_TOUR_JOBS_EXTENSION)) return;
+      openInstallGuide();
+    };
+
+    const onDashboardTourRequest = (event: Event) => {
+      const tourId = (event as CustomEvent<{ tourId?: string }>).detail?.tourId || "";
+      if (tourId !== DASHBOARD_TOUR_JOBS_EXTENSION) return;
+      maybeOpenQueuedTour();
+    };
+
+    maybeOpenQueuedTour();
+    window.addEventListener(DASHBOARD_TOUR_EVENT_NAME, onDashboardTourRequest);
+    return () => {
+      window.removeEventListener(DASHBOARD_TOUR_EVENT_NAME, onDashboardTourRequest);
+    };
+  }, [openInstallGuide]);
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Auto-Apply Jobs</h1>
           <p className="text-gray-600">Showing {jobs.length} real jobs from your backend queue</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span ref={versionBadgeRef} className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">
+              Current ZIP: {currentPackageFileName || "loading..."}
+            </span>
+            <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
+              Installed extension: {installedPackageName || "not detected"}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -1281,14 +1716,28 @@ export default function Jobs() {
           <div>
             <h2 className="text-xl font-bold text-gray-900">LinkedIn Extension Setup</h2>
             <p className="text-sm text-gray-600">Login LinkedIn, install extension, then click Start inside extension panel.</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Current package on site: {currentPackageBaseName}
+            </p>
           </div>
-          <button
-            onClick={() => void checkExtensionStatus()}
-            disabled={checkingExtension}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold disabled:opacity-60"
-          >
-            {checkingExtension ? "Checking..." : "Check Extension"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={openInstallGuide}
+              className="px-4 py-2 rounded-xl bg-sky-600 text-white font-semibold shadow-sm transition-colors hover:bg-sky-700 inline-flex items-center gap-2"
+            >
+              <Play className="w-4 h-4" />
+              Start Install Guide
+            </button>
+            <button
+              ref={checkExtensionButtonRef}
+              onClick={() => void checkExtensionStatus()}
+              disabled={checkingExtension}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold disabled:opacity-60"
+            >
+              {checkingExtension ? "Checking..." : "Check Extension"}
+            </button>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-3 gap-3">
@@ -1323,6 +1772,7 @@ export default function Jobs() {
 
         <div className="mt-4 flex flex-wrap gap-2">
           <a
+            ref={openLinkedInJobsButtonRef}
             href="https://www.linkedin.com/jobs/"
             target="_blank"
             rel="noreferrer"
@@ -1332,6 +1782,7 @@ export default function Jobs() {
             Open LinkedIn Jobs
           </a>
           <button
+            ref={downloadOpenButtonRef}
             type="button"
             onClick={onInstallOrReloadExtension}
             className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
@@ -1340,12 +1791,13 @@ export default function Jobs() {
             Download + Open Extensions
           </button>
           <a
+            ref={downloadZipButtonRef}
             href={extensionZipUrl}
-            download
+            download={currentPackageFileName || undefined}
             className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
-            Download ZIP
+            Download Current ZIP
           </a>
           {extensionStoreUrl ? (
             <a
@@ -1367,6 +1819,7 @@ export default function Jobs() {
             Copy Setup Steps
           </button>
           <button
+            ref={syncProfileButtonRef}
             onClick={() => void syncProfileToExtension()}
             disabled={syncingSettings}
             className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2 disabled:opacity-60"
@@ -1383,11 +1836,10 @@ export default function Jobs() {
         ) : null}
 
         <ol className="mt-4 text-sm text-gray-700 list-decimal pl-5 space-y-1">
-          <li>Login to LinkedIn in your browser.</li>
-          <li>Download and unzip `AutoApplyCVLinkedInExtension.zip`.</li>
-          <li>Open `chrome://extensions/`, enable Developer mode, click Load unpacked, and select the unzipped folder that contains `manifest.json`.</li>
-          <li>Open LinkedIn Jobs page.</li>
-          <li>Click extension icon, choose AutoApply CV extension, then click Start.</li>
+          <li>Download <code>{currentPackageFileName}</code>.</li>
+          <li>Extract it. The folder should look like <code>{currentPackageBaseName}</code> and contain <code>manifest.json</code>.</li>
+          <li>In Chrome click three dots, then <code>Extensions</code>, then <code>Manage Extensions</code>. Turn on Developer mode on the top-right and click <code>Load unpacked</code>.</li>
+          <li>Select the extracted folder. When the extension appears, click the extension icon, make sure LinkedIn is signed in, then return here and click Check Extension.</li>
         </ol>
 
         <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
@@ -1398,40 +1850,64 @@ export default function Jobs() {
           </div>
         </div>
 
+        <ExtensionInstallGuide
+          open={installGuideOpen}
+          steps={installGuideSteps}
+          currentStepIndex={installGuideStepIndex}
+          completedStepIds={installGuideCompletedIds}
+        onClose={closeInstallGuide}
+        onNext={nextInstallGuideStep}
+        onPrevious={previousInstallGuideStep}
+        onStepDone={markInstallGuideStepDone}
+        onJumpToStep={jumpToInstallGuideStep}
+        onStepAction={runInstallGuideStepAction}
+      />
+
         {(extensionStatus.pendingQuestions || []).length > 0 ? (
           <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
             <h3 className="font-semibold text-gray-900">Action Needed: Answer Required Fields</h3>
-            {(extensionStatus.pendingQuestions || []).map((q) => (
-              <div key={q.questionKey} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <div className="text-sm font-semibold text-gray-900">{q.questionLabel}</div>
-                {q.validationMessage ? <div className="text-xs text-amber-700 mt-1">{q.validationMessage}</div> : null}
-                {(q.questionKey === "resume_upload_required" || /resume/i.test(String(q.validationMessage || ""))) ? (
-                  <div className="text-xs text-blue-700 mt-2">
-                    Upload resume in LinkedIn Easy Apply profile. Copilot will auto-select the newest attached resume.
+            {(extensionStatus.pendingQuestions || []).map((q) => {
+              const pendingKey = toQuestionKey(q.questionKey || q.questionLabel);
+              const pendingCatalog = lookupCatalogField(q.questionKey || q.questionLabel, q.questionLabel);
+              const pendingDraftValue = answerDrafts[pendingKey] || "";
+              const pendingAnswerType = pendingCatalog?.answerType || siteAnswerTypes[pendingKey] || inferAnswerType(pendingDraftValue);
+              return (
+                <div key={q.questionKey} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="text-sm font-semibold text-gray-900">{q.questionLabel}</div>
+                  {q.validationMessage ? <div className="text-xs text-amber-700 mt-1">{q.validationMessage}</div> : null}
+                  {(q.questionKey === "resume_upload_required" || /resume/i.test(String(q.validationMessage || ""))) ? (
+                    <div className="text-xs text-blue-700 mt-2">
+                      Upload resume in LinkedIn Easy Apply profile. Copilot will auto-select the newest attached resume.
+                    </div>
+                  ) : null}
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <div className="flex-1">
+                      <AnswerValueEditor
+                        answerType={pendingAnswerType}
+                        value={pendingDraftValue}
+                        onChange={(value) =>
+                          setAnswerDrafts((prev) => ({
+                            ...prev,
+                            [pendingKey]: value,
+                          }))
+                        }
+                        options={withCurrentSelectOption(pendingCatalog?.options || (pendingAnswerType === "boolean" ? YES_NO_OPTIONS : []), pendingDraftValue)}
+                        presets={pendingCatalog?.presets || []}
+                        placeholder="Enter answer to reuse in next applications"
+                        variant="amber"
+                      />
+                    </div>
+                    <button
+                      onClick={() => void saveAnswerForQuestion(q.questionKey, q.questionLabel, pendingAnswerType)}
+                      disabled={savingAnswerKey === pendingKey}
+                      className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
+                    >
+                      {savingAnswerKey === pendingKey ? "Saving..." : "Save"}
+                    </button>
                   </div>
-                ) : null}
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={answerDrafts[toQuestionKey(q.questionKey || q.questionLabel)] || ""}
-                    onChange={(e) =>
-                      setAnswerDrafts((prev) => ({
-                        ...prev,
-                        [toQuestionKey(q.questionKey || q.questionLabel)]: e.target.value,
-                      }))
-                    }
-                    placeholder="Enter answer to reuse in next applications"
-                    className="flex-1 px-3 py-2 rounded-lg border border-amber-300 bg-white text-sm outline-none focus:border-purple-400"
-                  />
-                  <button
-                    onClick={() => void saveAnswerForQuestion(q.questionKey, q.questionLabel)}
-                    disabled={savingAnswerKey === toQuestionKey(q.questionKey || q.questionLabel)}
-                    className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
-                  >
-                    {savingAnswerKey === toQuestionKey(q.questionKey || q.questionLabel) ? "Saving..." : "Save"}
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 
@@ -1489,19 +1965,24 @@ export default function Jobs() {
                         </div>
 
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                          <input
-                            value={draftValue}
-                            onChange={(e) =>
-                              setAnswerDrafts((prev) => ({
-                                ...prev,
-                                [field.questionKey]: e.target.value,
-                              }))
-                            }
-                            placeholder="Type answer and click Save"
-                            className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:border-purple-400"
-                          />
+                          <div className="flex-1">
+                            <AnswerValueEditor
+                              answerType={field.answerType}
+                              value={draftValue}
+                              onChange={(value) =>
+                                setAnswerDrafts((prev) => ({
+                                  ...prev,
+                                  [field.questionKey]: value,
+                                }))
+                              }
+                              options={withCurrentSelectOption(field.options || (field.answerType === "boolean" ? YES_NO_OPTIONS : []), draftValue)}
+                              presets={field.presets || []}
+                              placeholder="Type answer and click Save"
+                              variant={isPending ? "amber" : "default"}
+                            />
+                          </div>
                           <button
-                            onClick={() => void saveAnswerForQuestion(field.questionKey, field.questionLabel)}
+                            onClick={() => void saveAnswerForQuestion(field.questionKey, field.questionLabel, field.answerType)}
                             disabled={savingAnswerKey === field.questionKey || !String(draftValue || "").trim()}
                             className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
                           >
@@ -1728,6 +2209,206 @@ export default function Jobs() {
           )}
         </motion.div>
       </div>
+    </div>
+  );
+}
+
+function withCurrentSelectOption(options: string[], currentValue: string) {
+  const normalizedCurrent = String(currentValue || "").trim();
+  if (!normalizedCurrent) return options;
+  if (options.some((option) => option.toLowerCase() === normalizedCurrent.toLowerCase())) return options;
+  return [normalizedCurrent, ...options];
+}
+
+function AnswerValueEditor({
+  answerType,
+  value,
+  onChange,
+  options = [],
+  presets = [],
+  placeholder,
+  variant = "default",
+}: {
+  answerType: ScreeningAnswerType;
+  value: string;
+  onChange: (value: string) => void;
+  options?: string[];
+  presets?: string[];
+  placeholder: string;
+  variant?: "default" | "amber";
+}) {
+  if (answerType === "multiselect") {
+    return (
+      <AnswerTagInput
+        values={parsePreferenceListInput(value)}
+        onChange={(values) => onChange(stringifyPreferenceList(values))}
+        placeholder={placeholder}
+        presets={presets}
+        variant={variant}
+      />
+    );
+  }
+  if (answerType === "boolean" || answerType === "choice") {
+    return (
+      <AnswerSelectInput
+        value={value}
+        onChange={onChange}
+        options={options}
+        variant={variant}
+      />
+    );
+  }
+  return (
+    <AnswerTextInput
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      inputMode={answerType === "number" ? "numeric" : undefined}
+      variant={variant}
+    />
+  );
+}
+
+function AnswerTextInput({
+  value,
+  onChange,
+  placeholder,
+  inputMode,
+  variant = "default",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  inputMode?: "text" | "numeric" | "decimal" | "email" | "tel" | "url" | "search" | "none";
+  variant?: "default" | "amber";
+}) {
+  const borderClass = variant === "amber" ? "border-amber-300 focus:border-amber-400" : "border-gray-300 focus:border-purple-400";
+  return (
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      inputMode={inputMode}
+      className={`w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ${borderClass}`}
+    />
+  );
+}
+
+function AnswerSelectInput({
+  value,
+  onChange,
+  options,
+  variant = "default",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  variant?: "default" | "amber";
+}) {
+  const borderClass = variant === "amber" ? "border-amber-300 focus:border-amber-400" : "border-gray-300 focus:border-purple-400";
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ${borderClass}`}
+    >
+      <option value="">Select</option>
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function AnswerTagInput({
+  values,
+  onChange,
+  placeholder,
+  presets = [],
+  variant = "default",
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+  presets?: string[];
+  variant?: "default" | "amber";
+}) {
+  const [draft, setDraft] = useState("");
+  const borderClass = variant === "amber" ? "border-amber-300" : "border-gray-300";
+
+  const addTag = (raw: string) => {
+    const value = String(raw || "").trim();
+    if (!value) return;
+    if (values.some((item) => item.toLowerCase() === value.toLowerCase())) return;
+    onChange([...values, value]);
+  };
+
+  const removeTag = (value: string) => {
+    onChange(values.filter((item) => item !== value));
+  };
+
+  return (
+    <div>
+      <div className={`rounded-lg border bg-white p-2 ${borderClass}`}>
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((item) => (
+            <span
+              key={item}
+              className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700"
+            >
+              {item}
+              <button
+                type="button"
+                onClick={() => removeTag(item)}
+                className="text-indigo-700 hover:text-indigo-900"
+                aria-label={`Remove ${item}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+
+          <input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === ",") {
+                event.preventDefault();
+                addTag(draft);
+                setDraft("");
+              }
+              if (event.key === "Backspace" && !draft && values.length) {
+                removeTag(values[values.length - 1]);
+              }
+            }}
+            onBlur={() => {
+              if (draft.trim()) {
+                addTag(draft);
+                setDraft("");
+              }
+            }}
+            placeholder={placeholder}
+            className="min-w-[180px] flex-1 px-1 py-1 text-sm outline-none"
+          />
+        </div>
+      </div>
+
+      {presets.length ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {presets.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => addTag(preset)}
+              className="rounded-full border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

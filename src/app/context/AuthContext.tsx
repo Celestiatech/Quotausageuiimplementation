@@ -80,9 +80,17 @@ function writeStoredUser(user: User | null) {
 
 async function fetchCurrentUser() {
   const res = await fetch('/api/auth/me', { credentials: 'include' });
-  if (!res.ok) return null;
+  if (res.status === 401 || res.status === 403) {
+    return { user: null, unauthorized: true } as const;
+  }
+  if (!res.ok) {
+    return { user: null, unauthorized: false } as const;
+  }
   const data = await res.json();
-  return ((data?.data?.user || data?.user) as User | undefined) || null;
+  return {
+    user: ((data?.data?.user || data?.user) as User | undefined) || null,
+    unauthorized: false,
+  } as const;
 }
 
 const useAuthStore = create<AuthStore>((set, get) => ({
@@ -100,10 +108,13 @@ const useAuthStore = create<AuthStore>((set, get) => ({
     }
 
     try {
-      const serverUser = await fetchCurrentUser();
-      if (serverUser) {
-        set({ user: serverUser });
-        writeStoredUser(serverUser);
+      const result = await fetchCurrentUser();
+      if (result.user) {
+        set({ user: result.user });
+        writeStoredUser(result.user);
+      } else if (result.unauthorized) {
+        set({ user: null });
+        writeStoredUser(null);
       }
     } catch {
       // Keep local session fallback when API is unreachable.
@@ -177,10 +188,16 @@ const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   refreshUser: async () => {
-    const serverUser = await fetchCurrentUser();
-    if (!serverUser) return;
-    set({ user: serverUser });
-    writeStoredUser(serverUser);
+    const result = await fetchCurrentUser();
+    if (result.user) {
+      set({ user: result.user });
+      writeStoredUser(result.user);
+      return;
+    }
+    if (result.unauthorized) {
+      set({ user: null });
+      writeStoredUser(null);
+    }
   },
 }));
 

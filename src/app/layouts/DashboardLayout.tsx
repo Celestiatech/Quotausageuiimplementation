@@ -16,11 +16,17 @@ import {
   User,
   CreditCard,
   ChevronDown,
-  Zap
+  Zap,
+  PlayCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
 import { useExtensionPipelineStats } from '../hooks/useExtensionPipelineStats';
+import {
+  DASHBOARD_TOUR_JOBS_EXTENSION,
+  DASHBOARD_TOUR_ONBOARDING_EXTENSION,
+  queueDashboardTourRequest,
+} from 'src/lib/dashboard-tour';
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -39,6 +45,8 @@ export default function DashboardLayout() {
   const freeLeft = user?.plan === 'free' ? Math.max(0, 3 - mergedDailyUsed) : 0;
   const spendableNow = user?.plan === 'pro' ? Number.MAX_SAFE_INTEGER : Math.max(0, hireBalance + freeLeft);
   const needsHires = spendableNow <= 0;
+  const primaryTourId = onboardingComplete ? DASHBOARD_TOUR_JOBS_EXTENSION : DASHBOARD_TOUR_ONBOARDING_EXTENSION;
+  const primaryTourRoute = onboardingComplete ? '/dashboard/jobs' : '/dashboard/onboarding';
 
   useEffect(() => {
     const handler = () => {
@@ -64,6 +72,13 @@ export default function DashboardLayout() {
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const handleStartTour = () => {
+    queueDashboardTourRequest(primaryTourId);
+    if (location.pathname !== primaryTourRoute) {
+      navigate(primaryTourRoute);
+    }
   };
 
   return (
@@ -209,6 +224,15 @@ export default function DashboardLayout() {
             </div>
 
             <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={handleStartTour}
+                className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100"
+              >
+                <PlayCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">Start Tour</span>
+                <span className="sm:hidden">Tour</span>
+              </button>
               <Link
                 to="/dashboard/billing"
                 className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg hover:shadow-md transition-all"

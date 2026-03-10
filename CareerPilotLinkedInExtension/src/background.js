@@ -10,15 +10,15 @@ const PORTAL_IMPORT_QUEUE_KEY = "cpPortalImportQueue";
 const PORTAL_SYNC_COOLDOWN_KEY = "cpPortalSyncCooldown";
 const PORTAL_ORIGIN_STATE_KEY = "cpPortalOriginState";
 const PORTAL_ORIGIN_FAILURE_THRESHOLD = 3;
-const PORTAL_DEFAULT_ORIGIN = "https://autoapplycv.in";
+const PORTAL_DEFAULT_ORIGIN = "https://www.autoapplycv.in";
 const PORTAL_REMOTE_ORIGIN_PRIORITY = [
   PORTAL_DEFAULT_ORIGIN,
-  "https://www.autoapplycv.in",
+  "https://autoapplycv.in",
   "https://autoapplycv.vercel.app",
 ];
 const PORTAL_FALLBACK_ORIGINS = [
   PORTAL_DEFAULT_ORIGIN,
-  "https://www.autoapplycv.in",
+  "https://autoapplycv.in",
   "https://autoapplycv.vercel.app",
   "http://localhost:3001",
   "http://localhost:3000",
@@ -164,6 +164,135 @@ async function notifyDashboardTabs(payload) {
   } catch {
     // ignore
   }
+}
+
+async function sendMessageToTab(tabId, message) {
+  if (!tabId) return { ok: false, error: "Missing tab id" };
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve({ ok: true, response });
+      });
+    } catch (error) {
+      resolve({ ok: false, error: String(error?.message || error) });
+    }
+  });
+}
+
+async function importPortalBatchViaDashboardTab(origin, batch) {
+  const targetOrigin = normalizePortalOrigin(origin);
+  if (!targetOrigin || !Array.isArray(batch) || !batch.length) {
+    return { attempted: false, status: 0, body: null };
+  }
+  try {
+    const tabs = await chrome.tabs.query({});
+    const matchingTabs = (tabs || []).filter((tab) => {
+      if (!tab?.id || !tab?.url) return false;
+      try {
+        return new URL(tab.url).origin === targetOrigin;
+      } catch {
+        return false;
+      }
+    });
+    for (const tab of matchingTabs) {
+      const result = await sendMessageToTab(tab.id, {
+        type: "CP_WEB_IMPORT_OUTCOMES",
+        entries: batch,
+      });
+      if (!result.ok) continue;
+      const payload = result.response && typeof result.response === "object" ? result.response : {};
+      const status = Math.max(0, Number(payload.status || 0));
+      return {
+        attempted: Boolean(payload.attempted),
+        status,
+        body: payload.body && typeof payload.body === "object" ? payload.body : null,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return { attempted: false, status: 0, body: null };
+}
+
+async function finalizePortalImportSuccess(origin, body, queue, batch) {
+  const imported = Math.max(0, Number(body?.data?.imported ?? batch.length));
+  const billingRaw = body?.data?.billing && typeof body.data.billing === "object" ? body.data.billing : {};
+  const resultItems = Array.isArray(body?.data?.results) ? body.data.results : [];
+  let chargedJobs = Math.max(0, Math.floor(Number(billingRaw.chargedJobs || 0)));
+  let consumedTotal = Math.max(0, Math.floor(Number(billingRaw.consumedTotal || 0)));
+  let freeConsumed = Math.max(0, Math.floor(Number(billingRaw.freeConsumed || 0)));
+  let paidConsumed = Math.max(0, Math.floor(Number(billingRaw.paidConsumed || 0)));
+  let chargeFailures = Math.max(0, Math.floor(Number(billingRaw.chargeFailures || 0)));
+  if (!chargedJobs && resultItems.length) {
+    chargedJobs = resultItems.filter((item) => Boolean(item?.billing?.charged)).length;
+  }
+  if (!consumedTotal && resultItems.length) {
+    consumedTotal = resultItems.reduce((sum, item) => sum + Math.max(0, Number(item?.billing?.consumed || 0)), 0);
+  }
+  if (!freeConsumed && resultItems.length) {
+    freeConsumed = resultItems.reduce(
+      (sum, item) => sum + Math.max(0, Number(item?.billing?.sourceBreakdown?.free || 0)),
+      0,
+    );
+  }
+  if (!paidConsumed && resultItems.length) {
+    paidConsumed = resultItems.reduce(
+      (sum, item) => sum + Math.max(0, Number(item?.billing?.sourceBreakdown?.paid || 0)),
+      0,
+    );
+  }
+  if (!chargeFailures && resultItems.length) {
+    chargeFailures = resultItems.filter((item) => {
+      const shouldCharge = String(item?.outcomeType || "").toUpperCase() === "APPLIED";
+      const reason = String(item?.billing?.reason || "").toUpperCase();
+      return shouldCharge && !item?.billing?.charged && reason && reason !== "NOT_CHARGED_ALREADY_SUBMITTED";
+    }).length;
+  }
+  const lastCharged = [...resultItems]
+    .reverse()
+    .find((item) => Boolean(item?.billing?.charged));
+  const syncSnapshot = setLastPortalSyncSnapshot({
+    ts: nowIso(),
+    origin,
+    imported,
+    chargedJobs,
+    consumedTotal,
+    freeConsumed,
+    paidConsumed,
+    chargeFailures,
+    lastChargedJobId: String(lastCharged?.externalJobId || "").trim(),
+    lastChargedJobTitle: String(lastCharged?.title || "").trim(),
+    lastChargedJobCompany: String(lastCharged?.company || "").trim(),
+  });
+  setPreferredPortalOrigin(origin, { resetFailures: true });
+  await setPortalQueue(queue.slice(batch.length));
+  await clearPortalCooldown();
+  await refreshPortalQuota();
+  await pushLog(
+    `Synced ${imported} update(s) to dashboard via ${origin}. Charged ${chargedJobs} (free ${freeConsumed}, paid ${paidConsumed}).`,
+    "info",
+    {
+      chargedJobs,
+      consumedTotal,
+      freeConsumed,
+      paidConsumed,
+      chargeFailures,
+    },
+  );
+  await notifyDashboardTabs({
+    imported,
+    ts: syncSnapshot.ts || nowIso(),
+    chargedJobs,
+    consumedTotal,
+    freeConsumed,
+    paidConsumed,
+    chargeFailures,
+    lastChargedJobId: syncSnapshot.lastChargedJobId || "",
+  });
 }
 
 function setPortalQuota(data) {
@@ -528,7 +657,38 @@ async function flushPortalImports() {
     const statusByOrigin = [];
     const notFoundOrigins = [];
     const authOrigins = [];
+    const processImportResponse = async (origin, status, body, label = "") => {
+      lastStatus = status;
+      statusByOrigin.push(`${origin}=${status}${label}`);
+      if (status === 401 || status === 403) {
+        authFailed = true;
+        authOrigins.push(origin);
+        if (preferred && origin === preferred) await markPortalOriginFailure(origin);
+        return "continue";
+      }
+      if (status === 404) {
+        lastNotFound = true;
+        notFoundOrigins.push(origin);
+        if (preferred && origin === preferred) await markPortalOriginFailure(origin);
+        return "continue";
+      }
+      if (!status) return "fallback";
+      if (!body?.success) {
+        if (preferred && origin === preferred) await markPortalOriginFailure(origin);
+        await pushLog(`Portal sync failed on ${origin} (HTTP ${status}). Will retry.`, "warn");
+        await setPortalCooldown(30 * 1000, "HTTP_ERROR");
+        return "stop";
+      }
+      await finalizePortalImportSuccess(origin, body, queue, batch);
+      return "success";
+    };
     for (const origin of candidates) {
+      const bridgeResult = await importPortalBatchViaDashboardTab(origin, batch);
+      if (bridgeResult.attempted && bridgeResult.status > 0) {
+        const bridgeOutcome = await processImportResponse(origin, bridgeResult.status, bridgeResult.body, ":bridge");
+        if (bridgeOutcome === "success" || bridgeOutcome === "stop") return;
+        if (bridgeOutcome === "continue") continue;
+      }
       try {
         const res = await fetch(`${origin}/api/extension/import`, {
           method: "POST",
@@ -537,105 +697,15 @@ async function flushPortalImports() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ entries: batch }),
         });
-        lastStatus = res.status;
         const body = await res.json().catch(() => null);
-        statusByOrigin.push(`${origin}=${res.status}`);
-
-        if (res.status === 401 || res.status === 403) {
-          authFailed = true;
-          authOrigins.push(origin);
-          if (preferred && origin === preferred) await markPortalOriginFailure(origin);
-          continue;
-        }
-        if (res.status === 404) {
-          lastNotFound = true;
-          notFoundOrigins.push(origin);
-          if (preferred && origin === preferred) await markPortalOriginFailure(origin);
+        const directOutcome = await processImportResponse(origin, res.status, body);
+        if (directOutcome === "success" || directOutcome === "stop") return;
+        if (directOutcome === "continue") {
           continue; // try another origin (common when both prod + localhost are open)
         }
-        if (!res.ok || !body?.success) {
-          if (preferred && origin === preferred) await markPortalOriginFailure(origin);
-          await pushLog(`Portal sync failed on ${origin} (HTTP ${res.status}). Will retry.`, "warn");
-          await setPortalCooldown(30 * 1000, "HTTP_ERROR");
+        if (directOutcome === "fallback") {
           return;
         }
-
-        // Success for this origin.
-        const imported = Math.max(0, Number(body?.data?.imported ?? batch.length));
-        const billingRaw = body?.data?.billing && typeof body.data.billing === "object" ? body.data.billing : {};
-        const resultItems = Array.isArray(body?.data?.results) ? body.data.results : [];
-        let chargedJobs = Math.max(0, Math.floor(Number(billingRaw.chargedJobs || 0)));
-        let consumedTotal = Math.max(0, Math.floor(Number(billingRaw.consumedTotal || 0)));
-        let freeConsumed = Math.max(0, Math.floor(Number(billingRaw.freeConsumed || 0)));
-        let paidConsumed = Math.max(0, Math.floor(Number(billingRaw.paidConsumed || 0)));
-        let chargeFailures = Math.max(0, Math.floor(Number(billingRaw.chargeFailures || 0)));
-        if (!chargedJobs && resultItems.length) {
-          chargedJobs = resultItems.filter((item) => Boolean(item?.billing?.charged)).length;
-        }
-        if (!consumedTotal && resultItems.length) {
-          consumedTotal = resultItems.reduce((sum, item) => sum + Math.max(0, Number(item?.billing?.consumed || 0)), 0);
-        }
-        if (!freeConsumed && resultItems.length) {
-          freeConsumed = resultItems.reduce(
-            (sum, item) => sum + Math.max(0, Number(item?.billing?.sourceBreakdown?.free || 0)),
-            0,
-          );
-        }
-        if (!paidConsumed && resultItems.length) {
-          paidConsumed = resultItems.reduce(
-            (sum, item) => sum + Math.max(0, Number(item?.billing?.sourceBreakdown?.paid || 0)),
-            0,
-          );
-        }
-        if (!chargeFailures && resultItems.length) {
-          chargeFailures = resultItems.filter((item) => {
-            const shouldCharge = String(item?.outcomeType || "").toUpperCase() === "APPLIED";
-            const reason = String(item?.billing?.reason || "").toUpperCase();
-            return shouldCharge && !item?.billing?.charged && reason && reason !== "NOT_CHARGED_ALREADY_SUBMITTED";
-          }).length;
-        }
-        const lastCharged = [...resultItems]
-          .reverse()
-          .find((item) => Boolean(item?.billing?.charged));
-        const syncSnapshot = setLastPortalSyncSnapshot({
-          ts: nowIso(),
-          origin,
-          imported,
-          chargedJobs,
-          consumedTotal,
-          freeConsumed,
-          paidConsumed,
-          chargeFailures,
-          lastChargedJobId: String(lastCharged?.externalJobId || "").trim(),
-          lastChargedJobTitle: String(lastCharged?.title || "").trim(),
-          lastChargedJobCompany: String(lastCharged?.company || "").trim(),
-        });
-        setPreferredPortalOrigin(origin, { resetFailures: true });
-        await setPortalQueue(queue.slice(batch.length));
-        await clearPortalCooldown();
-        await refreshPortalQuota();
-        await pushLog(
-          `Synced ${imported} update(s) to dashboard via ${origin}. Charged ${chargedJobs} (free ${freeConsumed}, paid ${paidConsumed}).`,
-          "info",
-          {
-            chargedJobs,
-            consumedTotal,
-            freeConsumed,
-            paidConsumed,
-            chargeFailures,
-          },
-        );
-        await notifyDashboardTabs({
-          imported,
-          ts: syncSnapshot.ts || nowIso(),
-          chargedJobs,
-          consumedTotal,
-          freeConsumed,
-          paidConsumed,
-          chargeFailures,
-          lastChargedJobId: syncSnapshot.lastChargedJobId || "",
-        });
-        return;
       } catch {
         networkFailed = true;
         statusByOrigin.push(`${origin}=NETWORK_ERROR`);

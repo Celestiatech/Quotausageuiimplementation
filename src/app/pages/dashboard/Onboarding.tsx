@@ -4,14 +4,23 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
+  Download,
+  ExternalLink,
   Loader2,
   Plus,
+  Play,
   Save,
   Sparkles,
   Trash2,
   UploadCloud,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
+import {
+  DASHBOARD_TOUR_EVENT_NAME,
+  DASHBOARD_TOUR_ONBOARDING_EXTENSION,
+  consumeDashboardTourRequest,
+} from "src/lib/dashboard-tour";
 
 type TabKey = "profile" | "preferences" | "screening";
 
@@ -62,10 +71,18 @@ type OnboardingProfileApi = {
 type ExtensionStatus = {
   installed: boolean;
   runtimeId?: string;
+  version?: string;
   linkedIn?: {
     hasLinkedInTab: boolean;
     hasJobsTab: boolean;
   };
+};
+
+type ExtensionReleaseMeta = {
+  version: string;
+  displayName: string;
+  downloadFileName: string;
+  downloadBaseName: string;
 };
 
 type ScreeningRow = {
@@ -139,6 +156,16 @@ type WizardStep = {
 
 const EXT_BRIDGE_PING_TIMEOUT_MS = 4500;
 const EXT_BRIDGE_ACK_TIMEOUT_MS = 5000;
+const EXTENSION_PACKAGE_PREFIX = "AutoApplyCVExtensionVersion";
+
+function formatExtensionPackageName(version: string) {
+  const normalized = String(version || "").trim();
+  return normalized ? `${EXTENSION_PACKAGE_PREFIX}${normalized}` : EXTENSION_PACKAGE_PREFIX;
+}
+
+function formatExtensionPackageFileName(version: string) {
+  return `${formatExtensionPackageName(version)}.zip`;
+}
 
 const WIZARD_STEPS: WizardStep[] = [
   { title: "Basic Details", description: "Name, email, phone, and location", tab: "profile" },
@@ -215,6 +242,36 @@ function normalizeLabel(value: string) {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function isRemoteLikeValue(value: string) {
+  const normalized = normalizeLabel(value);
+  return (
+    normalized === "remote" ||
+    normalized === "work from home" ||
+    normalized === "wfh" ||
+    normalized === "anywhere" ||
+    normalized === "worldwide"
+  );
+}
+
+function isRemoteWorkModeSelected(value: string) {
+  return normalizeLabel(value) === "remote";
+}
+
+function sanitizeLocationFilterValues(values: string[]) {
+  const seen = new Set<string>();
+  return values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value) => !isRemoteLikeValue(value))
+    .filter((value) => {
+      const normalized = normalizeLabel(value);
+      if (!normalized || seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    })
+    .slice(0, 25);
 }
 
 function slugifyKey(value: string) {
@@ -523,7 +580,7 @@ const DEFAULT_PREFERENCES: JobPreferences = {
   jobTypes: ["Full-time"],
   salaryMin: "",
   salaryMax: "",
-  preferredCountries: ["United States"],
+  preferredCountries: [],
   excludedCompanies: [],
   excludedKeywords: [],
 };
@@ -549,6 +606,27 @@ export default function Onboarding() {
   const [savingAnswerKey, setSavingAnswerKey] = useState("");
   const [checkingExtension, setCheckingExtension] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({ installed: false });
+  const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
+    version: "1.1.1",
+    displayName: "AutoApply CV LinkedIn Copilot",
+    downloadFileName: formatExtensionPackageFileName("1.1.1"),
+    downloadBaseName: formatExtensionPackageName("1.1.1"),
+  });
+  const currentPackageBaseName =
+    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.1");
+  const currentPackageFileName =
+    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.1");
+  const installedPackageName =
+    extensionStatus.installed && extensionStatus.version ? formatExtensionPackageName(extensionStatus.version) : "";
+  const checkExtensionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const saveAndFinishButtonRef = useRef<HTMLButtonElement | null>(null);
+  const currentPackageLabelRef = useRef<HTMLParagraphElement | null>(null);
+  const downloadOpenButtonRef = useRef<HTMLButtonElement | null>(null);
+  const downloadZipButtonRef = useRef<HTMLAnchorElement | null>(null);
+  const openLinkedInJobsButtonRef = useRef<HTMLAnchorElement | null>(null);
+  const [installGuideOpen, setInstallGuideOpen] = useState(false);
+  const [installGuideStepIndex, setInstallGuideStepIndex] = useState(0);
+  const [installGuideCompletedIds, setInstallGuideCompletedIds] = useState<string[]>([]);
 
   const loadedRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
@@ -558,6 +636,46 @@ export default function Onboarding() {
   );
 
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
+
+  const installGuideSteps = useMemo<ExtensionInstallGuideStep[]>(
+    () => [
+      {
+        id: "download-zip",
+        title: "Download extension",
+        body: `Download ${currentPackageFileName} from this page.`,
+        note: "This is the ZIP file you will extract in the next step.",
+        actionLabel: "Download current ZIP",
+        targetRef: downloadZipButtonRef,
+      },
+      {
+        id: "extract-folder",
+        title: "Extract folder",
+        body: "Extract the ZIP after downloading it.",
+        note: `The extracted folder should look like ${currentPackageBaseName} and contain manifest.json.`,
+        targetRef: currentPackageLabelRef,
+      },
+      {
+        id: "open-chrome-extensions",
+        title: "Load unpacked",
+        body: "Open Chrome menu (three dots) > Extensions > Manage Extensions. Turn on Developer mode on the top-right, then click Load unpacked on the top-left.",
+        note: `Select the extracted folder ${currentPackageBaseName}. This matches the screenshot: Developer mode on the right, Load unpacked on the left.`,
+        actionLabel: "Download + Open Extensions",
+        targetRef: downloadOpenButtonRef,
+      },
+      {
+        id: "verify-install",
+        title: "Check extension",
+        body: "After the extension card appears in Chrome, click the extension icon, make sure you are signed in to LinkedIn, then come back here and click Check Extension.",
+        note: installedPackageName
+          ? `Detected right now: ${installedPackageName}. If this is the new version, click Step done.`
+          : "If detection still fails, refresh this page and click Check Extension again, then click Step done.",
+        actionLabel: checkingExtension ? "Checking..." : "Check extension",
+        actionDisabled: checkingExtension,
+        targetRef: checkExtensionButtonRef,
+      },
+    ],
+    [checkingExtension, currentPackageBaseName, currentPackageFileName, installedPackageName],
+  );
 
   const checkExtensionStatus = async (opts?: { silent?: boolean }) => {
     if (typeof window === "undefined") return;
@@ -591,6 +709,7 @@ export default function Onboarding() {
           resolve({
             installed,
             runtimeId: data.runtimeId || undefined,
+            version: data.extensionVersion || undefined,
             linkedIn: data.linkedIn || undefined,
           });
         };
@@ -607,6 +726,170 @@ export default function Onboarding() {
       setCheckingExtension(false);
     }
   };
+
+  const onInstallOrReloadExtension = async () => {
+    if (typeof window === "undefined") return;
+    setError("");
+    setMessage("");
+    const downloadFileName = currentPackageFileName;
+    try {
+      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = downloadFileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch {
+      const anchor = document.createElement("a");
+      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
+      anchor.download = downloadFileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }
+
+    setMessage(
+      `ZIP downloaded: ${downloadFileName}. Extract it, open Manage Extensions, turn on Developer mode, then click Load unpacked and choose the extracted folder.`,
+    );
+
+    window.setTimeout(() => {
+      window.open("chrome://extensions/", "_blank");
+    }, 160);
+  };
+
+  const downloadCurrentZipOnly = async () => {
+    if (typeof window === "undefined") return;
+    setError("");
+    const downloadFileName = currentPackageFileName;
+    try {
+      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = downloadFileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch {
+      const anchor = document.createElement("a");
+      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
+      anchor.download = downloadFileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }
+
+    setMessage(`ZIP downloaded: ${downloadFileName}. Unzip it before the next step.`);
+  };
+
+  const openLinkedInJobsTab = () => {
+    if (typeof window === "undefined") return;
+    const opened = window.open("https://www.linkedin.com/jobs/", "_blank", "noopener,noreferrer");
+    if (opened) {
+      opened.opener = null;
+    }
+  };
+
+  const openInstallGuide = () => {
+    setError("");
+    setMessage("");
+    setActiveTab("preferences");
+    setInstallGuideCompletedIds([]);
+    setInstallGuideStepIndex(0);
+    setInstallGuideOpen(true);
+  };
+
+  const closeInstallGuide = () => {
+    setInstallGuideOpen(false);
+  };
+
+  const jumpToInstallGuideStep = (index: number) => {
+    setInstallGuideStepIndex(Math.max(0, Math.min(installGuideSteps.length - 1, index)));
+  };
+
+  const previousInstallGuideStep = () => {
+    setInstallGuideStepIndex((prev) => Math.max(0, prev - 1));
+  };
+
+  const nextInstallGuideStep = () => {
+    setInstallGuideStepIndex((prev) => Math.min(installGuideSteps.length - 1, prev + 1));
+  };
+
+  const markInstallGuideStepDone = () => {
+    const currentStep = installGuideSteps[installGuideStepIndex];
+    if (!currentStep) return;
+
+    setInstallGuideCompletedIds((prev) => (prev.includes(currentStep.id) ? prev : [...prev, currentStep.id]));
+
+    if (currentStep.id === "verify-install") {
+      void checkExtensionStatus();
+    }
+
+    if (installGuideStepIndex >= installGuideSteps.length - 1) {
+      setInstallGuideOpen(false);
+      setMessage("Guided install completed. If the version still looks old, reload the unpacked extension once in chrome://extensions.");
+      return;
+    }
+
+    setInstallGuideStepIndex((prev) => Math.min(installGuideSteps.length - 1, prev + 1));
+  };
+
+  const runInstallGuideStepAction = (step: ExtensionInstallGuideStep) => {
+    if (step.id === "download-zip") {
+      void downloadCurrentZipOnly();
+      return;
+    }
+    if (step.id === "open-chrome-extensions") {
+      void onInstallOrReloadExtension();
+      return;
+    }
+    if (step.id === "verify-install") {
+      void checkExtensionStatus();
+      return;
+    }
+    if (step.id === "save-and-sync") {
+      void persistAll();
+      return;
+    }
+    if (step.id === "open-linkedin-jobs") {
+      openLinkedInJobsTab();
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const maybeOpenQueuedTour = () => {
+      if (!consumeDashboardTourRequest(DASHBOARD_TOUR_ONBOARDING_EXTENSION)) return;
+      openInstallGuide();
+    };
+
+    const onDashboardTourRequest = (event: Event) => {
+      const tourId = (event as CustomEvent<{ tourId?: string }>).detail?.tourId || "";
+      if (tourId !== DASHBOARD_TOUR_ONBOARDING_EXTENSION) return;
+      maybeOpenQueuedTour();
+    };
+
+    maybeOpenQueuedTour();
+    window.addEventListener(DASHBOARD_TOUR_EVENT_NAME, onDashboardTourRequest);
+    return () => {
+      window.removeEventListener(DASHBOARD_TOUR_EVENT_NAME, onDashboardTourRequest);
+    };
+  }, [openInstallGuide]);
 
   const loadData = async () => {
     setLoading(true);
@@ -700,7 +983,7 @@ export default function Onboarding() {
         jobTypes: parsedJobTypes.length ? parsedJobTypes : ["Full-time"],
         salaryMin: readAnswer("cp_pref_salary_min"),
         salaryMax: readAnswer("cp_pref_salary_max", LEGACY_PREFERENCE_KEYS.desiredSalary),
-        preferredCountries: parseTags(readAnswer("cp_pref_preferred_countries") || nextProfile.country || "United States"),
+        preferredCountries: parseTags(readAnswer("cp_pref_preferred_countries") || nextProfile.country || ""),
         excludedCompanies: parseTags(readAnswer("cp_pref_excluded_companies")),
         excludedKeywords: parseTags(readAnswer("cp_pref_excluded_keywords")),
       };
@@ -772,6 +1055,27 @@ export default function Onboarding() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let active = true;
+    const loadExtensionMeta = async () => {
+      try {
+        const res = await fetch("/api/public/extension-meta", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data?.success || !active) return;
+        setExtensionRelease((prev) => ({
+          ...prev,
+          ...(data.data || {}),
+        }));
+      } catch {
+        // Best effort.
+      }
+    };
+    void loadExtensionMeta();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     void loadData();
@@ -908,6 +1212,8 @@ export default function Onboarding() {
     return Math.round((doneCount / completionChecks.length) * 100);
   }, [completionChecks]);
 
+  const remoteWorkModeSelected = isRemoteWorkModeSelected(preferences.workMode);
+
   const missingItems = useMemo(
     () => completionChecks.filter((item) => !item.done).map((item) => item.label),
     [completionChecks],
@@ -1003,6 +1309,7 @@ export default function Onboarding() {
     push("preferred_locations", "Preferred Locations", stringifyTags(profile.preferredLocations), "multiselect");
 
     for (const pref of PREFERENCE_KEY_LABELS) {
+      if (remoteWorkModeSelected && pref.key === "preferredCountries") continue;
       const value = preferences[pref.key];
       if (Array.isArray(value)) {
         push(pref.questionKey, pref.label, stringifyTags(value), pref.answerType || "multiselect");
@@ -1071,10 +1378,18 @@ export default function Onboarding() {
   };
 
   const buildExtensionSettingsPayload = (screeningAnswers: Record<string, string>) => {
+    const filterLocations = sanitizeLocationFilterValues(
+      remoteWorkModeSelected ? preferences.searchLocations : [...preferences.searchLocations, ...preferences.preferredCountries],
+    );
+    const resolvedSearchLocation =
+      preferences.searchLocations[0] ||
+      (!remoteWorkModeSelected ? preferences.preferredCountries[0] || combineCityState(profile.city, profile.state) : "");
+
     return {
       currentCity: combineCityState(profile.city, profile.state),
-      searchLocation: preferences.searchLocations[0] || combineCityState(profile.city, profile.state),
+      searchLocation: resolvedSearchLocation,
       searchTerms: preferences.searchTerms,
+      filterLocations,
       contactEmail: profile.email,
       phoneNumber: extractPhoneNumber(profile.phone),
       phoneCountryCode: extractPhoneCountryCode(profile.phone),
@@ -1313,11 +1628,30 @@ export default function Onboarding() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
+            onClick={openInstallGuide}
+            className="px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 inline-flex items-center gap-2"
+          >
+            <Play className="h-4 w-4" />
+            Start Install Guide
+          </button>
+          <button
+            ref={checkExtensionButtonRef}
+            type="button"
             onClick={() => void checkExtensionStatus()}
             className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             {checkingExtension ? "Checking Extension..." : "Check Extension"}
           </button>
+          <a
+            ref={openLinkedInJobsButtonRef}
+            href="https://www.linkedin.com/jobs/"
+            target="_blank"
+            rel="noreferrer"
+            className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+          >
+            <ExternalLink className="h-4 w-4" />
+            LinkedIn Jobs
+          </a>
           <a
             href="/dashboard/resume"
             className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
@@ -1326,6 +1660,7 @@ export default function Onboarding() {
             Resume
           </a>
           <button
+            ref={saveAndFinishButtonRef}
             type="button"
             onClick={() => void persistAll()}
             disabled={saving}
@@ -1350,6 +1685,19 @@ export default function Onboarding() {
           <span>{message}</span>
         </div>
       ) : null}
+
+      <ExtensionInstallGuide
+        open={installGuideOpen}
+        steps={installGuideSteps}
+        currentStepIndex={installGuideStepIndex}
+        completedStepIds={installGuideCompletedIds}
+        onClose={closeInstallGuide}
+        onNext={nextInstallGuideStep}
+        onPrevious={previousInstallGuideStep}
+        onStepDone={markInstallGuideStepDone}
+        onJumpToStep={jumpToInstallGuideStep}
+        onStepAction={runInstallGuideStepAction}
+      />
 
       <div className="grid lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
@@ -1771,12 +2119,14 @@ export default function Onboarding() {
                 onChange={(value) => setPreferences((prev) => ({ ...prev, salaryMax: value }))}
                 placeholder="120000"
               />
-              <TagInput
-                label="Preferred Countries"
-                values={preferences.preferredCountries}
-                onChange={(values) => setPreferences((prev) => ({ ...prev, preferredCountries: values }))}
-                placeholder="United States"
-              />
+              {!remoteWorkModeSelected ? (
+                <TagInput
+                  label="Preferred Countries"
+                  values={preferences.preferredCountries}
+                  onChange={(values) => setPreferences((prev) => ({ ...prev, preferredCountries: values }))}
+                  placeholder="United States"
+                />
+              ) : null}
               <TagInput
                 label="Excluded Companies"
                 values={preferences.excludedCompanies}
@@ -1806,13 +2156,30 @@ export default function Onboarding() {
             <PreferenceMirror preferences={preferences} />
             {canDownloadExtensionZip ? (
               <div className="mt-3">
-                <a
-                  href={extensionZipUrl}
-                  download
-                  className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                >
-                  Download Extension ZIP
-                </a>
+                <p ref={currentPackageLabelRef} className="mb-2 text-xs text-gray-500">Current package on site: {currentPackageBaseName}</p>
+                {installedPackageName ? (
+                  <p className="mb-2 text-xs font-medium text-green-700">Installed in browser: {installedPackageName}</p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    ref={downloadOpenButtonRef}
+                    type="button"
+                    onClick={() => void onInstallOrReloadExtension()}
+                    className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 items-center gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download + Open Extensions
+                  </button>
+                  <a
+                    ref={downloadZipButtonRef}
+                    href={extensionZipUrl}
+                    download={currentPackageFileName}
+                    className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 items-center gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download Current ZIP
+                  </a>
+                </div>
               </div>
             ) : null}
           </SectionCard>
@@ -2291,7 +2658,9 @@ function PreferenceMirror({ preferences }: { preferences: JobPreferences }) {
             : "-"
         }
       />
-      <MirrorLine label="Preferred Countries" value={preferences.preferredCountries.join(", ") || "-"} />
+      {normalizeLabel(preferences.workMode) !== "remote" ? (
+        <MirrorLine label="Preferred Countries" value={preferences.preferredCountries.join(", ") || "-"} />
+      ) : null}
       <MirrorLine label="Excluded Companies" value={preferences.excludedCompanies.join(", ") || "-"} />
       <MirrorLine label="Excluded Keywords" value={preferences.excludedKeywords.join(", ") || "-"} />
     </div>

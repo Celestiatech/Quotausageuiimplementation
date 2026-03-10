@@ -1512,9 +1512,25 @@ function getPreferredResumeOption(options, questionLabel = "") {
   const cacheKey = getResumeChoiceCacheKey(questionLabel);
   const cachedIdentity = resumeChoiceCache.get(cacheKey);
   if (cachedIdentity) {
-    const cached = resumeOptions.find(
-      (option) => getResumeOptionIdentity(option?.text || option?.value || "") === cachedIdentity
-    );
+    const cachedMatches = resumeOptions
+      .map((option, index) => ({
+        option,
+        index,
+        text: String(option?.text || option?.value || ""),
+      }))
+      .filter((entry) => getResumeOptionIdentity(entry.text) === cachedIdentity)
+      .sort((a, b) => {
+        const aNorm = normalizeLabel(a.text);
+        const bNorm = normalizeLabel(b.text);
+        const aSelectionScore = aNorm.includes("select resume") ? 2 : aNorm.includes("deselect resume") ? 1 : 0;
+        const bSelectionScore = bNorm.includes("select resume") ? 2 : bNorm.includes("deselect resume") ? 1 : 0;
+        if (bSelectionScore !== aSelectionScore) return bSelectionScore - aSelectionScore;
+        const aChecked = a.option?.input?.checked ? 1 : 0;
+        const bChecked = b.option?.input?.checked ? 1 : 0;
+        if (aChecked !== bChecked) return aChecked - bChecked;
+        return a.index - b.index;
+      });
+    const cached = cachedMatches[0]?.option || null;
     if (cached) return cached;
   }
 
@@ -1563,6 +1579,45 @@ function getCurrentSearchKeyword() {
   }
 }
 
+const SEARCH_LOCATION_QUERY_PARAM_KEYS = ["geoId", "locationId", "locationUrn", "geoUrn", "f_PP"];
+
+function isRemoteLikeSearchValue(value) {
+  const normalized = normalizeLabel(value);
+  return (
+    normalized === "remote" ||
+    normalized === "work from home" ||
+    normalized === "wfh" ||
+    normalized === "anywhere" ||
+    normalized === "worldwide"
+  );
+}
+
+function isRemoteModeSelected(settings) {
+  return parseListSetting(settings?.onSite).some((value) => normalizeLabel(value) === "remote");
+}
+
+function clearSearchLocationQueryParams(url) {
+  for (const key of SEARCH_LOCATION_QUERY_PARAM_KEYS) {
+    url.searchParams.delete(key);
+  }
+}
+
+function shouldClearStaleLocationQueryParams(settings, url) {
+  if (!url) return false;
+  const hasLocationParams = SEARCH_LOCATION_QUERY_PARAM_KEYS.some((key) => url.searchParams.has(key));
+  if (!hasLocationParams) return false;
+
+  const searchLocation = String(settings?.searchLocation || "").trim();
+  const filterLocations = parseListSetting(settings?.filterLocations);
+
+  if (isRemoteLikeSearchValue(searchLocation)) return true;
+  if (filterLocations.length > 0 && filterLocations.every((value) => isRemoteLikeSearchValue(value))) return true;
+  if (isRemoteModeSelected(settings) && filterLocations.every((value) => !value || isRemoteLikeSearchValue(value))) {
+    return true;
+  }
+  return false;
+}
+
 function buildJobsSearchUrl(keyword = "") {
   const url = new URL(JOBS_SEARCH_URL);
   const cleanKeyword = String(keyword || "").trim();
@@ -1587,6 +1642,14 @@ function datePostedToLinkedInParam(value) {
   if (v === "past 24 hours") return "r86400";
   if (v === "past week") return "r604800";
   if (v === "past month") return "r2592000";
+  return "";
+}
+
+function getBroaderDatePostedValue(currentValue) {
+  const normalizedCurrent = normalizeLabel(currentValue);
+  if (normalizedCurrent === "past 24 hours") return "Past week";
+  if (normalizedCurrent === "past week") return "Past month";
+  if (normalizedCurrent === "past month") return "Any time";
   return "";
 }
 
@@ -1629,6 +1692,10 @@ async function ensureSearchQueryParams(settings) {
     if (sortParam) url.searchParams.set("sortBy", sortParam);
     else url.searchParams.delete("sortBy");
 
+    if (shouldClearStaleLocationQueryParams(settings, url)) {
+      clearSearchLocationQueryParams(url);
+    }
+
     const after = url.toString();
     if (after !== before) {
       await logLine("Applied search query preferences (date/sort)", "info");
@@ -1639,6 +1706,24 @@ async function ensureSearchQueryParams(settings) {
   } catch {
     return true;
   }
+}
+
+async function relaxDatePostedForEmptyResults(settings) {
+  const nextDatePosted = getBroaderDatePostedValue(settings?.datePosted || "");
+  if (!nextDatePosted) return false;
+
+  const currentDatePosted = String(settings?.datePosted || "Any time").trim() || "Any time";
+  const saved = await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { datePosted: nextDatePosted } });
+  const nextSettings =
+    saved?.ok && saved.settings && typeof saved.settings === "object"
+      ? { ...settings, ...saved.settings, datePosted: nextDatePosted }
+      : { ...settings, datePosted: nextDatePosted };
+  const nextUrl = getActiveRunSearchUrl(nextSettings);
+  if (!nextUrl) return false;
+
+  await logLine(`No jobs with "${currentDatePosted}". Trying "${nextDatePosted}".`, "info");
+  window.location.href = nextUrl;
+  return true;
 }
 
 async function ensureSearchTermIfNeeded(settings) {
@@ -1741,8 +1826,7 @@ async function setSearchLocationIfNeeded(settings) {
     "input.jobs-search-box__text-input"
   ]);
   if (!input) {
-    await logLine("Search location input not found", "warn");
-    await debugLog(settings, "Location selectors failed", { url: window.location.href });
+    await debugLog(settings, "Search location input not found", { url: window.location.href });
     return;
   }
   input.focus();
@@ -4547,6 +4631,8 @@ async function runCycle(settings) {
   });
   if (!cards.length) {
     await logLine("No jobs found on current page", "warn");
+    const broadenedDate = await relaxDatePostedForEmptyResults(settings);
+    if (broadenedDate) return true;
     const scrollRoot =
       document.querySelector(".jobs-search-results-list") ||
       document.querySelector(".scaffold-layout__list-detail-inner") ||
@@ -4721,6 +4807,8 @@ async function runCycle(settings) {
 
     const description = getJobDescriptionText();
     const aboutCompany = getAboutCompanyText();
+    const detailUrl = window.location.href;
+    const canonicalJobUrl = extractLinkedInJobIdFromUrl(detailUrl) ? detailUrl : (anchor?.href || detailUrl);
     currentJobContext = {
       title,
       company: cardMeta.companyRaw || cardMeta.company || "",
@@ -4728,7 +4816,7 @@ async function runCycle(settings) {
       description,
       aboutCompany,
       jobId: jobKey || "",
-      jobUrl: anchor?.href || window.location.href
+      jobUrl: canonicalJobUrl
     };
 
     const aboutCompanyDecision = shouldSkipByAboutCompany(aboutCompany, settings);
