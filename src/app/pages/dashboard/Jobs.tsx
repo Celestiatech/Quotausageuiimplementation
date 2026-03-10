@@ -89,7 +89,6 @@ type ScreeningFieldView = {
   category: ScreeningFieldCategory;
   order: number;
   source: "site" | "extension" | "pending" | "merged";
-  duplicateCount: number;
 };
 
 function statusBadge(status: JobStatus) {
@@ -155,6 +154,44 @@ function hasWords(label: string, words: string[]) {
 function toQuestionKey(value: string) {
   const normalized = normalizeLabel(value);
   if (!normalized) return "";
+  if (normalized === "full name" || normalized === "full legal name" || normalized === "legal name") {
+    return "full_name";
+  }
+  if (normalized === "first name" || normalized === "given name") return "first_name";
+  if (normalized === "last name" || normalized === "family name" || normalized === "surname") {
+    return "last_name";
+  }
+  if (normalized === "email" || normalized === "email address") return "email_address";
+  if (
+    normalized === "phone" ||
+    normalized === "phone number" ||
+    normalized === "mobile phone" ||
+    normalized === "mobile phone number" ||
+    normalized === "contact number"
+  ) {
+    return "phone_number";
+  }
+  if (normalized.includes("linkedin") && (normalized.includes("profile") || normalized.includes("url"))) {
+    return "linkedin_url";
+  }
+  if (
+    normalized.includes("portfolio") &&
+    (normalized.includes("url") || normalized.includes("website") || normalized.includes("site") || normalized === "portfolio")
+  ) {
+    return "portfolio_url";
+  }
+  if (
+    normalized === "current city" ||
+    normalized === "city" ||
+    normalized.includes("location city") ||
+    normalized.includes("city state")
+  ) {
+    return "current_city";
+  }
+  if (normalized === "state" || normalized === "state region" || normalized === "region") {
+    return "state_region";
+  }
+  if (normalized === "country") return "country";
   if (
     (hasWords(normalized, ["authorized", "work"]) ||
       hasWords(normalized, ["eligible", "work"]) ||
@@ -242,7 +279,28 @@ function pickFirstNonEmpty(answers: Record<string, string>, keys: string[]) {
   return "";
 }
 
+function splitFullName(value: string) {
+  const parts = String(value || "")
+    .trim()
+    .split(/\s+/g)
+    .filter(Boolean);
+  if (!parts.length) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
 function parseSearchTermsInput(value: string) {
+  return String(value || "")
+    .split(/[,\n;|]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 25);
+}
+
+function parsePreferenceListInput(value: string) {
   return String(value || "")
     .split(/[,\n;|]+/g)
     .map((item) => item.trim())
@@ -266,17 +324,17 @@ const SCREENING_SECTION_META: Record<ScreeningFieldCategory, { title: string; su
 };
 
 const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
-  { key: "full_name", label: "Full Name", category: "profile", order: 10 },
-  { key: "first_name", label: "First Name", category: "profile", order: 20 },
-  { key: "last_name", label: "Last Name", category: "profile", order: 30 },
-  { key: "email_address", label: "Email Address", category: "profile", order: 40 },
-  { key: "phone_number", label: "Phone Number", category: "profile", order: 50 },
+  { key: "full_name", label: "Full Name", category: "profile", order: 10, aliases: ["full legal name", "legal name"] },
+  { key: "first_name", label: "First Name", category: "profile", order: 20, aliases: ["given name"] },
+  { key: "last_name", label: "Last Name", category: "profile", order: 30, aliases: ["family name", "surname"] },
+  { key: "email_address", label: "Email Address", category: "profile", order: 40, aliases: ["email"] },
+  { key: "phone_number", label: "Phone Number", category: "profile", order: 50, aliases: ["phone", "mobile phone", "mobile phone number", "contact number"] },
   { key: "address_line", label: "Address Line", category: "profile", order: 60 },
-  { key: "current_city", label: "Current City", category: "profile", order: 70 },
-  { key: "state_region", label: "State / Region", category: "profile", order: 80 },
+  { key: "current_city", label: "Current City", category: "profile", order: 70, aliases: ["city", "your location city state", "location city state"] },
+  { key: "state_region", label: "State / Region", category: "profile", order: 80, aliases: ["state", "region"] },
   { key: "country", label: "Country", category: "profile", order: 90 },
-  { key: "linkedin_url", label: "LinkedIn URL", category: "profile", order: 100 },
-  { key: "portfolio_url", label: "Portfolio URL", category: "profile", order: 110 },
+  { key: "linkedin_url", label: "LinkedIn URL", category: "profile", order: 100, aliases: ["linkedin profile", "linkedin profile url"] },
+  { key: "portfolio_url", label: "Portfolio URL", category: "profile", order: 110, aliases: ["portfolio", "portfolio website", "portfolio site"] },
   {
     key: "work_authorization_us",
     label: "U.S. Work Authorization",
@@ -342,7 +400,12 @@ const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
     label: "Confidence Level",
     category: "preferences",
     order: 250,
-    aliases: ["autoapply cv preference confidence level", "autoapply cv preference: confidence level"],
+    aliases: [
+      "autoapply cv preference confidence level",
+      "autoapply cv preference: confidence level",
+      "careerpilot preference confidence level",
+      "careerpilot preference: confidence level",
+    ],
   },
   { key: "cp_pref_salary_min", label: "Salary Range Min", category: "preferences", order: 260 },
   { key: "cp_pref_salary_max", label: "Salary Range Max", category: "preferences", order: 270 },
@@ -666,9 +729,29 @@ export default function Jobs() {
         "careerpilot_preference_search_terms",
       ]);
       const preferredSearchTerms = parseSearchTermsInput(preferredSearchTermsRaw);
+      const preferredLocations = parsePreferenceListInput(
+        pickFirstNonEmpty(siteScreeningAnswers, [
+          "cp_pref_search_locations",
+          "cp_pref_search_location",
+          "preferred_locations",
+        ]),
+      );
+      const preferredJobTypes = parsePreferenceListInput(
+        pickFirstNonEmpty(siteScreeningAnswers, ["cp_pref_job_types", "job_types"]),
+      );
+      const preferredCountries = parsePreferenceListInput(
+        pickFirstNonEmpty(siteScreeningAnswers, ["cp_pref_preferred_countries", "preferred_countries"]),
+      );
+      const preferredWorkMode = parsePreferenceListInput(
+        pickFirstNonEmpty(siteScreeningAnswers, ["cp_pref_work_mode", "remote_onsite_hybrid", "work_mode_preference"]),
+      );
       const preferredYearsOfExperience = pickFirstNonEmpty(siteScreeningAnswers, [
         "cp_pref_years_of_experience",
         "careerpilot_preference_years_of_experience",
+      ]);
+      const preferredConfidenceLevel = pickFirstNonEmpty(siteScreeningAnswers, [
+        "cp_pref_confidence_level",
+        "careerpilot_preference_confidence_level",
       ]);
       const preferredRequireVisa = pickFirstNonEmpty(siteScreeningAnswers, [
         "cp_pref_require_visa",
@@ -688,17 +771,38 @@ export default function Jobs() {
         if (!canonicalKey) continue;
         screeningAnswersForSync[canonicalKey] = answer;
       }
+
+      const fullName =
+        pickFirstNonEmpty(siteScreeningAnswers, ["full_name", "full legal name"]) ||
+        String(user?.name || "").trim();
+      const { firstName, lastName } = splitFullName(
+        pickFirstNonEmpty(siteScreeningAnswers, ["first_name"])
+          ? `${pickFirstNonEmpty(siteScreeningAnswers, ["first_name"])} ${pickFirstNonEmpty(siteScreeningAnswers, ["last_name"])}`
+          : fullName,
+      );
+      const phoneAnswer = pickFirstNonEmpty(siteScreeningAnswers, ["phone_number", "phone", "mobile_phone_number"]);
+      const currentCity = pickFirstNonEmpty(siteScreeningAnswers, ["current_city", "your_location_city_state"]) || user?.currentCity || "";
+      const linkedinUrl = pickFirstNonEmpty(siteScreeningAnswers, ["linkedin_url", "linkedin_profile"]) || user?.linkedinUrl || "";
+      const websiteUrl = pickFirstNonEmpty(siteScreeningAnswers, ["portfolio_url"]) || user?.portfolioUrl || "";
+      const streetAddress = pickFirstNonEmpty(siteScreeningAnswers, ["address_line"]) || user?.addressLine || "";
+      const stateRegion = pickFirstNonEmpty(siteScreeningAnswers, ["state_region"]);
+      const country = pickFirstNonEmpty(siteScreeningAnswers, ["country"]);
+
       const settingsPayload = {
-        currentCity: user?.currentCity || "",
-        searchLocation: preferredSearchLocation || user?.currentCity || "",
+        currentCity,
+        searchLocation: preferredSearchLocation || currentCity,
         searchTerms: preferredSearchTerms,
+        filterLocations: Array.from(new Set([...preferredLocations, ...preferredCountries])),
+        jobType: preferredJobTypes,
+        onSite: preferredWorkMode,
         contactEmail: user?.email || "",
-        phoneNumber: derivePhoneNumber(user?.phone),
-        phoneCountryCode: derivePhoneCountryCode(user?.phone),
+        phoneNumber: derivePhoneNumber(phoneAnswer || user?.phone),
+        phoneCountryCode: derivePhoneCountryCode(phoneAnswer || user?.phone),
         marketingConsent: "No",
         requireVisa: preferredRequireVisa || "No",
         usCitizenship: preferredUsCitizenship || "",
         yearsOfExperienceAnswer: preferredYearsOfExperience || "",
+        confidenceLevel: preferredConfidenceLevel || "",
         easyApplyOnly: true,
         debugMode: false,
         dryRun: false,
@@ -708,6 +812,14 @@ export default function Jobs() {
         maxSkipsPerRun: 50,
         blacklistedCompanies: [],
         badWords: [],
+        fullName,
+        firstName,
+        lastName,
+        linkedinUrl,
+        websiteUrl,
+        streetAddress,
+        stateRegion,
+        country,
         screeningAnswers: screeningAnswersForSync,
       };
 
@@ -923,7 +1035,6 @@ export default function Jobs() {
           category,
           order,
           source,
-          duplicateCount: 1,
         });
         return;
       }
@@ -946,7 +1057,6 @@ export default function Jobs() {
               : sourceRank(source) > sourceRank(existing.source)
                 ? source
                 : existing.source,
-        duplicateCount: existing.duplicateCount + 1,
       });
     };
 
@@ -1374,11 +1484,6 @@ export default function Jobs() {
                             <div className="text-sm font-semibold text-gray-900">{field.questionLabel}</div>
                             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
                               <span className="rounded-full bg-gray-100 px-2 py-0.5">{sourceBadge}</span>
-                              {field.duplicateCount > 1 ? (
-                                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
-                                  merged {field.duplicateCount} duplicates
-                                </span>
-                              ) : null}
                             </div>
                           </div>
                         </div>

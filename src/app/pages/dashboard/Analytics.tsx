@@ -1,68 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
 import { BarChart3, RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
-import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
-
-type Job = {
-  id: string;
-  status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
-  createdAt: string;
-  criteriaJson?: Record<string, unknown>;
-};
+import { useDashboardSummary } from "../../hooks/useDashboardSummary";
 
 export default function Analytics() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
-  const extensionStats = useExtensionPipelineStats();
-
-  const load = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/auto-apply/jobs");
-      const data = await res.json();
-      if (!res.ok || !data?.success) return;
-      setJobs((data?.data?.jobs || []) as Job[]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  const stats = useMemo(() => {
-    const backendTotal = jobs.length;
-    const backendSubmitted = jobs.filter((j) => j.status === "succeeded").length;
-    const backendFailed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
-    const submitted = Math.max(backendSubmitted, extensionStats.applied);
-    const failed = Math.max(backendFailed, extensionStats.failed);
-    const total = Math.max(backendTotal, submitted + failed + extensionStats.skipped);
-    const cancelled = jobs.filter((j) => j.status === "cancelled").length;
-    const inProgress = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
-    const completion = total > 0 ? Math.round(((submitted + failed + cancelled) / total) * 100) : 0;
-    const successRate = submitted + failed > 0 ? Math.round((submitted / (submitted + failed)) * 100) : 0;
-
-    const byDayMap = new Map<string, number>();
-    jobs.forEach((j) => {
-      const key = new Date(j.createdAt).toLocaleDateString();
-      byDayMap.set(key, (byDayMap.get(key) || 0) + 1);
-    });
-    const byDay = Array.from(byDayMap.entries())
-      .sort((a, b) => +new Date(a[0]) - +new Date(b[0]))
-      .slice(-7);
-
-    const byStatus = [
-      { label: "Submitted", value: submitted, color: "bg-green-500" },
-      { label: "Failed", value: failed, color: "bg-red-500" },
-      { label: "Skipped", value: extensionStats.skipped, color: "bg-amber-500" },
-      { label: "Cancelled", value: cancelled, color: "bg-gray-500" },
-      { label: "In Progress", value: inProgress, color: "bg-blue-500" },
-    ];
-
-    return { total, submitted, failed, cancelled, inProgress, completion, successRate, byDay, byStatus };
-  }, [jobs, extensionStats]);
-
-  const maxDay = Math.max(1, ...stats.byDay.map(([, v]) => v));
+  const { summary, loading, error, refresh } = useDashboardSummary();
+  const maxDay = Math.max(1, ...summary.activityByDay.map((row) => row.value));
+  const byStatus = [
+    { label: "Submitted", value: summary.applications.submitted, color: "bg-green-500" },
+    { label: "Failed", value: summary.applications.failed, color: "bg-red-500" },
+    { label: "Skipped", value: summary.applications.skipped, color: "bg-amber-500" },
+    { label: "Cancelled", value: summary.jobs.cancelled, color: "bg-gray-500" },
+    { label: "In Progress", value: summary.jobs.active, color: "bg-blue-500" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -72,7 +20,7 @@ export default function Analytics() {
           <p className="text-gray-600">Real job funnel analytics from your backend pipeline.</p>
         </div>
         <button
-          onClick={() => void load()}
+          onClick={() => void refresh()}
           className="px-5 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
         >
           <RefreshCw className="w-4 h-4" />
@@ -81,27 +29,28 @@ export default function Analytics() {
       </div>
 
       {loading ? <div className="text-sm text-gray-500">Loading analytics...</div> : null}
+      {error ? <div className="text-sm text-rose-600">{error}</div> : null}
 
       <div className="grid md:grid-cols-5 gap-4">
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Total Jobs</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{stats.total}</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.jobs.total}</div>
         </div>
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Submitted</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{stats.submitted}</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.submitted}</div>
         </div>
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Failed</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{stats.failed}</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.failed}</div>
         </div>
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Success Rate</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{stats.successRate}%</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.metrics.responseRate}%</div>
         </div>
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Completion</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{stats.completion}%</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.metrics.completionRate}%</div>
         </div>
       </div>
 
@@ -112,17 +61,17 @@ export default function Analytics() {
             Jobs Created (Last 7 Days)
           </h2>
           <div className="space-y-3">
-            {stats.byDay.length === 0 ? (
+            {summary.activityByDay.length === 0 ? (
               <div className="text-sm text-gray-500">No activity yet.</div>
             ) : (
-              stats.byDay.map(([day, value]) => (
-                <div key={day}>
+              summary.activityByDay.map((row) => (
+                <div key={row.key}>
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-700">{day}</span>
-                    <span className="font-semibold text-gray-900">{value}</span>
+                    <span className="text-gray-700">{row.label}</span>
+                    <span className="font-semibold text-gray-900">{row.value}</span>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500" style={{ width: `${(value / maxDay) * 100}%` }} />
+                    <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500" style={{ width: `${(row.value / maxDay) * 100}%` }} />
                   </div>
                 </div>
               ))
@@ -133,7 +82,7 @@ export default function Analytics() {
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-6">
           <h2 className="font-bold text-gray-900 mb-4">Status Breakdown</h2>
           <div className="space-y-3">
-            {stats.byStatus.map((row) => (
+            {byStatus.map((row) => (
               <div key={row.label} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={`w-3 h-3 rounded-full ${row.color}`} />

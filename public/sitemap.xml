@@ -1,54 +1,53 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://autoapplycv.in/</loc>
+    <loc>https://www.autoapplycv.in/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/features</loc>
+    <loc>https://www.autoapplycv.in/features</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/how-it-works</loc>
+    <loc>https://www.autoapplycv.in/how-it-works</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/pricing</loc>
+    <loc>https://www.autoapplycv.in/pricing</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/about</loc>
+    <loc>https://www.autoapplycv.in/about</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/faq</loc>
+    <loc>https://www.autoapplycv.in/faq</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/blog</loc>
+    <loc>https://www.autoapplycv.in/blog</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/blog/lazyapply-alternative</loc>
+    <loc>https://www.autoapplycv.in/blog/lazyapply-alternative</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/blog/best-ai-job-search-tools</loc>
+    <loc>https://www.autoapplycv.in/blog/best-ai-job-search-tools</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://autoapplycv.in/blog/linkedin-easy-apply-does-it-work</loc>
+    <loc>https://www.autoapplycv.in/blog/linkedin-easy-apply-does-it-work</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 </urlset>
-

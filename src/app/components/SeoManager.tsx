@@ -15,6 +15,22 @@ const DEFAULT_SEO: SeoEntry = {
   index: true,
 };
 
+function normalizeCanonicalBaseUrl(value?: string) {
+  const fallback = "https://www.autoapplycv.in";
+  const raw = value?.trim();
+  if (!raw) return fallback;
+
+  try {
+    const url = new URL(raw);
+    if (url.hostname === "autoapplycv.in") {
+      url.hostname = "www.autoapplycv.in";
+    }
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return fallback;
+  }
+}
+
 const SEO_BY_PATH: Record<string, SeoEntry> = {
   "/": {
     title: "AutoApply CV | LinkedIn Auto Apply Bot for Software Engineers",
@@ -35,7 +51,7 @@ const SEO_BY_PATH: Record<string, SeoEntry> = {
         "@context": "https://schema.org",
         "@type": "Organization",
         name: "AutoApply CV",
-        url: "https://autoapplycv.in"
+        url: "https://www.autoapplycv.in"
       }
     ],
   },
@@ -244,9 +260,9 @@ export function SeoManager() {
 
   useEffect(() => {
     const seo = resolveSeo(location.pathname);
-    const baseUrl =
-      ((import.meta as any).env?.VITE_SITE_URL as string | undefined)?.replace(/\/+$/, "") ||
-      "https://autoapplycv.in";
+    const baseUrl = normalizeCanonicalBaseUrl(
+      (import.meta as any).env?.VITE_SITE_URL as string | undefined,
+    );
     const canonical = `${baseUrl}${location.pathname}`;
 
     document.title = seo.title;

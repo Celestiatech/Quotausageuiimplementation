@@ -13,146 +13,45 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { QuotaUsage } from "../../components/quota-usage";
 import { UpgradeModal } from "../../components/upgrade-modal";
-import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
-
-type AutoApplyJob = {
-  id: string;
-  status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
-  createdAt: string;
-  criteriaJson?: Record<string, unknown>;
-};
-
-type RecentItem = {
-  id: string;
-  company: string;
-  position: string;
-  status: "Submitted" | "Running" | "Queued" | "Failed" | "Cancelled";
-  date: string;
-  match: number | null;
-  linkedInUrl: string;
-  externalJobId: string;
-};
-
-function parseLinkedInJobId(value: unknown) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const m = raw.match(/\/jobs\/view\/(\d+)/i);
-  if (m?.[1]) return String(m[1]);
-  return raw.match(/^\d+$/) ? raw : "";
-}
-
-function linkedInUrlFromCriteria(criteria: Record<string, unknown> | undefined) {
-  const c = criteria || {};
-  const direct = String(c.jobUrl || c.pageUrl || "").trim();
-  const id = parseLinkedInJobId(c.jobId) || parseLinkedInJobId(direct);
-  if (direct && direct.includes("linkedin.com/jobs/")) return direct;
-  if (id) return `https://www.linkedin.com/jobs/view/${id}/`;
-  return "";
-}
+import { useDashboardSummary } from "../../hooks/useDashboardSummary";
 
 export default function Overview() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [jobs, setJobs] = useState<AutoApplyJob[]>([]);
-  const [loadingJobs, setLoadingJobs] = useState(true);
   const [copiedJobId, setCopiedJobId] = useState("");
-  const extensionStats = useExtensionPipelineStats();
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/auto-apply/jobs");
-        const data = await res.json();
-        if (!res.ok || !data?.success || !active) return;
-        setJobs((data?.data?.jobs || []) as AutoApplyJob[]);
-      } finally {
-        if (active) setLoadingJobs(false);
-      }
-    };
-    load();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const computed = useMemo(() => {
-    const active = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
-    const backendSucceeded = jobs.filter((j) => j.status === "succeeded").length;
-    const backendFailed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
-    const succeeded = Math.max(backendSucceeded, extensionStats.applied);
-    const failed = Math.max(backendFailed, extensionStats.failed);
-    const totalTracked = Math.max(jobs.length, succeeded + failed + extensionStats.skipped);
-    const resolved = succeeded + failed;
-    const responseRate = resolved > 0 ? Math.round((succeeded / resolved) * 100) : 0;
-    const interviews = 0;
-
-    const recent: RecentItem[] = jobs
-      .slice()
-      .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
-      .slice(0, 5)
-      .map((j) => {
-        const status: RecentItem["status"] =
-          j.status === "succeeded"
-            ? "Submitted"
-            : j.status === "running"
-            ? "Running"
-            : j.status === "queued"
-            ? "Queued"
-            : j.status === "cancelled"
-            ? "Cancelled"
-            : "Failed";
-        const company = String(j.criteriaJson?.company || "LinkedIn");
-        const position = String(j.criteriaJson?.title || j.criteriaJson?.keywords || "Auto-Apply Job");
-        const parsedMatch = Number(j.criteriaJson?.matchScore || 0);
-        const linkedInUrl = linkedInUrlFromCriteria(j.criteriaJson);
-        const externalJobId = parseLinkedInJobId(j.criteriaJson?.jobId) || parseLinkedInJobId(linkedInUrl);
-        return {
-          id: j.id,
-          company,
-          position,
-          status,
-          date: new Date(j.createdAt).toLocaleDateString(),
-          match: Number.isFinite(parsedMatch) && parsedMatch > 0 ? parsedMatch : null,
-          linkedInUrl,
-          externalJobId,
-        };
-      });
-
-    return { active, succeeded, failed, totalTracked, responseRate, interviews, recent };
-  }, [jobs, extensionStats]);
+  const { summary, loading, error } = useDashboardSummary();
 
   const stats = [
     {
       name: "Active Applications",
-      value: String(computed.active > 0 ? computed.active : computed.succeeded),
-      change: `${computed.succeeded} submitted`,
+      value: String(summary.jobs.active > 0 ? summary.jobs.active : summary.applications.submitted),
+      change: `${summary.applications.submitted} submitted`,
       icon: Briefcase,
       color: "from-blue-500 to-cyan-500",
     },
     {
       name: "Total Jobs",
-      value: String(computed.totalTracked),
-      change: `${computed.failed} failed`,
+      value: String(summary.jobs.total),
+      change: `${summary.jobs.failed} failed`,
       icon: Target,
       color: "from-purple-500 to-pink-500",
     },
     {
       name: "Interviews Scheduled",
-      value: String(computed.interviews),
-      change: "Synced from pipeline",
+      value: String(summary.interview.upcomingCount),
+      change: `${summary.metrics.interviewReadiness}% readiness`,
       icon: Calendar,
       color: "from-green-500 to-emerald-500",
     },
     {
       name: "Response Rate",
-      value: `${computed.responseRate}%`,
+      value: `${summary.metrics.responseRate}%`,
       change: "Submitted vs failed",
       icon: TrendingUp,
       color: "from-orange-500 to-red-500",
@@ -218,12 +117,13 @@ export default function Overview() {
             </div>
 
             <div className="space-y-4">
-              {loadingJobs ? <div className="text-sm text-gray-500">Loading recent activity...</div> : null}
-              {!loadingJobs && computed.recent.length === 0 ? (
+              {loading ? <div className="text-sm text-gray-500">Loading recent activity...</div> : null}
+              {error ? <div className="text-sm text-rose-600">{error}</div> : null}
+              {!loading && summary.recent.length === 0 ? (
                 <div className="text-sm text-gray-500">No applications yet. Start your first auto-apply run.</div>
               ) : null}
-              {!loadingJobs &&
-                computed.recent.map((app) => (
+              {!loading &&
+                summary.recent.map((app) => (
                   <div key={app.id} className="flex items-center justify-between p-4 rounded-xl hover:bg-purple-50 transition-colors cursor-pointer">
                     <div className="flex items-center gap-4 flex-1">
                       <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center font-bold text-purple-700">
@@ -343,16 +243,19 @@ export default function Overview() {
             </div>
             <div className="space-y-4">
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="font-semibold mb-1">No interview events yet</div>
-                <div className="text-sm text-purple-100 mb-2">Interview calendar integration pending</div>
+                <div className="font-semibold mb-1">{summary.interview.title}</div>
+                <div className="text-sm text-purple-100 mb-2">{summary.interview.body}</div>
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="w-4 h-4" />
-                  <span>Keep applying to unlock interviews</span>
+                  <span>{summary.metrics.interviewReadiness}% interview readiness</span>
                 </div>
               </div>
             </div>
-            <button className="w-full mt-4 px-4 py-3 bg-white text-purple-700 rounded-xl font-semibold hover:bg-purple-50 transition-colors">
-              View Calendar
+            <button
+              onClick={() => navigate(summary.interview.ctaHref)}
+              className="w-full mt-4 px-4 py-3 bg-white text-purple-700 rounded-xl font-semibold hover:bg-purple-50 transition-colors"
+            >
+              {summary.interview.ctaLabel}
             </button>
           </motion.div>
 
@@ -366,13 +269,14 @@ export default function Overview() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-400 to-orange-400 flex items-center justify-center">
                 <Star className="w-5 h-5 text-white" />
               </div>
-              <h3 className="font-bold text-gray-900">Pro Tip</h3>
+              <h3 className="font-bold text-gray-900">{summary.proTip.title}</h3>
             </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Complete onboarding and keep resume/profile updated for fewer application errors and better success rate.
-            </p>
-            <button className="text-purple-600 hover:text-purple-700 font-semibold text-sm flex items-center gap-1">
-              Learn More
+            <p className="text-sm text-gray-600 mb-4">{summary.proTip.body}</p>
+            <button
+              onClick={() => navigate(summary.proTip.ctaHref)}
+              className="text-purple-600 hover:text-purple-700 font-semibold text-sm flex items-center gap-1"
+            >
+              {summary.proTip.ctaLabel}
               <ArrowRight className="w-4 h-4" />
             </button>
           </motion.div>

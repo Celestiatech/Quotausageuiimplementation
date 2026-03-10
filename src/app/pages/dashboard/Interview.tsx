@@ -1,59 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
 import { CalendarCheck2, CircleCheckBig, AlertTriangle, MessagesSquare, RefreshCw } from "lucide-react";
-import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
-
-type Job = {
-  id: string;
-  status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
-  createdAt: string;
-  criteriaJson?: Record<string, unknown>;
-};
+import { useDashboardSummary } from "../../hooks/useDashboardSummary";
 
 export default function Interview() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
-  const extensionStats = useExtensionPipelineStats();
-
-  const load = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/auto-apply/jobs");
-      const data = await res.json();
-      if (!res.ok || !data?.success) return;
-      setJobs((data?.data?.jobs || []) as Job[]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  const summary = useMemo(() => {
-    const backendSubmitted = jobs.filter((j) => j.status === "succeeded").length;
-    const backendFailed = jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length;
-    const submitted = Math.max(backendSubmitted, extensionStats.applied);
-    const failed = Math.max(backendFailed, extensionStats.failed);
-    const inProgress = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
-    const interviewReadiness = submitted > 0 ? Math.min(100, 40 + submitted * 10) : 20;
-    return { submitted, failed, inProgress, interviewReadiness, skipped: extensionStats.skipped };
-  }, [jobs, extensionStats]);
+  const { summary, loading, error, refresh } = useDashboardSummary();
+  const mostRecentRole = summary.recent[0]?.position || "software role";
+  const mostRecentCompany = summary.recent[0]?.company || "this company";
 
   const prepChecklist = [
     {
       title: "Review top applied roles",
-      done: summary.submitted > 0,
+      done: summary.applications.submitted > 0,
       help: "Focus on roles where your applications were submitted successfully.",
     },
     {
       title: "Fix recurring application failures",
-      done: summary.failed === 0,
+      done: summary.applications.failed === 0,
       help: "Resolve blockers like invalid phone/city/required fields to increase interview chances.",
     },
     {
       title: "Prepare role-specific intro",
-      done: summary.submitted >= 2,
+      done: summary.applications.submitted >= 2,
       help: "Create a 60-second summary tailored to your target role.",
     },
   ];
@@ -66,7 +32,7 @@ export default function Interview() {
           <p className="text-gray-600">Use real application outcomes to prepare smarter.</p>
         </div>
         <button
-          onClick={() => void load()}
+          onClick={() => void refresh()}
           className="px-5 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
         >
           <RefreshCw className="w-4 h-4" />
@@ -75,27 +41,28 @@ export default function Interview() {
       </div>
 
       {loading ? <div className="text-sm text-gray-500">Loading interview readiness...</div> : null}
+      {error ? <div className="text-sm text-rose-600">{error}</div> : null}
 
       <div className="grid md:grid-cols-5 gap-4">
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
           <div className="text-sm text-gray-600">Submitted Jobs</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.submitted}</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.submitted}</div>
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
           <div className="text-sm text-gray-600">In Progress</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.inProgress}</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.jobs.active}</div>
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
           <div className="text-sm text-gray-600">Failed Jobs</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.failed}</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.failed}</div>
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
           <div className="text-sm text-gray-600">Skipped Jobs</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.skipped}</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.skipped}</div>
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
           <div className="text-sm text-gray-600">Readiness Score</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.interviewReadiness}%</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.metrics.interviewReadiness}%</div>
         </div>
       </div>
 
@@ -124,7 +91,8 @@ export default function Interview() {
             Suggested Practice Prompts
           </h2>
           <div className="space-y-3 text-sm text-gray-700">
-            <div className="border border-gray-200 rounded-xl p-4">Tell me about yourself for a {summary.submitted > 0 ? "role you've applied to" : "software role"}.</div>
+            <div className="border border-gray-200 rounded-xl p-4">Tell me about yourself for a {mostRecentRole} role.</div>
+            <div className="border border-gray-200 rounded-xl p-4">Why do you want to work at {mostRecentCompany}?</div>
             <div className="border border-gray-200 rounded-xl p-4">Describe a challenging bug you fixed and how you debugged it.</div>
             <div className="border border-gray-200 rounded-xl p-4">How do you prioritize tasks when deadlines are tight?</div>
             <div className="border border-gray-200 rounded-xl p-4">Walk me through one project from architecture to delivery.</div>

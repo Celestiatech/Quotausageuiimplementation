@@ -1053,6 +1053,22 @@ function hasWords(label, words) {
 function canonicalScreeningKey(label) {
   const n = normalizeLabel(label);
   if (!n) return "";
+  if (n === "full name" || n === "full legal name" || n === "legal name") return "full_name";
+  if (n === "first name" || n === "given name") return "first_name";
+  if (n === "last name" || n === "family name" || n === "surname") return "last_name";
+  if (n === "email" || n === "email address") return "email_address";
+  if (n === "phone" || n === "phone number" || n === "mobile phone" || n === "mobile phone number" || n === "contact number") {
+    return "phone_number";
+  }
+  if (n.includes("linkedin") && (n.includes("profile") || n.includes("url"))) return "linkedin_url";
+  if (n.includes("portfolio") && (n.includes("url") || n.includes("website") || n.includes("site") || n === "portfolio")) {
+    return "portfolio_url";
+  }
+  if (n === "current city" || n === "city" || n.includes("location city") || n.includes("city state")) {
+    return "current_city";
+  }
+  if (n === "state" || n === "state region" || n === "region") return "state_region";
+  if (n === "country") return "country";
   if (
     (hasWords(n, ["authorized", "work"]) || hasWords(n, ["eligible", "work"]) || hasWords(n, ["work", "authorization"])) &&
     (n.includes("united states") || n.includes("u s") || n.includes("us"))
@@ -1071,6 +1087,7 @@ function canonicalScreeningKey(label) {
   if (n.includes("year") && n.includes("experience")) return "years_of_experience";
   if (n.includes("bachelor") && n.includes("degree")) return "bachelors_degree_completed";
   if (n.includes("english") && n.includes("proficiency")) return "english_proficiency";
+  if (n.includes("confidence") && n.includes("level")) return "cp_pref_confidence_level";
   if (n.includes("notice") && n.includes("period")) return "notice_period_days";
   if (n.includes("start") && n.includes("date")) return "start_date_availability";
   return n.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
@@ -2262,7 +2279,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         screeningAnswers: {
           ...(settings.screeningAnswers || {}),
           [questionKey]: answer,
-          ...(questionLabel ? { [questionLabel.toLowerCase()]: answer } : {})
+          ...(questionLabel ? {
+            [questionLabel.toLowerCase()]: answer,
+            [normalizeLabel(questionLabel)]: answer,
+            ...(questionKeyFromLabel(questionLabel) ? { [questionKeyFromLabel(questionLabel)]: answer } : {}),
+          } : {})
         }
       };
       await chrome.storage.local.set({ cpSettings: nextSettings });

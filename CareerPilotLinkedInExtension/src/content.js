@@ -633,10 +633,57 @@ function normalizeLabel(value) {
     .trim();
 }
 
-function questionKeyFromLabel(label) {
-  const n = normalizeLabel(label);
+function canonicalQuestionKey(label) {
+  const n = String(label || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!n) return "";
+  if (n === "full name" || n === "full legal name" || n === "legal name") return "full_name";
+  if (n === "first name" || n === "given name") return "first_name";
+  if (n === "last name" || n === "family name" || n === "surname") return "last_name";
+  if (n === "email" || n === "email address") return "email_address";
+  if (n === "phone" || n === "phone number" || n === "mobile phone" || n === "mobile phone number" || n === "contact number") {
+    return "phone_number";
+  }
+  if (n.includes("linkedin") && (n.includes("profile") || n.includes("url"))) return "linkedin_url";
+  if (n.includes("portfolio") && (n.includes("url") || n.includes("website") || n.includes("site") || n === "portfolio")) {
+    return "portfolio_url";
+  }
+  if (n === "current city" || n === "city" || n.includes("location city") || n.includes("city state")) {
+    return "current_city";
+  }
+  if (n === "state" || n === "state region" || n === "region") return "state_region";
+  if (n === "country") return "country";
+  if (
+    ((n.includes("authorized") && n.includes("work")) ||
+      (n.includes("eligible") && n.includes("work")) ||
+      (n.includes("work") && n.includes("authorization"))) &&
+    (n.includes("united states") || n.includes("u s") || n.includes("us"))
+  ) {
+    return "work_authorization_us";
+  }
+  if ((n.includes("visa") && n.includes("sponsorship")) || (n.includes("require") && n.includes("sponsorship"))) {
+    return "visa_sponsorship_required";
+  }
+  if (n.includes("onsite") || n.includes("on site")) return "comfortable_working_onsite";
+  if (n.includes("commut")) return "comfortable_commuting";
+  if (n.includes("relocat")) return "comfortable_relocation";
+  if ((n.includes("salary") || n.includes("compensation") || n.includes("pay")) && n.includes("expect")) {
+    return "expected_salary";
+  }
+  if (n.includes("year") && n.includes("experience")) return "years_of_experience";
+  if (n.includes("bachelor") && n.includes("degree")) return "bachelors_degree_completed";
+  if (n.includes("english") && n.includes("proficiency")) return "english_proficiency";
+  if (n.includes("confidence") && n.includes("level")) return "cp_pref_confidence_level";
+  if (n.includes("notice") && n.includes("period")) return "notice_period_days";
+  if (n.includes("start") && n.includes("date")) return "start_date_availability";
   return n.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
+}
+
+function questionKeyFromLabel(label) {
+  return canonicalQuestionKey(label);
 }
 
 function cleanQuestionLabel(value) {
@@ -3020,11 +3067,14 @@ function resolveManualAnswer(screeningAnswers, questionKey, questionLabel) {
   const source = screeningAnswers && typeof screeningAnswers === "object" ? screeningAnswers : {};
   const key = String(questionKey || "").trim();
   const labelNorm = normalizeLabel(questionLabel || "");
+  const canonicalKey = canonicalQuestionKey(questionKey || questionLabel || "");
   if (key && !isBlankValue(source[key])) return String(source[key] || "").trim();
+  if (canonicalKey && !isBlankValue(source[canonicalKey])) return String(source[canonicalKey] || "").trim();
   if (labelNorm && !isBlankValue(source[labelNorm])) return String(source[labelNorm] || "").trim();
   for (const [k, value] of Object.entries(source)) {
     if (isBlankValue(value)) continue;
     if (normalizeLabel(k) === labelNorm) return String(value || "").trim();
+    if (canonicalQuestionKey(k) === canonicalKey && canonicalKey) return String(value || "").trim();
   }
   return "";
 }
