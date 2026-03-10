@@ -1,0 +1,56 @@
+import MarketingInfoPage from "../components/marketing/MarketingInfoPage";
+
+export default function PressKit() {
+  return (
+    <MarketingInfoPage
+      eyebrow="Press Kit"
+      title="Brand and product facts for media use"
+      description="Everything needed for coverage, product listings, and reference links in one place."
+      sections={[
+        {
+          title: "Company summary",
+          cards: [
+            {
+              kicker: "What we do",
+              title: "AI-assisted job search execution",
+              description: "AutoApply CV helps users run high-quality applications with automation controls, resume optimization, and tracking.",
+            },
+            {
+              kicker: "Primary audience",
+              title: "Software engineers and tech professionals",
+              description: "Designed for users who need speed without sacrificing quality or review control.",
+            },
+            {
+              kicker: "Website",
+              title: "https://www.autoapplycv.in",
+              description: "Canonical public site and product onboarding entry point.",
+            },
+          ],
+        },
+        {
+          title: "Brand assets",
+          bullets: [
+            "Wordmark: AutoApply CV",
+            "Primary logo files: PNG app icons in /public/logos",
+            "Recommended primary color: #6366F1",
+            "Tagline: Apply smarter, not blindly.",
+          ],
+        },
+        {
+          title: "Press inquiries",
+          cards: [
+            {
+              kicker: "Media",
+              title: "press@autoapplycv.in",
+              description: "Interview requests, product announcements, and launch coverage requests.",
+            },
+          ],
+        },
+      ]}
+      ctaTitle="Need custom assets or a statement?"
+      ctaDescription="Send publication details and deadlines so we can respond with the right format quickly."
+      primaryAction={{ label: "Contact Press Team", to: "/contact" }}
+      secondaryAction={{ label: "About Company", to: "/about" }}
+    />
+  );
+}

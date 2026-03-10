@@ -607,15 +607,15 @@ export default function Onboarding() {
   const [checkingExtension, setCheckingExtension] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({ installed: false });
   const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
-    version: "1.1.2",
+    version: "1.1.3",
     displayName: "AutoApply CV LinkedIn Copilot",
-    downloadFileName: formatExtensionPackageFileName("1.1.2"),
-    downloadBaseName: formatExtensionPackageName("1.1.2"),
+    downloadFileName: formatExtensionPackageFileName("1.1.3"),
+    downloadBaseName: formatExtensionPackageName("1.1.3"),
   });
   const currentPackageBaseName =
-    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.2");
+    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.3");
   const currentPackageFileName =
-    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.2");
+    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.3");
   const installedPackageName =
     extensionStatus.installed && extensionStatus.version ? formatExtensionPackageName(extensionStatus.version) : "";
   const checkExtensionButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -1842,11 +1842,15 @@ export default function Onboarding() {
             {pendingQuestions.slice(0, 6).map((item) => {
               const draftKey = item.questionKey;
               const draftValue = answerDrafts[draftKey] ?? "";
+              const hasValidationMessage = Boolean(item.validationMessage);
               return (
-                <div key={`${item.questionKey}-${item.questionLabel}`} className="rounded-xl border border-amber-200 bg-white p-3">
+                <div
+                  key={`${item.questionKey}-${item.questionLabel}`}
+                  className={`rounded-xl border p-3 ${hasValidationMessage ? "border-red-200 bg-red-50" : "border-amber-200 bg-white"}`}
+                >
                   <div className="text-sm font-semibold text-gray-900">{item.questionLabel}</div>
                   {item.validationMessage ? (
-                    <div className="text-xs text-amber-700 mt-1">{item.validationMessage}</div>
+                    <div className="mt-1 text-xs font-medium text-red-700">{item.validationMessage}</div>
                   ) : null}
                   <div className="mt-2 flex flex-wrap gap-2">
                     <input
@@ -2350,11 +2354,17 @@ export default function Onboarding() {
                 {pendingQuestions.map((item) => {
                   const key = item.questionKey;
                   const draft = answerDrafts[key] || "";
+                  const hasValidationMessage = Boolean(item.validationMessage);
                   return (
-                    <div key={`${item.questionKey}-${item.questionLabel}`} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div
+                      key={`${item.questionKey}-${item.questionLabel}`}
+                      className={`rounded-xl border p-3 ${
+                        hasValidationMessage ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
+                      }`}
+                    >
                       <div className="text-sm font-semibold text-gray-900">{item.questionLabel}</div>
                       {item.validationMessage ? (
-                        <div className="text-xs text-amber-700 mt-1">{item.validationMessage}</div>
+                        <div className="mt-1 text-xs font-medium text-red-700">{item.validationMessage}</div>
                       ) : null}
 
                       <div className="mt-2 flex flex-wrap gap-2">

@@ -592,10 +592,10 @@ export default function Jobs() {
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
   const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
-    version: "1.1.2",
+    version: "1.1.3",
     displayName: "AutoApply CV LinkedIn Copilot",
-    downloadFileName: formatExtensionPackageFileName("1.1.2"),
-    downloadBaseName: formatExtensionPackageName("1.1.2"),
+    downloadFileName: formatExtensionPackageFileName("1.1.3"),
+    downloadBaseName: formatExtensionPackageName("1.1.3"),
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -611,9 +611,9 @@ export default function Jobs() {
     installed: false,
   });
   const currentPackageBaseName =
-    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.2");
+    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.3");
   const currentPackageFileName =
-    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.2");
+    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.3");
   const installedPackageName =
     extensionStatus.installed && extensionStatus.version ? formatExtensionPackageName(extensionStatus.version) : "";
   const versionBadgeRef = useRef<HTMLSpanElement | null>(null);
@@ -1871,10 +1871,18 @@ export default function Jobs() {
               const pendingCatalog = lookupCatalogField(q.questionKey || q.questionLabel, q.questionLabel);
               const pendingDraftValue = answerDrafts[pendingKey] || "";
               const pendingAnswerType = pendingCatalog?.answerType || siteAnswerTypes[pendingKey] || inferAnswerType(pendingDraftValue);
+              const hasValidationMessage = Boolean(q.validationMessage);
               return (
-                <div key={q.questionKey} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div
+                  key={q.questionKey}
+                  className={`rounded-xl border p-4 ${
+                    hasValidationMessage ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
+                  }`}
+                >
                   <div className="text-sm font-semibold text-gray-900">{q.questionLabel}</div>
-                  {q.validationMessage ? <div className="text-xs text-amber-700 mt-1">{q.validationMessage}</div> : null}
+                  {q.validationMessage ? (
+                    <div className="mt-1 text-xs font-medium text-red-700">{q.validationMessage}</div>
+                  ) : null}
                   {(q.questionKey === "resume_upload_required" || /resume/i.test(String(q.validationMessage || ""))) ? (
                     <div className="text-xs text-blue-700 mt-2">
                       Upload resume in LinkedIn Easy Apply profile. Copilot will auto-select the newest attached resume.

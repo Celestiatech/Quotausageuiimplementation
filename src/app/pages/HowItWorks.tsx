@@ -1,8 +1,14 @@
 import { useNavigate } from 'react-router';
-import { Download, Target, Rocket, Check, ArrowRight, Play } from 'lucide-react';
+import { Download, Target, Rocket, Check, ArrowRight, Play, Shield, Clock, MessageSquare } from 'lucide-react';
+import { MediaSlot } from '../components/marketing/MediaSlot';
 
 export default function HowItWorks() {
   const navigate = useNavigate();
+  const mediaAssets = {
+    demoVideoSrc: '',
+    demoPosterSrc: '',
+    guardrailVideoSrcs: ['', '', ''],
+  };
 
   const steps = [
     {
@@ -14,7 +20,7 @@ export default function HowItWorks() {
         'One-click Chrome extension setup',
         'Connect directly with AutoApply CV',
         'Sync screening answers from dashboard',
-        'Start from LinkedIn Jobs instantly'
+        'Start from LinkedIn Jobs instantly',
       ],
       gradient: 'from-blue-500 to-cyan-500'
     },
@@ -46,6 +52,30 @@ export default function HowItWorks() {
     }
   ];
 
+  const runGuardrails = [
+    {
+      icon: Clock,
+      title: 'Wait-for-ready checks',
+      detail: 'Before every answer/submit action, the extension verifies modal state and required button visibility.',
+    },
+    {
+      icon: Shield,
+      title: 'Duplicate + retry cooldown',
+      detail: 'Already-applied jobs and recently-attempted jobs are skipped to prevent refresh loops and repeat actions.',
+    },
+    {
+      icon: MessageSquare,
+      title: 'Validation feedback to dashboard',
+      detail: 'If LinkedIn returns a red field error, the run pauses and requests the exact corrected value.',
+    },
+  ];
+
+  const guardrailMediaHints = [
+    'Add 10-15s clip: wait for modal/form readiness before answering.',
+    'Add 10-15s clip: already-applied and cooldown skip behavior.',
+    'Add 10-15s clip: validation error -> dashboard correction -> resume.',
+  ];
+
   return (
     <div className="bg-white">
       {/* Hero */}
@@ -70,6 +100,17 @@ export default function HowItWorks() {
             <Play className="w-5 h-5" />
             Watch 2-min Demo Video
           </button>
+
+          <div className="mt-8 max-w-5xl mx-auto rounded-2xl overflow-hidden border border-indigo-200 bg-white shadow-sm">
+            <MediaSlot
+              videoSrc={mediaAssets.demoVideoSrc}
+              posterSrc={mediaAssets.demoPosterSrc}
+              className="w-full h-[320px] object-cover"
+              placeholderTitle="How-it-works demo video"
+              placeholderHint="Add a 90-120s walkthrough: setup, run guardrails, and dashboard correction flow."
+              videoControls
+            />
+          </div>
         </div>
       </section>
 
@@ -117,6 +158,50 @@ export default function HowItWorks() {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-block px-4 py-2 bg-indigo-100 rounded-full text-indigo-700 text-sm font-semibold mb-4">
+              Run Guardrails
+            </div>
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">Safety checks built into each apply cycle</h2>
+            <p className="text-xl text-gray-600 max-w-4xl mx-auto">
+              This is where reliable automation differs from generic auto-apply tools: stable waits, dedupe logic, and actionable pauses.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 mb-10">
+            {runGuardrails.map((item, index) => (
+              <div key={item.title} className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#6366F1] to-[#A855F7] flex items-center justify-center mb-4">
+                  <item.icon className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
+                <p className="text-gray-600 leading-relaxed">{item.detail}</p>
+                <div className="mt-4 rounded-xl overflow-hidden border border-gray-200">
+                  <MediaSlot
+                    videoSrc={mediaAssets.guardrailVideoSrcs[index]}
+                    className="w-full h-[140px] object-cover"
+                    placeholderTitle={`${item.title} media`}
+                    placeholderHint={guardrailMediaHints[index] || 'Add short feature clip.'}
+                    videoControls
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl bg-white border border-gray-200 p-7">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">If LinkedIn returns an input error</h3>
+            <ol className="space-y-3 text-gray-700">
+              <li className="flex items-start gap-3"><span className="font-bold text-indigo-600">1.</span><span>AutoApply CV captures the exact LinkedIn error text (example: decimal number format issue).</span></li>
+              <li className="flex items-start gap-3"><span className="font-bold text-indigo-600">2.</span><span>The run pauses automatically so no incorrect submission is attempted.</span></li>
+              <li className="flex items-start gap-3"><span className="font-bold text-indigo-600">3.</span><span>You update the answer in dashboard and the run resumes from the same queue safely.</span></li>
+            </ol>
           </div>
         </div>
       </section>

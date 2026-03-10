@@ -10,11 +10,21 @@ import AdminLayout from './layouts/AdminLayout';
 
 // Marketing Pages
 import Home from './pages/Home';
+import Product from './pages/Product';
 import Features from './pages/Features';
 import HowItWorks from './pages/HowItWorks';
 import Pricing from './pages/Pricing';
 import About from './pages/About';
 import FAQ from './pages/FAQ';
+import Roadmap from './pages/Roadmap';
+import Careers from './pages/Careers';
+import Contact from './pages/Contact';
+import PressKit from './pages/PressKit';
+import HelpCenter from './pages/HelpCenter';
+import Community from './pages/Community';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
+import CookiePolicy from './pages/CookiePolicy';
 import Blog from './pages/Blog';
 import BlogPost from './pages/BlogPost';
 import ExtensionDesign from './pages/ExtensionDesign';
@@ -90,11 +100,21 @@ export default function App() {
           {/* Marketing Pages */}
           <Route path="/" element={<Root />}>
             <Route index element={<Home />} />
+            <Route path="product" element={<Product />} />
             <Route path="features" element={<Features />} />
             <Route path="how-it-works" element={<HowItWorks />} />
             <Route path="pricing" element={<Pricing />} />
             <Route path="about" element={<About />} />
             <Route path="faq" element={<FAQ />} />
+            <Route path="roadmap" element={<Roadmap />} />
+            <Route path="careers" element={<Careers />} />
+            <Route path="contact" element={<Contact />} />
+            <Route path="press-kit" element={<PressKit />} />
+            <Route path="help-center" element={<HelpCenter />} />
+            <Route path="community" element={<Community />} />
+            <Route path="privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="terms-of-service" element={<TermsOfService />} />
+            <Route path="cookie-policy" element={<CookiePolicy />} />
             <Route path="extension-design" element={<ExtensionDesign />} />
             <Route path="blog" element={<Blog />} />
             <Route path="blog/:slug" element={<BlogPost />} />

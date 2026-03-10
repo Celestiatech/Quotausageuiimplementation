@@ -16,9 +16,16 @@ import {
   Sparkles
 } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import { MediaSlot } from '../components/marketing/MediaSlot';
 
 export default function Home() {
   const navigate = useNavigate();
+  const mediaAssets = {
+    heroVideoSrc: '',
+    heroImageSrc: '',
+    valueImageSrc: '',
+    reliabilityEvidenceImageSrc: '',
+  };
 
   const features = [
     {
@@ -64,23 +71,64 @@ export default function Home() {
       name: 'Sarah Chen',
       role: 'Senior SDE',
       company: 'Google',
-      image: 'https://images.unsplash.com/photo-1689600944138-da3b150d9cb8?w=400',
+      image: '',
       content: 'Increased my interview callbacks by 3x in just 2 weeks!'
     },
     {
       name: 'Michael Rodriguez',
       role: 'Full Stack Dev',
       company: 'Meta',
-      image: 'https://images.unsplash.com/photo-1723537742563-15c3d351dbf2?w=400',
+      image: '',
       content: 'The AI resume tailoring saved me hours. Worth every penny!'
     },
     {
       name: 'Emily Watson',
       role: 'Software Engineer',
       company: 'Amazon',
-      image: 'https://images.unsplash.com/photo-1576558656222-ba66febe3dec?w=400',
+      image: '',
       content: 'Got 4 FAANG offers using AutoApply CV. Simply amazing!'
     }
+  ];
+
+  const switchReasons = [
+    {
+      icon: Clock,
+      title: 'Page-ready submission guard',
+      description: 'AutoApply CV waits for LinkedIn Easy Apply modal readiness before answering and submitting.',
+    },
+    {
+      icon: Shield,
+      title: 'Duplicate prevention by job ID + URL',
+      description: 'Recently attempted and already-submitted jobs are skipped automatically to avoid repeated loops.',
+    },
+    {
+      icon: MessageSquare,
+      title: 'Actionable validation feedback',
+      description: 'If a field fails (for example decimal/number format), run pauses and sends exact fix prompts to dashboard.',
+    },
+  ];
+
+  const comparisonRows = [
+    {
+      area: 'Page stability',
+      legacy: 'Attempts while job card/modal is still loading',
+      modern: 'Waits for stable form state before next action',
+    },
+    {
+      area: 'Repeat protection',
+      legacy: 'May revisit same jobs after refresh',
+      modern: 'Dedupes by applied cache, job ID, and retry cooldown',
+    },
+    {
+      area: 'Skip visibility',
+      legacy: 'Generic skipped status',
+      modern: 'Exact reason codes: external apply, cache hit, required input, validation',
+    },
+    {
+      area: 'Human control',
+      legacy: 'Limited recovery when forms fail',
+      modern: 'Auto-pause and resume after user answer sync from dashboard',
+    },
   ];
 
   return (
@@ -189,10 +237,16 @@ export default function Home() {
               transition={{ duration: 0.8, delay: 0.4 }}
             >
               <div className="relative rounded-3xl overflow-hidden shadow-premium-lg border-8 border-white hover-lift">
-                <ImageWithFallback
-                  src="https://images.unsplash.com/photo-1580894896813-652ff5aa8146?w=1080"
-                  alt="AutoApply CV Dashboard"
-                  className="w-full h-auto"
+                <MediaSlot
+                  videoSrc={mediaAssets.heroVideoSrc}
+                  imageSrc={mediaAssets.heroImageSrc}
+                  className="w-full h-[460px] object-cover"
+                  placeholderTitle="Hero demo media"
+                  placeholderHint="Add a 8-12s product clip (recommended) or dashboard hero screenshot."
+                  autoPlay
+                  loop
+                  muted
+                  videoControls={false}
                 />
                 {/* Floating Card */}
                 <motion.div 
@@ -234,6 +288,75 @@ export default function Home() {
                 {company}
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Reliability Positioning */}
+      <section className="py-20 bg-gradient-to-br from-slate-50 via-white to-indigo-50">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-block px-4 py-2 bg-indigo-100 rounded-full text-indigo-700 font-semibold text-sm mb-4">
+              Why Users Switch
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+              Built for reliable runs, not blind mass apply
+            </h2>
+            <p className="text-xl text-gray-600 max-w-4xl mx-auto">
+              If you are comparing LiftmyCV, LazyApply, and other auto apply tools, focus on control quality:
+              page waits, duplicate protection, and clear error routing.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 mb-10">
+            {switchReasons.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm hover:shadow-lg transition-all duration-200"
+              >
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#6366F1] to-[#A855F7] flex items-center justify-center mb-4">
+                  <item.icon className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
+                <p className="text-gray-600 leading-relaxed">{item.description}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="md:hidden grid gap-4">
+            {comparisonRows.map((row) => (
+              <div key={row.area} className="rounded-xl border border-gray-200 bg-white p-4">
+                <p className="font-semibold text-gray-900 mb-2">{row.area}</p>
+                <p className="text-sm text-gray-500 mb-1">Typical Mass-Apply</p>
+                <p className="text-sm text-gray-700 mb-3">{row.legacy}</p>
+                <p className="text-sm text-indigo-600 mb-1 font-medium">AutoApply CV</p>
+                <p className="text-sm text-gray-800">{row.modern}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block rounded-2xl border border-gray-200 overflow-hidden bg-white">
+            <div className="grid grid-cols-3 bg-gray-50 border-b border-gray-200 text-sm font-semibold text-gray-700">
+              <div className="px-5 py-3">Decision Area</div>
+              <div className="px-5 py-3 border-l border-gray-200">Typical Mass-Apply</div>
+              <div className="px-5 py-3 border-l border-gray-200">AutoApply CV</div>
+            </div>
+            {comparisonRows.map((row) => (
+              <div key={row.area} className="grid grid-cols-3 text-sm">
+                <div className="px-5 py-3 font-semibold text-gray-900 border-b border-gray-100">{row.area}</div>
+                <div className="px-5 py-3 text-gray-600 border-l border-b border-gray-100">{row.legacy}</div>
+                <div className="px-5 py-3 text-gray-700 border-l border-b border-gray-100">{row.modern}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-2xl overflow-hidden border border-gray-200 bg-white">
+            <MediaSlot
+              imageSrc={mediaAssets.reliabilityEvidenceImageSrc}
+              className="w-full h-[260px] object-cover"
+              placeholderTitle="Reliability evidence image"
+              placeholderHint="Add annotated screenshot: duplicate skip, cooldown, and validation pause/resume flow."
+            />
           </div>
         </div>
       </section>
@@ -280,10 +403,11 @@ export default function Home() {
             </div>
             <div className="relative">
               <div className="rounded-3xl overflow-hidden shadow-2xl">
-                <ImageWithFallback
-                  src="https://images.unsplash.com/photo-1739298061766-e2751d92e9db?w=800"
-                  alt="Team collaboration"
-                  className="w-full h-auto"
+                <MediaSlot
+                  imageSrc={mediaAssets.valueImageSrc}
+                  className="w-full h-[420px] object-cover"
+                  placeholderTitle="Value proposition image"
+                  placeholderHint="Add a real dashboard screenshot showing queue, applied/skipped counts, and reason codes."
                 />
               </div>
             </div>
@@ -390,11 +514,22 @@ export default function Home() {
                   "{testimonial.content}"
                 </p>
                 <div className="flex items-center gap-4">
-                  <ImageWithFallback
-                    src={testimonial.image}
-                    alt={testimonial.name}
-                    className="w-14 h-14 rounded-full object-cover border-2 border-white/30"
-                  />
+                  {testimonial.image ? (
+                    <ImageWithFallback
+                      src={testimonial.image}
+                      alt={testimonial.name}
+                      className="w-14 h-14 rounded-full object-cover border-2 border-white/30"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-full border-2 border-white/30 bg-white/15 flex items-center justify-center text-sm font-bold text-white">
+                      {testimonial.name
+                        .split(' ')
+                        .map((part) => part[0] || '')
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </div>
+                  )}
                   <div>
                     <div className="font-semibold text-white">{testimonial.name}</div>
                     <div className="text-sm text-purple-100">{testimonial.role}</div>

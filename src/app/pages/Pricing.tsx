@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Check, Zap, Crown, Users, ArrowRight, Sparkles, Shield, Clock } from 'lucide-react';
+import { Check, X, Zap, Crown, Users, ArrowRight, Sparkles, Shield, Clock } from 'lucide-react';
+import { MediaSlot } from '../components/marketing/MediaSlot';
 
 type Plan = {
   name: string;
@@ -19,6 +20,10 @@ type Plan = {
 export default function Pricing() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const navigate = useNavigate();
+  const mediaAssets = {
+    billingEvidenceImageSrc: '',
+    billingEvidenceVideoSrc: '',
+  };
 
   const plans: Plan[] = [
     {
@@ -80,6 +85,14 @@ export default function Pricing() {
       popular: false,
       gradient: 'from-purple-600 to-pink-600'
     }
+  ];
+
+  const billingRules = [
+    { event: 'Application submitted successfully', charged: true, note: 'Counts as 1 apply action or 1 Hire credit.' },
+    { event: 'Skipped: External Apply only', charged: false, note: 'Not counted when easy-apply-only is enabled.' },
+    { event: 'Skipped: Already applied / cache hit', charged: false, note: 'Duplicate prevention avoids repeat charging.' },
+    { event: 'Skipped: Validation error (form blocked)', charged: false, note: 'Run pauses and asks for corrected answer.' },
+    { event: 'Paused/stopped by operator before submit', charged: false, note: 'No submit means no charge event.' },
   ];
 
   const handleSelectPlan = (planName: string) => {
@@ -200,6 +213,56 @@ export default function Pricing() {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 bg-gradient-to-br from-slate-50 to-white border-y border-gray-200">
+        <div className="max-w-5xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <div className="inline-block px-4 py-2 bg-green-100 rounded-full text-green-700 text-sm font-semibold mb-4">
+              Billing Transparency
+            </div>
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3">Exactly what is charged and what is not</h2>
+            <p className="text-lg text-gray-600">
+              Compare tools on billing clarity. AutoApply CV records charge intent only on successful submit outcomes.
+            </p>
+          </div>
+
+          <div className="rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm">
+            {billingRules.map((rule, index) => (
+              <div
+                key={rule.event}
+                className={`grid md:grid-cols-[1.2fr_0.45fr_1.35fr] gap-3 px-5 py-4 ${index === billingRules.length - 1 ? '' : 'border-b border-gray-100'}`}
+              >
+                <div className="font-semibold text-gray-900">{rule.event}</div>
+                <div>
+                  {rule.charged ? (
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
+                      <Check className="w-3.5 h-3.5" />
+                      Charged
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-full">
+                      <X className="w-3.5 h-3.5" />
+                      Not Charged
+                    </span>
+                  )}
+                </div>
+                <div className="text-gray-600">{rule.note}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-2xl overflow-hidden border border-gray-200 bg-white">
+            <MediaSlot
+              imageSrc={mediaAssets.billingEvidenceImageSrc}
+              videoSrc={mediaAssets.billingEvidenceVideoSrc}
+              className="w-full h-[260px] object-cover"
+              placeholderTitle="Billing evidence media"
+              placeholderHint="Add log screenshot or 15-20s clip showing charged vs skipped outcomes in real runs."
+              videoControls
+            />
           </div>
         </div>
       </section>

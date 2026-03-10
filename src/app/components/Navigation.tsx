@@ -55,6 +55,9 @@ export function Navigation() {
 
             {/* Desktop Navigation */}
             <div className="hidden lg:flex items-center gap-8">
+              <Link to="/product" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
+                Product
+              </Link>
               <Link to="/features" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
                 Features
               </Link>
@@ -63,6 +66,9 @@ export function Navigation() {
               </Link>
               <Link to="/pricing" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
                 Pricing
+              </Link>
+              <Link to="/roadmap" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
+                Roadmap
               </Link>
               <Link to="/about" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
                 About Us
@@ -129,6 +135,13 @@ export function Navigation() {
             <div className="lg:hidden py-4 border-t border-gray-200 animate-in slide-in-from-top duration-200">
               <div className="flex flex-col gap-4">
                 <Link 
+                  to="/product" 
+                  className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Product
+                </Link>
+                <Link 
                   to="/features" 
                   className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
@@ -148,6 +161,13 @@ export function Navigation() {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Pricing
+                </Link>
+                <Link
+                  to="/roadmap"
+                  className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Roadmap
                 </Link>
                 <Link 
                   to="/about" 

@@ -56,6 +56,11 @@ export function Footer() {
             <h4 className="font-semibold text-gray-900 mb-4">Product</h4>
             <ul className="space-y-3">
               <li>
+                <Link to="/product" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                  Product
+                </Link>
+              </li>
+              <li>
                 <Link to="/features" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Features
                 </Link>
@@ -71,9 +76,9 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                <Link to="/roadmap" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Roadmap
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -87,19 +92,19 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                <Link to="/careers" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Careers
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                <Link to="/contact" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Contact
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                <Link to="/press-kit" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Press Kit
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -118,14 +123,14 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                <Link to="/help-center" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Help Center
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                <Link to="/community" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Community
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -134,18 +139,18 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-gray-600 text-sm">
-            (c) 2026 AutoApply CV. All rights reserved.
+            © 2026 AutoApply CV. All rights reserved.
           </p>
           <div className="flex gap-6">
-            <a href="#" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">
+            <Link to="/privacy-policy" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">
               Privacy Policy
-            </a>
-            <a href="#" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">
+            </Link>
+            <Link to="/terms-of-service" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">
               Terms of Service
-            </a>
-            <a href="#" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">
+            </Link>
+            <Link to="/cookie-policy" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">
               Cookie Policy
-            </a>
+            </Link>
           </div>
         </div>
       </div>

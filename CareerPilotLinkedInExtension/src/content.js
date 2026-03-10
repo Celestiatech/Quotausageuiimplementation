@@ -11,6 +11,8 @@ const PANEL_PREFS_KEY = "cpPanelPrefs";
 const RUN_SEEN_STORAGE_KEY = "cpRunSeenSnapshot";
 const JOB_OUTCOME_CACHE_KEY = "cpSeenJobOutcomeCache";
 const JOB_OUTCOME_CACHE_SCHEMA_KEY = "cpSeenJobOutcomeCacheSchema";
+const LAST_SEARCH_RESULTS_URL_KEY = "cpLastSearchResultsUrl";
+const ADVANCED_FILTERS_APPLIED_KEY = "cpAdvancedFiltersApplied";
 const JOB_OUTCOME_CACHE_SCHEMA_VERSION = 2;
 const APPLIED_JOB_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const ALREADY_APPLIED_TTL_MS = 24 * 60 * 60 * 1000;
@@ -982,6 +984,11 @@ function isDetailPaneStillLoading() {
   return false;
 }
 
+function shouldUseConservativeExternalApplyWait() {
+  const href = String(window.location.href || "");
+  return isJobsViewPage() || /[?&]eBP=|[?&]trk=|[?&]refId=|[?&]trackingId=/i.test(href);
+}
+
 async function waitForApplyButtonFromDetailPane(settings, timeoutMs = 7000, context = "detail pane") {
   const timeout = Math.max(1000, Number(timeoutMs || 7000));
   const start = Date.now();
@@ -989,8 +996,12 @@ async function waitForApplyButtonFromDetailPane(settings, timeoutMs = 7000, cont
   let polls = 0;
   let extendedForLoading = false;
   let extendedForExternal = false;
+  let extendedForConservativeExternal = false;
   let firstExternalSeenAt = 0;
   let lastExternalAction = null;
+  const conservativeExternalWait = shouldUseConservativeExternalApplyWait();
+  const minimumDecisionMs = conservativeExternalWait ? 3600 : 1400;
+  const stableExternalMs = conservativeExternalWait ? 2600 : 1200;
   while (Date.now() < deadline) {
     polls += 1;
     const action = getApplyButtonFromDetailPane();
@@ -1011,14 +1022,13 @@ async function waitForApplyButtonFromDetailPane(settings, timeoutMs = 7000, cont
       lastExternalAction = action;
       if (!firstExternalSeenAt) firstExternalSeenAt = Date.now();
       const externalVisibleForMs = Date.now() - firstExternalSeenAt;
-      const minimumDecisionMs = 1400;
-      const stableExternalMs = 1200;
       if (!detailLoading && Date.now() - start >= minimumDecisionMs && externalVisibleForMs >= stableExternalMs) {
         await debugLog(settings, "External apply button confirmed after settle wait", {
           context,
           polls,
           elapsedMs: Date.now() - start,
-          externalVisibleForMs
+          externalVisibleForMs,
+          conservativeExternalWait
         });
         return action;
       }
@@ -1056,15 +1066,41 @@ async function waitForApplyButtonFromDetailPane(settings, timeoutMs = 7000, cont
           polls,
           elapsedMs: Date.now() - start
         });
+      } else if (!extendedForConservativeExternal && conservativeExternalWait && lastExternalAction?.button) {
+        extendedForConservativeExternal = true;
+        deadline += 2200;
+        await debugLog(settings, "Extending apply button wait because jobs view may still promote Easy Apply", {
+          context,
+          polls,
+          elapsedMs: Date.now() - start
+        });
       }
     }
     await sleep(220);
+  }
+  if (conservativeExternalWait && lastExternalAction?.button) {
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      // ignore scroll failures
+    }
+    await sleep(900);
+    const finalAction = getApplyButtonFromDetailPane();
+    if (finalAction.type === "easy" && finalAction.button) {
+      await debugLog(settings, "Easy Apply appeared after conservative external wait", {
+        context,
+        polls,
+        elapsedMs: Date.now() - start
+      });
+      return finalAction;
+    }
   }
   if (lastExternalAction?.button) {
     await debugLog(settings, "Returning external apply after full wait window", {
       context,
       polls,
-      elapsedMs: Date.now() - start
+      elapsedMs: Date.now() - start,
+      conservativeExternalWait
     });
     return lastExternalAction;
   }
@@ -1960,18 +1996,110 @@ function hasSearchLocationQueryParams(url) {
   }
 }
 
-function getResumableSearchUrl(settings, options = {}) {
+function readStoredSearchResultsUrl() {
+  try {
+    const raw = String(sessionStorage.getItem(LAST_SEARCH_RESULTS_URL_KEY) || "").trim();
+    if (!raw) return "";
+    const url = new URL(raw);
+    if (!url.pathname.startsWith("/jobs/search")) return "";
+    clearTransientSearchQueryParams(url);
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredSearchResultsUrl(urlValue) {
+  try {
+    const url = new URL(String(urlValue || "").trim());
+    if (!url.pathname.startsWith("/jobs/search")) return;
+    clearTransientSearchQueryParams(url);
+    sessionStorage.setItem(LAST_SEARCH_RESULTS_URL_KEY, url.toString());
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function buildCanonicalSearchUrl(settings, options = {}) {
   const preserveStart = options?.preserveStart !== false;
-  const resumeUrl = new URL(getActiveRunSearchUrl(settings));
+  const baseCandidates = [
+    options?.baseUrl,
+    readStoredSearchResultsUrl(),
+    window.location.href,
+    getActiveRunSearchUrl(settings)
+  ];
+
+  let url = null;
+  for (const candidate of baseCandidates) {
+    try {
+      const parsed = new URL(String(candidate || "").trim());
+      if (parsed.pathname.startsWith("/jobs/search")) {
+        url = parsed;
+        break;
+      }
+    } catch {
+      // ignore invalid candidates
+    }
+  }
+
+  if (!url) {
+    url = new URL(getActiveRunSearchUrl(settings));
+  }
+
+  const currentStart = String(url.searchParams.get("start") || "").trim();
+  const dateParam = datePostedToLinkedInParam(settings?.datePosted || "");
+  const sortParam = sortByToLinkedInParam(settings?.sortBy || "");
+  const workplaceParam = onSiteToLinkedInParam(settings?.onSite || "");
+
+  if (dateParam) url.searchParams.set("f_TPR", dateParam);
+  else url.searchParams.delete("f_TPR");
+
+  if (sortParam) url.searchParams.set("sortBy", sortParam);
+  else url.searchParams.delete("sortBy");
+
+  if (workplaceParam) url.searchParams.set("f_WT", workplaceParam);
+  else url.searchParams.delete("f_WT");
+
+  if (settings?.easyApplyOnly !== false) {
+    url.searchParams.set("f_AL", "true");
+  }
+
+  if (shouldClearStaleLocationQueryParams(settings, url)) {
+    clearSearchLocationQueryParams(url);
+  }
+
+  if (!preserveStart || !/^\d+$/.test(currentStart) || Number(currentStart) <= 0) {
+    url.searchParams.delete("start");
+  } else {
+    url.searchParams.set("start", currentStart);
+  }
+
+  clearTransientSearchQueryParams(url);
+  return url;
+}
+
+function normalizeSearchUrlWithoutReload(settings) {
+  if (!isJobsSearchPage()) return false;
+  try {
+    const before = new URL(window.location.href).toString();
+    const after = buildCanonicalSearchUrl(settings, { baseUrl: before, preserveStart: true }).toString();
+    writeStoredSearchResultsUrl(after);
+    if (after === before) return false;
+    window.history.replaceState(null, "", after);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getResumableSearchUrl(settings, options = {}) {
+  const resumeUrl = buildCanonicalSearchUrl(settings, {
+    baseUrl: options?.baseUrl,
+    preserveStart: options?.preserveStart !== false
+  });
   try {
     const currentUrl = new URL(window.location.href);
     if (currentUrl.pathname.startsWith("/jobs/search")) {
-      if (preserveStart) {
-        const currentStart = String(currentUrl.searchParams.get("start") || "").trim();
-        if (/^\d+$/.test(currentStart) && Number(currentStart) > 0) {
-          resumeUrl.searchParams.set("start", currentStart);
-        }
-      }
       if (!shouldClearStaleLocationQueryParams(settings, currentUrl)) {
         for (const key of SEARCH_LOCATION_QUERY_PARAM_KEYS) {
           const value = String(currentUrl.searchParams.get(key) || "").trim();
@@ -1983,46 +2111,32 @@ function getResumableSearchUrl(settings, options = {}) {
     // fall back to the active run search URL
   }
   clearTransientSearchQueryParams(resumeUrl);
+  writeStoredSearchResultsUrl(resumeUrl.toString());
   return resumeUrl.toString();
 }
 
 async function ensureSearchQueryParams(settings) {
   if (!isJobsSearchPage()) return true;
   try {
-    const url = new URL(window.location.href);
-    const before = url.toString();
+    const before = new URL(window.location.href).toString();
     const transientOnlyUrl = new URL(before);
     clearTransientSearchQueryParams(transientOnlyUrl);
-    const dateParam = datePostedToLinkedInParam(settings.datePosted || "");
-    const sortParam = sortByToLinkedInParam(settings.sortBy || "");
-    const workplaceParam = onSiteToLinkedInParam(settings.onSite || "");
-
-    if (dateParam) url.searchParams.set("f_TPR", dateParam);
-    else url.searchParams.delete("f_TPR");
-
-    if (sortParam) url.searchParams.set("sortBy", sortParam);
-    else url.searchParams.delete("sortBy");
-
-    if (workplaceParam) url.searchParams.set("f_WT", workplaceParam);
-    else url.searchParams.delete("f_WT");
-
-    if (shouldClearStaleLocationQueryParams(settings, url)) {
-      clearSearchLocationQueryParams(url);
-    }
-
-    clearTransientSearchQueryParams(url);
+    const url = buildCanonicalSearchUrl(settings, { baseUrl: before, preserveStart: true });
 
     const after = url.toString();
     if (after !== before) {
       if (after === transientOnlyUrl.toString()) {
         window.history.replaceState(null, "", after);
+        writeStoredSearchResultsUrl(after);
         await debugLog(settings, "Normalized search URL without reload", { before, after });
         return true;
       }
+      writeStoredSearchResultsUrl(after);
       await logLine("Applied search query preferences (date/sort/work mode)", "info");
       window.location.href = after;
       return false;
     }
+    writeStoredSearchResultsUrl(after);
     return true;
   } catch {
     return true;
@@ -2076,14 +2190,17 @@ async function rotateSearchTerm(settings) {
   return true;
 }
 
-function buildNextPageUrlByStart(currentUrl, step = 25) {
+function buildNextPageUrlByStart(settings, currentUrl, step = 25) {
   try {
-    const url = new URL(String(currentUrl || window.location.href));
-    clearTransientSearchQueryParams(url);
+    const url = buildCanonicalSearchUrl(settings, {
+      baseUrl: currentUrl || window.location.href,
+      preserveStart: true
+    });
     const currentStartRaw = String(url.searchParams.get("start") || "0").trim();
     const currentStart = Number.isFinite(Number(currentStartRaw)) ? Number(currentStartRaw) : 0;
     const nextStart = Math.max(0, currentStart + Math.max(1, Number(step || 25)));
     url.searchParams.set("start", String(nextStart));
+    writeStoredSearchResultsUrl(url.toString());
     return url.toString();
   } catch {
     return "";
@@ -2091,7 +2208,7 @@ function buildNextPageUrlByStart(currentUrl, step = 25) {
 }
 
 async function gotoNextResultsPage(settings) {
-  const fallbackNextUrl = buildNextPageUrlByStart(window.location.href, 25);
+  const fallbackNextUrl = buildNextPageUrlByStart(settings, window.location.href, 25);
   if (fallbackNextUrl && fallbackNextUrl !== window.location.href && hasTransientSearchQueryParams(window.location.href)) {
     await logLine("Moving to next results page using clean URL offset.", "info");
     window.location.href = fallbackNextUrl;
@@ -2286,7 +2403,6 @@ function hasAdvancedFiltersConfigured(settings) {
     Boolean(String(settings.salary || "").trim()) ||
     parseListSetting(settings.experienceLevel).length > 0 ||
     parseListSetting(settings.jobType).length > 0 ||
-    parseListSetting(settings.onSite).length > 0 ||
     parseListSetting(settings.companies).length > 0 ||
     parseListSetting(settings.filterLocations).length > 0 ||
     parseListSetting(settings.industry).length > 0 ||
@@ -2298,6 +2414,54 @@ function hasAdvancedFiltersConfigured(settings) {
     Boolean(settings.inYourNetwork) ||
     Boolean(settings.fairChanceEmployer)
   );
+}
+
+function getAdvancedFilterSignature(settings) {
+  return JSON.stringify({
+    salary: String(settings?.salary || "").trim(),
+    experienceLevel: parseListSetting(settings?.experienceLevel),
+    jobType: parseListSetting(settings?.jobType),
+    companies: parseListSetting(settings?.companies),
+    filterLocations: parseListSetting(settings?.filterLocations),
+    industry: parseListSetting(settings?.industry),
+    jobFunction: parseListSetting(settings?.jobFunction),
+    jobTitles: parseListSetting(settings?.jobTitles),
+    benefits: parseListSetting(settings?.benefits),
+    commitments: parseListSetting(settings?.commitments),
+    under10Applicants: Boolean(settings?.under10Applicants),
+    inYourNetwork: Boolean(settings?.inYourNetwork),
+    fairChanceEmployer: Boolean(settings?.fairChanceEmployer),
+  });
+}
+
+function hasAppliedAdvancedFiltersForCurrentRun(settings) {
+  try {
+    const raw = String(sessionStorage.getItem(ADVANCED_FILTERS_APPLIED_KEY) || "").trim();
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return (
+      parsed &&
+      parsed.runId &&
+      parsed.runId === String(lastRunStartedAt || "") &&
+      parsed.signature === getAdvancedFilterSignature(settings)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function markAdvancedFiltersAppliedForCurrentRun(settings) {
+  try {
+    sessionStorage.setItem(
+      ADVANCED_FILTERS_APPLIED_KEY,
+      JSON.stringify({
+        runId: String(lastRunStartedAt || ""),
+        signature: getAdvancedFilterSignature(settings)
+      })
+    );
+  } catch {
+    // ignore storage failures
+  }
 }
 
 function optionTextMatches(candidate, target) {
@@ -2413,6 +2577,12 @@ async function addAutocompleteFilterValues(modal, hint, values, settings) {
 
 async function applyAdvancedFiltersIfNeeded(settings) {
   if (!hasAdvancedFiltersConfigured(settings)) return;
+  if (hasAppliedAdvancedFiltersForCurrentRun(settings)) {
+    await debugLog(settings, "Advanced filters already applied for this run/settings signature", {
+      runId: String(lastRunStartedAt || ""),
+    });
+    return;
+  }
   const allFiltersBtn = getBySelectorList([
     "button[aria-label*='All filters']",
     "button[aria-label='All filters']",
@@ -2434,7 +2604,6 @@ async function applyAdvancedFiltersIfNeeded(settings) {
   const optionTextValues = [
     ...parseListSetting(settings.experienceLevel),
     ...parseListSetting(settings.jobType),
-    ...parseListSetting(settings.onSite),
     ...parseListSetting(settings.industry),
     ...parseListSetting(settings.jobFunction),
     ...parseListSetting(settings.jobTitles),
@@ -2465,6 +2634,7 @@ async function applyAdvancedFiltersIfNeeded(settings) {
   if (showResults) {
     await resilientClick(showResults, "Apply current filters");
     await sleep(800);
+    markAdvancedFiltersAppliedForCurrentRun(settings);
     return;
   }
 
@@ -2472,6 +2642,7 @@ async function applyAdvancedFiltersIfNeeded(settings) {
   if (dismiss) {
     await resilientClick(dismiss, "Close filters");
   }
+  markAdvancedFiltersAppliedForCurrentRun(settings);
 }
 
 async function prepareRun(settings) {
@@ -3282,11 +3453,70 @@ function isRequiredQuestionBlock(block, rawLabel = "") {
   return false;
 }
 
+function collapseValidationText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function getValidationMessageFromElements(elements) {
+  for (const element of Array.isArray(elements) ? elements : []) {
+    if (!(element instanceof HTMLElement)) continue;
+    if (String(element.getAttribute("aria-hidden") || "").toLowerCase() === "true") continue;
+    const text = collapseValidationText(element.textContent || element.getAttribute("aria-label") || "");
+    if (text) return text;
+  }
+  return "";
+}
+
+function getQuestionBlockValidationMessage(block) {
+  if (!(block instanceof HTMLElement)) return "";
+  const selector = [
+    ".artdeco-inline-feedback__message",
+    "[role='alert']",
+    ".fb-dash-form-element__error",
+    ".jobs-easy-apply-form-element__error"
+  ].join(",");
+
+  const directMessage = getValidationMessageFromElements(Array.from(block.querySelectorAll(selector)));
+  if (directMessage) return directMessage;
+
+  const describedByIds = new Set();
+  const controls = Array.from(
+    block.querySelectorAll(
+      "input, select, textarea, [role='combobox'], button[aria-haspopup='listbox'], [aria-describedby]"
+    )
+  );
+  for (const control of controls) {
+    const ids = String(control.getAttribute("aria-describedby") || "")
+      .split(/\s+/)
+      .map((id) => id.trim())
+      .filter(Boolean);
+    for (const id of ids) describedByIds.add(id);
+  }
+
+  if (describedByIds.size) {
+    const describedByElements = Array.from(describedByIds)
+      .map((id) => document.getElementById(id))
+      .filter((element) => element instanceof HTMLElement);
+    const describedByMessage = getValidationMessageFromElements(describedByElements);
+    if (describedByMessage) return describedByMessage;
+  }
+
+  return "";
+}
+
+function isQuestionBlockInvalid(block, validationMessage = "") {
+  if (!(block instanceof HTMLElement)) return Boolean(validationMessage);
+  if (validationMessage) return true;
+  return Boolean(block.querySelector("[aria-invalid='true'], .artdeco-text-input--error, .fb-dash-form-element--error"));
+}
+
 function getQuestionBlockState(block) {
   const rawLabel = getQuestionLabel(block) || "LinkedIn required field";
   const label = cleanQuestionLabel(rawLabel) || "LinkedIn required field";
   const required = isRequiredQuestionBlock(block, rawLabel);
   const questionKey = questionKeyFromLabel(label) || questionKeyFromLabel(rawLabel) || "";
+  const validationMessage = getQuestionBlockValidationMessage(block);
+  const invalid = isQuestionBlockInvalid(block, validationMessage);
 
   const select = block.querySelector("select");
   if (select && isVisibleElement(select)) {
@@ -3299,7 +3529,9 @@ function getQuestionBlockState(block) {
       required,
       type: "select",
       answered,
-      value: selectedText
+      value: selectedText,
+      invalid,
+      validationMessage
     };
   }
 
@@ -3315,7 +3547,9 @@ function getQuestionBlockState(block) {
       required,
       type: "radio",
       answered: Boolean(selected),
-      value: selectedLabel
+      value: selectedLabel,
+      invalid,
+      validationMessage
     };
   }
 
@@ -3331,7 +3565,9 @@ function getQuestionBlockState(block) {
       required,
       type: textInput.tagName.toLowerCase() === "textarea" ? "textarea" : "text",
       answered: Boolean(value),
-      value
+      value,
+      invalid,
+      validationMessage
     };
   }
 
@@ -3348,7 +3584,9 @@ function getQuestionBlockState(block) {
       required,
       type: "combobox",
       answered,
-      value: comboText
+      value: comboText,
+      invalid,
+      validationMessage
     };
   }
 
@@ -3365,7 +3603,9 @@ function getQuestionBlockState(block) {
       required,
       type: "checkbox",
       answered,
-      value: answered ? "checked" : ""
+      value: answered ? "checked" : "",
+      invalid,
+      validationMessage
     };
   }
 
@@ -3378,7 +3618,9 @@ function getQuestionBlockState(block) {
       required,
       type: "date",
       answered: Boolean(value),
-      value
+      value,
+      invalid,
+      validationMessage
     };
   }
 
@@ -3401,7 +3643,9 @@ function getQuestionBlockState(block) {
         required,
         type: "date",
         answered: true,
-        value: hiddenDateValue
+        value: hiddenDateValue,
+        invalid,
+        validationMessage
       };
     }
   }
@@ -3423,7 +3667,9 @@ function getQuestionBlockState(block) {
       required,
       type: "date-picker",
       answered,
-      value: value || (answered ? "today-selected" : "")
+      value: value || (answered ? "today-selected" : ""),
+      invalid,
+      validationMessage
     };
   }
 
@@ -3433,7 +3679,9 @@ function getQuestionBlockState(block) {
     required,
     type: "unknown",
     answered: !required,
-    value: ""
+    value: "",
+    invalid,
+    validationMessage
   };
 }
 
@@ -3442,8 +3690,12 @@ function summarizeQuestionBlockState(state) {
   const type = String(state?.type || "unknown");
   const required = state?.required ? "required" : "optional";
   const answered = state?.answered ? "answered" : "missing";
+  const invalid = state?.invalid ? "invalid" : "valid";
   const value = truncateDebugText(state?.value || "", 36);
-  return `${type}|${required}|${answered}|${label}${value ? ` -> ${value}` : ""}`;
+  const validationMessage = truncateDebugText(state?.validationMessage || "", 48);
+  return `${type}|${required}|${answered}|${invalid}|${label}${value ? ` -> ${value}` : ""}${
+    validationMessage ? ` ! ${validationMessage}` : ""
+  }`;
 }
 
 function collectQuestionBlockDiagnostics(modal) {
@@ -3460,28 +3712,41 @@ function isPlaceholderOption(optionText) {
   return !t || t.includes("select an option") || t.includes("choose an option");
 }
 
-function collectUnansweredQuestions(modal) {
+function doesQuestionStateNeedAttention(state) {
+  if (!state) return false;
+  if (state.invalid) return true;
+  return Boolean(state.required && !state.answered);
+}
+
+function collectActionableQuestions(modal) {
   const diagnostics = collectQuestionBlockDiagnostics(modal);
   const pending = [];
   const seen = new Set();
   for (const d of diagnostics) {
-    if (!d?.required || d?.answered) continue;
+    if (!doesQuestionStateNeedAttention(d)) continue;
     const questionKey = d.questionKey || questionKeyFromLabel(d.label) || "linkedin_required_selection";
     const questionLabel = d.label || "LinkedIn required selection";
     const dedupeKey = `${questionKey}::${normalizeLabel(questionLabel)}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
-    pending.push({ questionKey, questionLabel });
+    pending.push({
+      questionKey,
+      questionLabel,
+      validationMessage: d.validationMessage || ""
+    });
   }
   return pending;
 }
 
 function buildPendingQuestionsFromValidation(modal, validationMessage) {
-  const questions = collectUnansweredQuestions(modal);
+  const questions = collectActionableQuestions(modal);
   if (questions.length) {
     return questions.map((q) => ({
       ...q,
-      validationMessage: validationMessage || "Required field answer missing"
+      validationMessage:
+        q.validationMessage ||
+        validationMessage ||
+        "Required field answer missing"
     }));
   }
 
@@ -3504,7 +3769,7 @@ function buildPendingQuestionsFromDiagnostics(unresolvedDiagnostics, validationM
   const pending = [];
   const seen = new Set();
   for (const d of items) {
-    if (!d || !d.required || d.answered) continue;
+    if (!doesQuestionStateNeedAttention(d)) continue;
     const questionKey = d.questionKey || questionKeyFromLabel(d.label) || "linkedin_required_selection";
     const questionLabel = d.label || "LinkedIn required selection";
     const dedupeKey = `${questionKey}::${normalizeLabel(questionLabel)}`;
@@ -3513,7 +3778,10 @@ function buildPendingQuestionsFromDiagnostics(unresolvedDiagnostics, validationM
     pending.push({
       questionKey,
       questionLabel,
-      validationMessage: validationMessage || "Required field answer missing"
+      validationMessage:
+        d.validationMessage ||
+        validationMessage ||
+        (d.invalid ? "Please correct this answer" : "Required field answer missing")
     });
   }
   return pending;
@@ -3562,13 +3830,22 @@ async function waitForPendingAnswersFromSettings(questions, timeoutMs = MANUAL_A
 }
 
 function getModalValidationMessage(modal) {
-  const err = getBySelectorList([
-    ".artdeco-inline-feedback__message",
-    "[role='alert']",
-    ".fb-dash-form-element__error",
-    ".jobs-easy-apply-form-element__error"
-  ], modal);
-  return err ? normalizeLabel(err.textContent || "") : "";
+  return normalizeLabel(getModalValidationMessageRaw(modal));
+}
+
+function getModalValidationMessageRaw(modal) {
+  return getValidationMessageFromElements(
+    Array.from(
+      modal?.querySelectorAll?.(
+        [
+          ".artdeco-inline-feedback__message",
+          "[role='alert']",
+          ".fb-dash-form-element__error",
+          ".jobs-easy-apply-form-element__error"
+        ].join(",")
+      ) || []
+    )
+  );
 }
 
 function getModalSignature(modal) {
@@ -4410,7 +4687,7 @@ async function processEasyApplyModal(settings) {
     let changedAny = false;
     const filledThisStep = [];
     const beforeDiagnostics = collectQuestionBlockDiagnostics(modal);
-    const unresolvedBefore = beforeDiagnostics.filter((d) => d.required && !d.answered);
+    const unresolvedBefore = beforeDiagnostics.filter((d) => doesQuestionStateNeedAttention(d));
     await debugLog(settings, "Modal step coverage (before fill)", {
       stepAttempt: safety,
       totalBlocks: beforeDiagnostics.length,
@@ -4440,7 +4717,7 @@ async function processEasyApplyModal(settings) {
       filledThisStep.push("checkbox|required|answered|submit consent");
     }
     const afterDiagnostics = collectQuestionBlockDiagnostics(modal);
-    const unresolvedAfter = afterDiagnostics.filter((d) => d.required && !d.answered);
+    const unresolvedAfter = afterDiagnostics.filter((d) => doesQuestionStateNeedAttention(d));
     const unresolvedImproved = unresolvedAfter.length < unresolvedBefore.length;
     const unresolvedKnownAfter = unresolvedAfter.filter((d) => d.type !== "unknown");
     const unresolvedUnknownOnly = unresolvedAfter.length > 0 && unresolvedKnownAfter.length === 0;
@@ -4456,7 +4733,8 @@ async function processEasyApplyModal(settings) {
 
     const stepSignature = getModalSignature(modal);
     const stepState = stepStateBySignature.get(stepSignature) || { preflightAttempts: 0, nextClicks: 0, manualAnswerWaits: 0 };
-    const modalValidationBeforeAction = getModalValidationMessage(modal);
+    const modalValidationBeforeActionRaw = getModalValidationMessageRaw(modal);
+    const modalValidationBeforeAction = normalizeLabel(modalValidationBeforeActionRaw);
     const hasVisibleSubmit = Boolean(findSubmitButton(modal));
     const hasVisibleNext = Boolean(findNextOrReviewButton(modal, { includeDisabled: true }));
     const hasVisibleDone = Boolean(findDoneOrCloseButton(modal));
@@ -4524,7 +4802,7 @@ async function processEasyApplyModal(settings) {
 
       const unresolvedQuestions = buildPendingQuestionsFromDiagnostics(
         unresolvedAfter,
-        modalValidationBeforeAction || "Required field answer missing"
+        modalValidationBeforeActionRaw || "Required field answer missing"
       );
       const shouldTryManualAnswerWait =
         unresolvedQuestions.length > 0 &&
@@ -4615,12 +4893,13 @@ async function processEasyApplyModal(settings) {
           await closePostSubmitUi(settings, { discardDraft: false });
           return { submitted: true, skipped: false, reachedSubmit: true };
         }
-        const submitValidation = getModalValidationMessage(getActiveModal() || modal);
+        const submitValidationRaw = getModalValidationMessageRaw(getActiveModal() || modal);
+        const submitValidation = normalizeLabel(submitValidationRaw);
         const unresolvedAfterSubmit = collectQuestionBlockDiagnostics(getActiveModal() || modal)
-          .filter((d) => d.required && !d.answered);
+          .filter((d) => doesQuestionStateNeedAttention(d));
         await debugLog(settings, "Submit click did not complete application", {
           clicked,
-          validation: submitValidation,
+          validation: submitValidationRaw || submitValidation,
           unresolvedRequired: unresolvedAfterSubmit.length,
           unresolvedFields: unresolvedAfterSubmit.slice(0, 12).map((d) => summarizeQuestionBlockState(d))
         });
@@ -4636,7 +4915,7 @@ async function processEasyApplyModal(settings) {
           submitted: false,
           skipped: true,
           reachedSubmit: true,
-          reason: submitValidation || "Submit click did not complete application"
+          reason: submitValidationRaw || submitValidation || "Submit click did not complete application"
         };
       }
       await logLine("Dry-run: reached submit step (not submitting). Use 'start live' to submit for real.", "warn");
@@ -4648,7 +4927,7 @@ async function processEasyApplyModal(settings) {
     if (!nextBtn) {
       const blockedNextBtn = findNextOrReviewButton(modal, { includeDisabled: true });
       if (blockedNextBtn) {
-        const validation = getModalValidationMessage(modal);
+        const validationRaw = getModalValidationMessageRaw(modal);
         const blockedFixedValidation = await attemptValidationAutoFix(modal, activeSettings);
         const blockedForcedAnswers = await forceAnswerModalQuestions(modal, activeSettings);
         if (blockedFixedValidation || blockedForcedAnswers) {
@@ -4661,7 +4940,7 @@ async function processEasyApplyModal(settings) {
           submitted: false,
           skipped: true,
           reachedSubmit: false,
-          reason: validation || "Next/review button is disabled"
+          reason: validationRaw || "Next/review button is disabled"
         };
       }
       const doneBtn = findDoneOrCloseButton(modal);
@@ -4673,12 +4952,12 @@ async function processEasyApplyModal(settings) {
           reachedSubmit: true
         };
       }
-      const validation = getModalValidationMessage(modal);
+      const validationRaw = getModalValidationMessageRaw(modal);
       return {
         submitted: false,
         skipped: true,
         reachedSubmit: false,
-        reason: validation ? `No next/review button. Validation: ${validation}` : "No next/review button"
+        reason: validationRaw ? `No next/review button. Validation: ${validationRaw}` : "No next/review button"
       };
     }
 
@@ -4696,12 +4975,13 @@ async function processEasyApplyModal(settings) {
     const autoFixed = await attemptValidationAutoFix(modal, activeSettings);
     if (!changedAny && !autoFixed && currentSignature === previousSignature) {
       stagnantSteps += 1;
-      const validation = getModalValidationMessage(modal);
+      const validationRaw = getModalValidationMessageRaw(modal);
+      const validation = normalizeLabel(validationRaw);
       const postClickDiagnostics = collectQuestionBlockDiagnostics(modal);
-      const unresolvedPostClick = postClickDiagnostics.filter((d) => d.required && !d.answered);
+      const unresolvedPostClick = postClickDiagnostics.filter((d) => doesQuestionStateNeedAttention(d));
       await debugLog(settings, "No modal progress detected", {
         stagnantSteps,
-        validation,
+        validation: validationRaw || validation,
         unresolvedRequired: unresolvedPostClick.length,
         unresolvedFields: unresolvedPostClick.slice(0, 12).map((d) => summarizeQuestionBlockState(d))
       });
@@ -4715,12 +4995,12 @@ async function processEasyApplyModal(settings) {
         }
       }
       if (stagnantSteps >= maxStagnantSteps) {
-        const validationNorm = normalizeLabel(validation || "");
+        const validationNorm = normalizeLabel(validationRaw || validation || "");
         const blockedDiagnostics = collectQuestionBlockDiagnostics(modal);
-        const unresolvedBlocked = blockedDiagnostics.filter((d) => d.required && !d.answered);
+        const unresolvedBlocked = blockedDiagnostics.filter((d) => doesQuestionStateNeedAttention(d));
         await debugLog(settings, "Modal blocked at step", {
           stagnantSteps,
-          validation,
+          validation: validationRaw || validation,
           unresolvedRequired: unresolvedBlocked.length,
           unresolvedFields: unresolvedBlocked.slice(0, 16).map((d) => summarizeQuestionBlockState(d))
         });
@@ -4753,7 +5033,7 @@ async function processEasyApplyModal(settings) {
           };
         }
 
-        const unanswered = buildPendingQuestionsFromValidation(modal, validation || "Required field answer missing");
+        const unanswered = buildPendingQuestionsFromValidation(modal, validationRaw || "Required field answer missing");
         if (unanswered.length && shouldPauseForInput) {
           await sendMessage({ type: "CP_REGISTER_PENDING_QUESTIONS", questions: unanswered });
           await logLine("Need your input for required application fields. Open dashboard Jobs to answer.", "warn");
@@ -4765,7 +5045,7 @@ async function processEasyApplyModal(settings) {
           submitted: false,
           skipped: true,
           reachedSubmit: false,
-          reason: validation || "Could not progress modal (likely unanswered required field)"
+          reason: validationRaw || validation || "Could not progress modal (likely unanswered required field)"
         };
       }
     } else {
@@ -4791,6 +5071,12 @@ async function runCycle(settings) {
     resetRemoteLocationKeywordCursor();
     window.location.href = getResumableSearchUrl(settings);
     return false;
+  }
+
+  if (normalizeSearchUrlWithoutReload(settings)) {
+    await debugLog(settings, "Normalized sticky search URL during run cycle", {
+      url: window.location.href
+    });
   }
 
   await refreshKnownAppliedJobIds(false);
