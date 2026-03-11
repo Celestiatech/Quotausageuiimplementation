@@ -8,9 +8,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://www.autoapplycv.in"),
   title: "AutoApply CV",
   description: "AutoApply CV - quota usage and job application UI",
+  manifest: "/site.webmanifest",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-48x48.png", type: "image/png", sizes: "48x48" },
       { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
       { url: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
     ],
