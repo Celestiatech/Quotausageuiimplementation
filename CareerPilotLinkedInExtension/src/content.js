@@ -4,6 +4,7 @@ const STATE_POLL_MS = 1200;
 const STEP_DELAY_MS = 900;
 const NO_PROGRESS_TIMEOUT_MS = 120000;
 const NO_PROGRESS_MAX_CYCLES = 25;
+const EXHAUSTED_RESULTS_PAGE_STREAK_LIMIT = 6;
 const MANUAL_ANSWER_WAIT_MS = 45000;
 const MANUAL_ANSWER_POLL_MS = 1200;
 const JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search/?f_AL=true";
@@ -36,6 +37,7 @@ let panelEl = null;
 let runningLoop = false;
 let runStats = { applied: 0, skipped: 0, failed: 0 };
 let preparedRun = false;
+let exhaustedSearchPageStreak = 0;
 let extensionContextAlive = true;
 let debugBadgeEl = null;
 let debugUiEnabled = false;
@@ -1866,15 +1868,13 @@ function shouldUseRemoteLocationKeywords(settings) {
 function getEffectiveSearchLocation(settings, locationOverride = "") {
   const override = String(locationOverride || "").trim();
   if (override) return override;
+  const explicitSearchLocation = String(settings?.searchLocation || "").trim();
   if (shouldUseRemoteLocationKeywords(settings)) {
-    const pool = getRemoteLocationKeywordPool(settings);
-    if (!pool.length) return "";
-    if (runRemoteLocationKeywordCursor < 0 || runRemoteLocationKeywordCursor >= pool.length) {
-      runRemoteLocationKeywordCursor = 0;
-    }
-    return pool[runRemoteLocationKeywordCursor] || "";
+    // When remote mode is already selected, repeatedly typing "remote" back into
+    // LinkedIn's location field causes avoidable reloads and search resets.
+    return isRemoteLikeSearchValue(explicitSearchLocation) ? "" : explicitSearchLocation;
   }
-  return String(settings?.searchLocation || "").trim();
+  return explicitSearchLocation;
 }
 
 function shouldClearStaleLocationQueryParams(settings, url) {
@@ -5080,6 +5080,10 @@ async function runCycle(settings) {
   }
 
   await refreshKnownAppliedJobIds(false);
+  const cycleStartApplied = runStats.applied;
+  let cycleConsideredCandidates = 0;
+  let cycleExhaustedCandidates = 0;
+  let cycleHadActionableCandidate = false;
 
   if (isJobsViewPage()) {
     const resumeSearchUrl = getResumableSearchUrl(settings);
@@ -5302,7 +5306,10 @@ async function runCycle(settings) {
     if (runSearchTermSuccessCount >= getSwitchNumber(settings)) {
       runSearchTermSuccessCount = 0;
       const switched = await rotateSearchTerm(settings);
-      if (switched) return true;
+      if (switched) {
+        exhaustedSearchPageStreak = 0;
+        return true;
+      }
     }
     return true;
   }
@@ -5320,6 +5327,7 @@ async function runCycle(settings) {
     path: window.location.pathname
   });
   if (!cards.length) {
+    exhaustedSearchPageStreak = 0;
     await logLine("No jobs found on current page", "warn");
     const rotatedRemoteLocation = await rotateRemoteLocationKeyword(settings);
     if (rotatedRemoteLocation) return true;
@@ -5363,7 +5371,10 @@ async function runCycle(settings) {
     if (runSearchTermSuccessCount >= getSwitchNumber(settings) && getConfiguredSearchTerms(settings).length > 1) {
       runSearchTermSuccessCount = 0;
       const switched = await rotateSearchTerm(settings);
-      if (switched) return true;
+      if (switched) {
+        exhaustedSearchPageStreak = 0;
+        return true;
+      }
     }
     if (runStats.applied >= Number(settings.maxApplicationsPerRun || 3)) {
       await logLine("Reached max applications for this run");
@@ -5398,12 +5409,26 @@ async function runCycle(settings) {
         markKnownApplied(alias);
       }
     };
+    let cardClassifiedForCycle = false;
+    const classifyExhaustedCandidate = () => {
+      if (cardClassifiedForCycle) return;
+      cardClassifiedForCycle = true;
+      cycleConsideredCandidates += 1;
+      cycleExhaustedCandidates += 1;
+    };
+    const classifyActionableCandidate = () => {
+      if (cardClassifiedForCycle) return;
+      cardClassifiedForCycle = true;
+      cycleConsideredCandidates += 1;
+      cycleHadActionableCandidate = true;
+    };
 
     if (jobKey && runSeenJobKeys.has(jobKey)) {
       await debugLog(settings, "Skipping already-seen card in this run", { jobKey });
       continue;
     }
     if (jobKey && knownAppliedJobIds.has(jobKey)) {
+      classifyExhaustedCandidate();
       await debugLog(settings, "Skipping job from known applied ids", { jobKey });
       runStats.skipped += 1;
       await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
@@ -5422,6 +5447,7 @@ async function runCycle(settings) {
     const cachedOutcome = getCachedJobOutcome(jobKey);
     const alreadyAppliedCacheHit = isAppliedCacheHit(cachedOutcome);
     if (alreadyAppliedCacheHit) {
+      classifyExhaustedCandidate();
       await debugLog(settings, "Skipping job from applied cache", { jobKey, reasonCode: cachedOutcome.reasonCode });
       runStats.skipped += 1;
       await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
@@ -5438,6 +5464,7 @@ async function runCycle(settings) {
       continue;
     }
     if (cachedOutcome && isTransientSkipCooldownOutcome(cachedOutcome)) {
+      classifyExhaustedCandidate();
       await debugLog(settings, "Skipping job from temporary cooldown cache", {
         jobKey,
         reasonCode: cachedOutcome.reasonCode,
@@ -5447,6 +5474,7 @@ async function runCycle(settings) {
       continue;
     }
     if (isAlreadyAppliedCard(card)) {
+      classifyExhaustedCandidate();
       const stableJobId = jobKey || extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || "";
       if (stableJobId) jobAliasKeys.add(stableJobId);
       runStats.skipped += 1;
@@ -5465,6 +5493,7 @@ async function runCycle(settings) {
     }
     const ruleDecision = shouldSkipByRules(card, settings);
     if (ruleDecision.skip) {
+      classifyActionableCandidate();
       const stableJobId = jobKey || extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || "";
       if (stableJobId) jobAliasKeys.add(stableJobId);
       runStats.skipped += 1;
@@ -5515,6 +5544,7 @@ async function runCycle(settings) {
 
     const aboutCompanyDecision = shouldSkipByAboutCompany(aboutCompany, settings);
     if (aboutCompanyDecision.skip) {
+      classifyActionableCandidate();
       runStats.skipped += 1;
       await logOutcome("warn", `Skipped: ${aboutCompanyDecision.reason}`, aboutCompanyDecision.reasonCode);
       await recordOutcome("SKIPPED", {
@@ -5530,6 +5560,7 @@ async function runCycle(settings) {
 
     const descriptionDecision = shouldSkipByDescription(description, settings);
     if (descriptionDecision.skip) {
+      classifyActionableCandidate();
       runStats.skipped += 1;
       await logOutcome("warn", `Skipped: ${descriptionDecision.reason}`, descriptionDecision.reasonCode);
       await recordOutcome("SKIPPED", {
@@ -5569,6 +5600,7 @@ async function runCycle(settings) {
       await refreshKnownAppliedJobIds(true);
       const appliedAlias = Array.from(jobAliasKeys).find((alias) => knownAppliedJobIds.has(alias));
       if (appliedAlias) {
+        classifyExhaustedCandidate();
         runStats.skipped += 1;
         await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
         await recordOutcome("SKIPPED", {
@@ -5586,6 +5618,7 @@ async function runCycle(settings) {
         await pauseRunForDailyEasyApplyLimit(settings);
         return false;
       }
+      classifyActionableCandidate();
       await debugLog(settings, "No detail apply button found", {
         detailRoots: document.querySelectorAll(".jobs-search__job-details, .jobs-details, .jobs-unified-top-card, .jobs-details-top-card, .scaffold-layout__detail").length,
         applyButtonsVisible: document.querySelectorAll("button.jobs-apply-button, .jobs-s-apply button").length
@@ -5604,6 +5637,7 @@ async function runCycle(settings) {
     }
     if (applyAction.type === "external") {
       if (settings.easyApplyOnly) {
+        classifyExhaustedCandidate();
         runStats.skipped += 1;
         await logOutcome("warn", "Skipped (external apply)", "EXTERNAL_APPLY_ONLY");
         await recordOutcome("SKIPPED", {
@@ -5613,6 +5647,7 @@ async function runCycle(settings) {
         });
         recordOutcomeCacheForAliases("SKIPPED", "EXTERNAL_APPLY_ONLY");
       } else {
+        classifyActionableCandidate();
         await resilientClick(applyAction.button, "External Apply");
         runStats.skipped += 1;
         runSearchTermSuccessCount += 1;
@@ -5629,6 +5664,7 @@ async function runCycle(settings) {
       continue;
     }
 
+    classifyActionableCandidate();
     await resilientClick(applyAction.button, "Easy Apply");
     const modal = await waitForModalOpen(4500);
     if (!modal) {
@@ -5702,9 +5738,36 @@ async function runCycle(settings) {
     if (runSearchTermSuccessCount >= getSwitchNumber(settings)) {
       runSearchTermSuccessCount = 0;
       const switched = await rotateSearchTerm(settings);
-      if (switched) return true;
+      if (switched) {
+        exhaustedSearchPageStreak = 0;
+        return true;
+      }
     }
     await sleep(900);
+  }
+  const exhaustedResultsPage =
+    cycleConsideredCandidates > 0 &&
+    cycleExhaustedCandidates === cycleConsideredCandidates &&
+    !cycleHadActionableCandidate &&
+    runStats.applied === cycleStartApplied;
+  if (exhaustedResultsPage) {
+    exhaustedSearchPageStreak += 1;
+    await debugLog(settings, "Exhausted results page detected", {
+      streak: exhaustedSearchPageStreak,
+      considered: cycleConsideredCandidates,
+      exhausted: cycleExhaustedCandidates,
+      url: window.location.href
+    });
+    if (exhaustedSearchPageStreak >= EXHAUSTED_RESULTS_PAGE_STREAK_LIMIT) {
+      exhaustedSearchPageStreak = 0;
+      const movedToNextTerm = await rotateSearchTerm(settings);
+      if (movedToNextTerm) return true;
+      await logLine("Recent pages only contained already-applied or external-only jobs. Stopping run.", "info");
+      await sendMessage({ type: "CP_STOP" });
+      return false;
+    }
+  } else if (cycleConsideredCandidates > 0 || runStats.applied !== cycleStartApplied) {
+    exhaustedSearchPageStreak = 0;
   }
   const movedToNextPage = await gotoNextResultsPage(settings);
   if (movedToNextPage) return true;
@@ -5721,6 +5784,7 @@ async function runAutomationLoop() {
   try {
     const boot = await getBootstrap();
     dailyLimitHandledRunId = "";
+    exhaustedSearchPageStreak = 0;
     runSeenJobKeys = loadRunSeenJobKeys(boot?.state?.startedAt || "");
     runStats = {
       applied: Number(boot.state.applied || 0),
@@ -5757,6 +5821,7 @@ async function runAutomationLoop() {
           jobId: "",
           jobUrl: ""
         };
+        exhaustedSearchPageStreak = 0;
         const terms = getConfiguredSearchTerms(settings);
         if (terms.length > 0) {
           runSearchTermCursor = settings.randomizeSearchOrder
@@ -5791,6 +5856,7 @@ async function runAutomationLoop() {
           }
           runStats = { applied: 0, skipped: 0, failed: 0 };
           dailyLimitHandledRunId = "";
+          exhaustedSearchPageStreak = 0;
           clearSeenJobsForRun(lastRunStartedAt);
           resumeChoiceCache.clear();
           runSearchTermSuccessCount = 0;
@@ -5902,6 +5968,7 @@ async function startStatePolling() {
     if (!boot.state.running) {
       preparedRun = false;
       lastRunStartedAt = null;
+      exhaustedSearchPageStreak = 0;
       runSearchTermSuccessCount = 0;
       resetRemoteLocationKeywordCursor();
       clearSeenJobsForRun();
