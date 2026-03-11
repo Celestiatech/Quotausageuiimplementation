@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Indeed Jobs Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 24px;
+        padding: 24px;
+      }
+
+      .results,
+      .detail {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 16px;
+        padding: 20px;
+      }
+
+      .job_seen_beacon {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+
+      .job_seen_beacon a {
+        color: inherit;
+        display: block;
+        text-decoration: none;
+      }
+
+      .meta {
+        color: #475569;
+        font-size: 14px;
+        margin-top: 6px;
+      }
+
+      .detail button {
+        margin-top: 18px;
+        background: #f97316;
+        border: 0;
+        border-radius: 10px;
+        color: #ffffff;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 700;
+        padding: 10px 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="layout">
+      <section class="results">
+        <h2>Search Results</h2>
+
+        <article class="job_seen_beacon" data-jk="bad-recruiters-001">
+          <a href="/viewjob?jk=bad-recruiters-001" data-jk="bad-recruiters-001">
+            <h3 data-testid="job-title">Staffing Recruiter</h3>
+          </a>
+          <div data-testid="company-name" class="meta">Bad Recruiters LLC</div>
+          <div data-testid="text-location" class="meta">Austin, TX</div>
+        </article>
+
+        <article class="job_seen_beacon" data-jk="acme-frontend-002">
+          <a href="/viewjob?jk=acme-frontend-002" data-jk="acme-frontend-002">
+            <h3 data-testid="job-title">Frontend Engineer</h3>
+          </a>
+          <div data-testid="company-name" class="meta">Acme Labs</div>
+          <div data-testid="text-location" class="meta">United States (Remote)</div>
+        </article>
+      </section>
+
+      <section class="detail">
+        <h1 data-testid="jobsearch-JobInfoHeader-title"></h1>
+        <div data-testid="inlineHeader-companyName" class="meta"></div>
+        <div data-testid="job-location" class="meta"></div>
+        <div data-testid="jobsearch-OtherJobDetailsContainer" class="meta"></div>
+        <div data-testid="companyInfo-container" class="meta"></div>
+        <div id="jobDescriptionText" class="meta"></div>
+        <button id="apply-now" type="button">Apply now</button>
+      </section>
+    </main>
+
+    <script>
+      const jobs = {
+        "bad-recruiters-001": {
+          title: "Staffing Recruiter",
+          company: "Bad Recruiters LLC",
+          location: "Austin, TX",
+          metadata:
+            "On-site Contract Recruiting Staffing Immediate opening $55,000 a year",
+          companyInfo:
+            "Bad Recruiters LLC is a recruiting and staffing company focused on rapid placement.",
+          description:
+            "We are hiring a staffing recruiter for a contract role. Recruiting agency background required.",
+        },
+        "acme-frontend-002": {
+          title: "Frontend Engineer",
+          company: "Acme Labs",
+          location: "United States (Remote)",
+          metadata:
+            "Remote Full-time Entry level Software Development Engineering Health insurance Equal opportunity employer $120,000 - $130,000 a year",
+          companyInfo:
+            "Acme Labs builds software development tooling and is an equal opportunity employer.",
+          description:
+            "Build React interfaces for software development teams. Entry level engineering role with health insurance and equal opportunity hiring. Candidates should have 3 years of JavaScript experience.",
+        },
+      };
+
+      function render(jobId) {
+        const job = jobs[jobId];
+        if (!job) return;
+        document.querySelector("[data-testid='jobsearch-JobInfoHeader-title']").textContent = job.title;
+        document.querySelector("[data-testid='inlineHeader-companyName']").textContent = job.company;
+        document.querySelector("[data-testid='job-location']").textContent = job.location;
+        document.querySelector("[data-testid='jobsearch-OtherJobDetailsContainer']").textContent = job.metadata;
+        document.querySelector("[data-testid='companyInfo-container']").textContent = job.companyInfo;
+        document.getElementById("jobDescriptionText").textContent = job.description;
+        const url = new URL(window.location.href);
+        url.searchParams.set("jk", jobId);
+        history.replaceState({}, "", url.toString());
+      }
+
+      for (const anchor of document.querySelectorAll("a[data-jk]")) {
+        anchor.addEventListener("click", (event) => {
+          event.preventDefault();
+          render(anchor.getAttribute("data-jk"));
+        });
+      }
+
+      render("bad-recruiters-001");
+    </script>
+  </body>
+</html>

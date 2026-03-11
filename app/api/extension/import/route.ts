@@ -1,14 +1,23 @@
 import { NextRequest } from "next/server";
 import { prisma } from "src/lib/prisma";
 import { fail, handleApiError, ok, parsePagination } from "src/lib/api";
+import {
+  extensionIdempotencyPrefix,
+  extensionSourceKey,
+  listExtensionProviderConfigs,
+  normalizeExtensionProvider,
+  type ExtensionProvider,
+} from "src/lib/extension-providers";
 import { requireAuth } from "src/lib/guards";
 import { consumeHiresForApplies } from "src/lib/hires";
+import { inferJobProvider, parseExternalJobId } from "src/lib/job-source";
 
 type IncomingEntry = {
   ts: string;
   outcomeType: string;
   entryId?: string;
   runId?: string;
+  provider?: ExtensionProvider;
   data?: Record<string, unknown>;
 };
 
@@ -28,18 +37,6 @@ function parseBoundedInt(value: unknown, fallback: number, min: number, max: num
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
-function parseLinkedInJobId(input: unknown) {
-  const raw = String(input || "").trim();
-  if (!raw) return "";
-  const m = raw.match(/\/jobs\/view\/(\d+)/i);
-  if (m?.[1]) return String(m[1]);
-  const q1 = raw.match(/[?&]currentJobId=(\d+)/i);
-  if (q1?.[1]) return String(q1[1]);
-  const q2 = raw.match(/[?&]jobId=(\d+)/i);
-  if (q2?.[1]) return String(q2[1]);
-  return "";
-}
-
 function normalizeOutcome(value: unknown) {
   const v = String(value || "").trim().toUpperCase();
   if (v === "APPLIED" || v === "FAILED" || v === "SKIPPED" || v === "EXTERNAL") return v;
@@ -48,14 +45,16 @@ function normalizeOutcome(value: unknown) {
 
 function buildEntryId(input: IncomingEntry) {
   const data = input.data || {};
+  const provider = normalizeExtensionProvider(input.provider || inferJobProvider(data));
   const stableJobId =
-    parseLinkedInJobId(data.jobUrl) ||
-    parseLinkedInJobId(data.pageUrl) ||
-    parseLinkedInJobId(data.jobId) ||
+    parseExternalJobId(data.jobUrl, provider) ||
+    parseExternalJobId(data.pageUrl, provider) ||
+    parseExternalJobId(data.jobId, provider) ||
+    parseExternalJobId(data.externalJobId, provider) ||
     String(data.jobId || data.externalJobId || "").trim() ||
     "unknown";
   const reasonCode = String(data.reasonCode || "").trim().toUpperCase() || "na";
-  return `${normalizeOutcome(input.outcomeType)}:${stableJobId}:${reasonCode}:${String(input.ts || "").trim()}`;
+  return `${provider}:${normalizeOutcome(input.outcomeType)}:${stableJobId}:${reasonCode}:${String(input.ts || "").trim()}`;
 }
 
 function toJobStatus(outcomeType: string) {
@@ -89,6 +88,7 @@ export async function POST(req: NextRequest) {
         outcomeType: normalizeOutcome(e?.outcomeType),
         entryId: String(e?.entryId || "").trim(),
         runId: String(e?.runId || "").trim(),
+        provider: normalizeExtensionProvider(e?.provider || inferJobProvider(e?.data)),
         data: e?.data && typeof e.data === "object" ? (e.data as Record<string, unknown>) : {},
       }))
       .filter((e) => Boolean(e.ts));
@@ -122,13 +122,19 @@ export async function POST(req: NextRequest) {
       if (seenEntryIds.has(effectiveEntryId)) continue;
       seenEntryIds.add(effectiveEntryId);
       const data = entry.data || {};
-      const jobUrlId = parseLinkedInJobId(data.jobUrl);
-      const pageUrlId = parseLinkedInJobId(data.pageUrl);
+      const provider = normalizeExtensionProvider(entry.provider || inferJobProvider(data));
+      const jobUrlId = parseExternalJobId(data.jobUrl, provider);
+      const pageUrlId = parseExternalJobId(data.pageUrl, provider);
       // Prefer the canonical /jobs/view/<id> value when available; card "jobId" can be an internal id in some views.
-      const jobId = jobUrlId || pageUrlId || String(data.jobId || "").trim();
+      const jobId =
+        jobUrlId ||
+        pageUrlId ||
+        parseExternalJobId(data.jobId, provider) ||
+        parseExternalJobId(data.externalJobId, provider) ||
+        String(data.jobId || data.externalJobId || "").trim();
       if (!jobId) continue;
 
-      const idempotencyKey = `ext:li:${jobId}`;
+      const idempotencyKey = `${extensionIdempotencyPrefix(provider)}${jobId}`;
       const jobUrl = String(data.jobUrl || "").trim();
       const pageUrl = String(data.pageUrl || "").trim();
       const title = String(data.title || "").trim();
@@ -136,10 +142,12 @@ export async function POST(req: NextRequest) {
       const workLocation = String(data.workLocation || "").trim();
       const reasonCode = String(data.reasonCode || "").trim();
       const runId = String(entry.runId || "").trim();
+      const sourceKey = extensionSourceKey(provider);
 
       const status = toJobStatus(entry.outcomeType);
       const criteriaJson = {
-        source: "linkedin_extension",
+        provider,
+        source: sourceKey,
         entryId: effectiveEntryId,
         runId,
         jobId,
@@ -191,7 +199,8 @@ export async function POST(req: NextRequest) {
             status: appStatus as any,
             submittedAt: new Date(entry.ts),
             metadataJson: {
-              source: "linkedin_extension",
+              provider,
+              source: sourceKey,
               entryId: effectiveEntryId,
               runId,
               reasonCode,
@@ -211,7 +220,8 @@ export async function POST(req: NextRequest) {
             submittedAt: new Date(entry.ts),
             metadataJson: {
               ...(typeof existingApp.metadataJson === "object" && existingApp.metadataJson ? (existingApp.metadataJson as any) : {}),
-              source: "linkedin_extension",
+              provider,
+              source: sourceKey,
               entryId: effectiveEntryId,
               runId,
               reasonCode,
@@ -238,9 +248,10 @@ export async function POST(req: NextRequest) {
           count: 1,
           referenceType: "extension_apply",
           referenceId: String(job.id),
-          idempotencyPrefix: `ext_apply:${jobId}:${entry.ts}`,
+          idempotencyPrefix: `ext_apply:${provider}:${jobId}:${entry.ts}`,
           metadataJson: {
-            source: "linkedin_extension",
+            provider,
+            source: sourceKey,
             entryId: effectiveEntryId,
             runId,
             externalJobId: jobId,
@@ -323,16 +334,27 @@ export async function GET(req: NextRequest) {
     const { page, limit, skip } = parsePagination(req, { defaultLimit: 25, maxLimit: 100 });
     const url = new URL(req.url);
     const statusRaw = String(url.searchParams.get("status") || "").trim().toLowerCase();
+    const providerRaw = String(url.searchParams.get("provider") || "").trim().toLowerCase();
     const status =
       statusRaw === "submitted" || statusRaw === "skipped" || statusRaw === "failed"
         ? statusRaw
         : "";
+    const provider =
+      providerRaw === "linkedin" || providerRaw === "indeed"
+        ? normalizeExtensionProvider(providerRaw)
+        : null;
+
+    const providerPrefixes = provider
+      ? [extensionIdempotencyPrefix(provider)]
+      : listExtensionProviderConfigs().map((item) => extensionIdempotencyPrefix(item.provider));
 
     const where = {
       userId,
       ...(status ? { status: status as any } : {}),
       job: {
-        idempotencyKey: { startsWith: "ext:li:" },
+        OR: providerPrefixes.map((prefix) => ({
+          idempotencyKey: { startsWith: prefix },
+        })),
       },
     };
 

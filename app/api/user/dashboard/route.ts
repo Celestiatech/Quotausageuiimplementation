@@ -1,5 +1,6 @@
 import { prisma } from "src/lib/prisma";
 import { handleApiError, ok } from "src/lib/api";
+import { buildJobSourceUrl, cleanJobText, inferJobProvider, jobProviderLabel, parseExternalJobId } from "src/lib/job-source";
 import { requireAuth } from "src/lib/guards";
 
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
@@ -13,34 +14,10 @@ type UserSnapshot = {
   currentCity: string | null;
 };
 
-function cleanText(value: unknown) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function parseLinkedInJobId(value: unknown) {
-  const raw = cleanText(value);
-  if (!raw) return "";
-  const directMatch = raw.match(/\/jobs\/view\/(\d+)/i);
-  if (directMatch?.[1]) return String(directMatch[1]);
-  const currentJobId = raw.match(/[?&]currentJobId=(\d+)/i);
-  if (currentJobId?.[1]) return String(currentJobId[1]);
-  const queryJobId = raw.match(/[?&]jobId=(\d+)/i);
-  if (queryJobId?.[1]) return String(queryJobId[1]);
-  return /^\d+$/.test(raw) ? raw : "";
-}
-
-function linkedInUrlFromCriteria(criteria: Record<string, unknown>) {
-  const direct = cleanText(criteria.jobUrl || criteria.pageUrl);
-  const id = parseLinkedInJobId(criteria.jobId) || parseLinkedInJobId(direct);
-  if (direct && direct.includes("linkedin.com/jobs/")) return direct;
-  if (id) return `https://www.linkedin.com/jobs/view/${id}/`;
-  return "";
 }
 
 function recentStatusLabel(status: JobStatus): RecentStatus {
@@ -270,17 +247,23 @@ export async function GET() {
 
     const recent = recentJobs.map((job) => {
       const criteria = asRecord(job.criteriaJson);
-      const linkedInUrl = linkedInUrlFromCriteria(criteria);
-      const externalJobId = parseLinkedInJobId(criteria.jobId) || parseLinkedInJobId(linkedInUrl);
+      const provider = inferJobProvider(criteria);
+      const sourceUrl = buildJobSourceUrl(criteria, provider);
+      const externalJobId =
+        parseExternalJobId(criteria.jobId, provider) ||
+        parseExternalJobId(criteria.externalJobId, provider) ||
+        parseExternalJobId(sourceUrl, provider);
       const matchValue = Number(criteria.matchScore || 0);
       return {
         id: job.id,
-        company: cleanText(criteria.company) || "LinkedIn",
-        position: cleanText(criteria.title || criteria.keywords) || "Auto-Apply Job",
+        company: cleanJobText(criteria.company) || jobProviderLabel(provider),
+        position: cleanJobText(criteria.title || criteria.keywords) || "Auto-Apply Job",
         status: recentStatusLabel(job.status as JobStatus),
         date: new Date(job.createdAt).toLocaleDateString(),
         match: Number.isFinite(matchValue) && matchValue > 0 ? matchValue : null,
-        linkedInUrl,
+        provider,
+        sourceLabel: jobProviderLabel(provider),
+        sourceUrl,
         externalJobId,
       };
     });

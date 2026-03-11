@@ -7,7 +7,9 @@ export type DashboardRecentItem = {
   status: "Submitted" | "Running" | "Queued" | "Failed" | "Cancelled";
   date: string;
   match: number | null;
-  linkedInUrl: string;
+  provider: "linkedin" | "indeed";
+  sourceLabel: string;
+  sourceUrl: string;
   externalJobId: string;
 };
 

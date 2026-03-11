@@ -1,9 +1,12 @@
 import { promises as fs } from "fs";
 import path from "path";
+import {
+  getExtensionProviderConfig,
+  listExtensionProviderConfigs,
+  type ExtensionProvider,
+} from "src/lib/extension-providers";
 
-const EXTENSION_ROOT_DIR = "CareerPilotLinkedInExtension";
 const EXTENSION_INCLUDE_ENTRIES = ["manifest.json", "icons", "src"] as const;
-const EXTENSION_PACKAGE_PREFIX = "AutoApplyCVExtensionVersion";
 
 type ExtensionManifest = {
   name?: string;
@@ -20,8 +23,9 @@ export type ExtensionRelease = {
   includeEntries: string[];
 };
 
-export async function getExtensionRelease(): Promise<ExtensionRelease> {
-  const rootPath = path.join(process.cwd(), EXTENSION_ROOT_DIR);
+export async function getExtensionRelease(provider: ExtensionProvider = "linkedin"): Promise<ExtensionRelease> {
+  const config = getExtensionProviderConfig(provider);
+  const rootPath = path.join(process.cwd(), config.rootDir);
   const manifestPath = path.join(rootPath, "manifest.json");
   let manifest: ExtensionManifest = {};
 
@@ -32,8 +36,8 @@ export async function getExtensionRelease(): Promise<ExtensionRelease> {
   }
 
   const version = String(manifest.version || "").trim() || "0.0.0";
-  const displayName = String(manifest.name || "").trim() || "AutoApply CV LinkedIn Copilot";
-  const zipBaseName = `${EXTENSION_PACKAGE_PREFIX}${version}`;
+  const displayName = String(manifest.name || "").trim() || config.displayName;
+  const zipBaseName = `${config.zipPrefix}${version}`;
 
   return {
     version,
@@ -44,4 +48,14 @@ export async function getExtensionRelease(): Promise<ExtensionRelease> {
     rootPath,
     includeEntries: [...EXTENSION_INCLUDE_ENTRIES],
   };
+}
+
+export async function listExtensionReleases() {
+  return Promise.all(
+    listExtensionProviderConfigs().map(async (config) => ({
+      provider: config.provider,
+      shortLabel: config.shortLabel,
+      ...(await getExtensionRelease(config.provider)),
+    })),
+  );
 }

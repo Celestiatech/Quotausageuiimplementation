@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import JSZip from "jszip";
+import { normalizeExtensionProvider } from "src/lib/extension-providers";
 import { getExtensionRelease } from "src/lib/extension-package";
 
 export const dynamic = "force-dynamic";
@@ -30,8 +31,9 @@ async function addToZip(zip: JSZip, absolutePath: string, zipPath: string) {
   zip.file(zipPath, file);
 }
 
-export async function GET() {
-  const release = await getExtensionRelease();
+export async function GET(req: Request) {
+  const provider = normalizeExtensionProvider(new URL(req.url).searchParams.get("provider"));
+  const release = await getExtensionRelease(provider);
 
   try {
     const zip = new JSZip();
@@ -50,10 +52,19 @@ export async function GET() {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${release.zipFileName}"`,
         "X-Extension-Version": release.version,
+        "X-Extension-Provider": provider,
       },
     });
     return noStore(res);
   } catch {
+    if (provider !== "linkedin") {
+      return noStore(
+        NextResponse.json(
+          { success: false, message: `Failed to package ${provider} extension` },
+          { status: 500 },
+        ),
+      );
+    }
     const localZipPath = path.join(process.cwd(), "public", "downloads", LEGACY_ZIP_FILE_NAME);
     try {
       const file = await fs.readFile(localZipPath);
@@ -63,6 +74,7 @@ export async function GET() {
           "Content-Type": "application/zip",
           "Content-Disposition": `attachment; filename="${release.zipFileName}"`,
           "X-Extension-Version": release.version,
+          "X-Extension-Provider": provider,
         },
       });
       return noStore(res);

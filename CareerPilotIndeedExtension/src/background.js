@@ -25,7 +25,7 @@ const PORTAL_FALLBACK_ORIGINS = [
 ];
 const PORTAL_ISSUE_REPORTED_KEY = "cpPortalIssueReported";
 const PORTAL_LAST_SYNC_SNAPSHOT_KEY = "cpPortalLastSyncSnapshot";
-const EXTENSION_PROVIDER = "linkedin";
+const EXTENSION_PROVIDER = "indeed";
 
 // Best-effort portal sync (AutoApply CV web app). This is fed by dashboard-bridge.js running on the site origin.
 let portalQuotaCache = {
@@ -1614,6 +1614,9 @@ async function getRunHistory() {
 function extractLinkedInJobId(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
+  const indeedMatch = raw.match(/[?&](?:jk|vjk)=([a-z0-9_-]+)/i);
+  if (EXTENSION_PROVIDER === "indeed" && indeedMatch?.[1]) return String(indeedMatch[1]);
+  if (EXTENSION_PROVIDER === "indeed" && /^[a-z0-9_-]{8,}$/i.test(raw)) return raw;
   const viewMatch = raw.match(/\/jobs\/view\/(\d+)/i);
   if (viewMatch?.[1]) return String(viewMatch[1]);
   const currentJobIdMatch = raw.match(/[?&]currentJobId=(\d+)/i);
@@ -1708,7 +1711,7 @@ async function getKnownAppliedJobIds(limit = 5000) {
   const portalIds = await getAppliedJobIdsFromPortal(Math.min(600, Number(limit || 5000))).catch(() => []);
   for (const id of portalIds) {
     const normalized = String(id || "").trim();
-    if (/^\d+$/.test(normalized)) set.add(normalized);
+    if (normalized) set.add(normalized);
   }
   return Array.from(set).slice(-Math.max(1, Number(limit || 5000)));
 }
@@ -2425,15 +2428,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
-    if (message.type === "CP_LINKEDIN_STATUS") {
-      const tabs = await chrome.tabs.query({ url: "https://www.linkedin.com/*" });
-      const hasLinkedInTab = tabs.length > 0;
+    if (message.type === "CP_INDEED_STATUS") {
+      const tabs = await chrome.tabs.query({ url: ["https://www.indeed.com/*", "https://*.indeed.com/*"] });
+      const hasIndeedTab = tabs.length > 0;
       const hasJobsTab = tabs.some((t) => String(t.url || "").includes("/jobs"));
       sendResponse({
         ok: true,
         provider: EXTENSION_PROVIDER,
         data: {
-          hasLinkedInTab,
+          hasIndeedTab,
           hasJobsTab
         }
       });

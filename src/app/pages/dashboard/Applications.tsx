@@ -12,6 +12,7 @@ import {
   List,
 } from "lucide-react";
 import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
+import { buildJobSourceUrl, cleanJobText, inferJobProvider, jobProviderLabel, parseExternalJobId } from "src/lib/job-source";
 
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
 type DisplayStatus = JobStatus | "skipped";
@@ -29,7 +30,9 @@ type PreparedJob = Job & {
   title: string;
   company: string;
   reason: string;
-  linkedInUrl: string;
+  provider: "linkedin" | "indeed";
+  sourceLabel: string;
+  sourceUrl: string;
   externalJobId: string;
   displayStatus: DisplayStatus;
   createdLabel: string;
@@ -108,29 +111,8 @@ const REASON_CODE_LABELS: Record<string, string> = {
   PENDING_USER_INPUT: "Pending user input",
 };
 
-function cleanText(value: unknown) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function parseLinkedInJobId(value: unknown) {
-  const raw = cleanText(value);
-  if (!raw) return "";
-  const match = raw.match(/\/jobs\/view\/(\d+)/i);
-  if (match?.[1]) return String(match[1]);
-  return /^\d+$/.test(raw) ? raw : "";
-}
-
-function linkedInUrlFromCriteria(criteria: Record<string, unknown> | undefined) {
-  const c = criteria || {};
-  const direct = cleanText(c.jobUrl || c.pageUrl);
-  const id = parseLinkedInJobId(c.jobId) || parseLinkedInJobId(direct);
-  if (direct && direct.includes("linkedin.com/jobs/")) return direct;
-  if (id) return `https://www.linkedin.com/jobs/view/${id}/`;
-  return "";
-}
-
 function formatReasonCode(value: unknown) {
-  const raw = cleanText(value);
+  const raw = cleanJobText(value);
   if (!raw) return "";
   const upper = raw.toUpperCase();
   if (REASON_CODE_LABELS[upper]) return REASON_CODE_LABELS[upper];
@@ -143,19 +125,19 @@ function formatReasonCode(value: unknown) {
 }
 
 function normalizeJobTitle(value: unknown) {
-  let text = cleanText(value);
+  let text = cleanJobText(value);
   if (!text) return "Auto-Apply Job";
   text = text.replace(/\s+with verification$/i, "");
   const doubledNoSpace = text.match(/^(.{4,}?)\1$/i);
-  if (doubledNoSpace?.[1]) text = cleanText(doubledNoSpace[1]);
+  if (doubledNoSpace?.[1]) text = cleanJobText(doubledNoSpace[1]);
   const doubledWithSpace = text.match(/^(.{4,}?)\s+\1$/i);
-  if (doubledWithSpace?.[1]) text = cleanText(doubledWithSpace[1]);
+  if (doubledWithSpace?.[1]) text = cleanJobText(doubledWithSpace[1]);
   return text || "Auto-Apply Job";
 }
 
 function getJobReason(job: Job) {
-  const code = cleanText(job.criteriaJson?.reasonCode);
-  const explicit = cleanText(job.criteriaJson?.reason || job.errorMessage);
+  const code = cleanJobText(job.criteriaJson?.reasonCode);
+  const explicit = cleanJobText(job.criteriaJson?.reason || job.errorMessage);
   if (code) return formatReasonCode(code);
   if (explicit) return explicit;
   return "";
@@ -173,13 +155,15 @@ function statusLabel(value: DisplayStatus) {
 }
 
 function JobActions({
-  linkedInUrl,
+  sourceUrl,
+  sourceLabel,
   externalJobId,
   copiedJobId,
   onCopy,
   compact = false,
 }: {
-  linkedInUrl: string;
+  sourceUrl: string;
+  sourceLabel: string;
   externalJobId: string;
   copiedJobId: string;
   onCopy: (jobId: string) => Promise<void>;
@@ -191,20 +175,20 @@ function JobActions({
     <div className="flex items-center gap-2">
       <button
         type="button"
-        disabled={!linkedInUrl}
+        disabled={!sourceUrl}
         onClick={() => {
-          if (!linkedInUrl) return;
-          window.open(linkedInUrl, "_blank", "noopener,noreferrer");
+          if (!sourceUrl) return;
+          window.open(sourceUrl, "_blank", "noopener,noreferrer");
         }}
         className={`inline-flex items-center gap-1.5 rounded-lg border font-semibold transition-colors ${sizeClass} ${
-          linkedInUrl
+          sourceUrl
             ? "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
             : "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed"
         }`}
-        title={linkedInUrl ? "Open on LinkedIn" : "LinkedIn link not available"}
+        title={sourceUrl ? `Open on ${sourceLabel}` : `${sourceLabel} link not available`}
       >
         <ExternalLink className="w-3.5 h-3.5" />
-        LinkedIn
+        {sourceLabel}
       </button>
 
       <button
@@ -216,7 +200,7 @@ function JobActions({
             ? "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
             : "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed"
         }`}
-        title={externalJobId ? "Copy LinkedIn Job ID" : "Job ID not available"}
+        title={externalJobId ? `Copy ${sourceLabel} Job ID` : "Job ID not available"}
       >
         {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
         {isCopied ? "Copied" : "Copy ID"}
@@ -261,14 +245,20 @@ export default function Applications() {
 
   const prepared = useMemo<PreparedJob[]>(() => {
     return jobs.map((job) => {
-      const linkedInUrl = linkedInUrlFromCriteria(job.criteriaJson);
+      const provider = inferJobProvider(job.criteriaJson);
+      const sourceUrl = buildJobSourceUrl(job.criteriaJson, provider);
       return {
         ...job,
         title: normalizeJobTitle(job.criteriaJson?.title || job.criteriaJson?.keywords),
-        company: cleanText(job.criteriaJson?.company) || "LinkedIn",
+        company: cleanJobText(job.criteriaJson?.company) || jobProviderLabel(provider),
         reason: getJobReason(job),
-        linkedInUrl,
-        externalJobId: parseLinkedInJobId(job.criteriaJson?.jobId) || parseLinkedInJobId(linkedInUrl),
+        provider,
+        sourceLabel: jobProviderLabel(provider),
+        sourceUrl,
+        externalJobId:
+          parseExternalJobId(job.criteriaJson?.jobId, provider) ||
+          parseExternalJobId(job.criteriaJson?.externalJobId, provider) ||
+          parseExternalJobId(sourceUrl, provider),
         displayStatus: getDisplayStatus(job),
         createdLabel: new Date(job.createdAt).toLocaleDateString(),
       };
@@ -451,7 +441,8 @@ export default function Applications() {
                       </div>
                       <div className="mt-3">
                         <JobActions
-                          linkedInUrl={job.linkedInUrl}
+                          sourceUrl={job.sourceUrl}
+                          sourceLabel={job.sourceLabel}
                           externalJobId={job.externalJobId}
                           copiedJobId={copiedJobId}
                           onCopy={copyJobId}
@@ -497,7 +488,8 @@ export default function Applications() {
                 ) : null}
 
                 <JobActions
-                  linkedInUrl={job.linkedInUrl}
+                  sourceUrl={job.sourceUrl}
+                  sourceLabel={job.sourceLabel}
                   externalJobId={job.externalJobId}
                   copiedJobId={copiedJobId}
                   onCopy={copyJobId}
@@ -534,7 +526,8 @@ export default function Applications() {
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{job.externalJobId || "-"}</td>
                     <td className="px-4 py-3">
                       <JobActions
-                        linkedInUrl={job.linkedInUrl}
+                        sourceUrl={job.sourceUrl}
+                        sourceLabel={job.sourceLabel}
                         externalJobId={job.externalJobId}
                         copiedJobId={copiedJobId}
                         onCopy={copyJobId}

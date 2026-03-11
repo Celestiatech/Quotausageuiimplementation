@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mock LinkedIn Jobs Search - Hard Replica</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #f4f6f8;
+        color: #1d2329;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 420px 1fr;
+        min-height: 100vh;
+      }
+      .left {
+        background: #fff;
+        border-right: 1px solid #d0d7de;
+        padding: 14px;
+      }
+      .right {
+        padding: 16px 18px;
+      }
+      .jobs-search-box__filters-bar {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      button {
+        cursor: pointer;
+      }
+      .jobs-search-results__list-item {
+        border: 1px solid #d0d7de;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
+        background: #fff;
+      }
+      .jobs-search-results__list-item.active {
+        border-color: #0a66c2;
+        box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.15);
+      }
+      .job-card-container__primary-description {
+        color: #445;
+        font-size: 13px;
+        margin-top: 4px;
+      }
+      .job-card-container__metadata-item {
+        color: #667;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .jobs-search__job-details {
+        background: #fff;
+        border: 1px solid #d0d7de;
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .jobs-unified-top-card__company-name {
+        display: inline-block;
+        margin-bottom: 8px;
+        color: #0a66c2;
+      }
+      .jobs-box__html-content,
+      .jobs-company__company-description {
+        margin-top: 8px;
+        line-height: 1.35;
+      }
+      .jobs-company__company-description {
+        border-top: 1px solid #eceff3;
+        margin-top: 14px;
+        padding-top: 10px;
+      }
+      .jobs-apply-button {
+        margin-top: 14px;
+        padding: 9px 14px;
+        border-radius: 20px;
+        border: 1px solid #0a66c2;
+        background: #0a66c2;
+        color: #fff;
+        font-weight: 600;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .jobs-easy-apply-modal {
+        position: fixed;
+        top: 7%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(880px, 94vw);
+        max-height: 84vh;
+        overflow: auto;
+        background: #fff;
+        border: 1px solid #202a35;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(5, 10, 20, 0.35);
+        z-index: 9999;
+        padding: 14px;
+      }
+      .fb-dash-form-element {
+        border: 1px solid #d9e0e6;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .fb-dash-form-element > label,
+      .fb-dash-form-element > legend,
+      .fb-dash-form-element__label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .fb-dash-form-element input[type="text"],
+      .fb-dash-form-element input[type="email"],
+      .fb-dash-form-element input[type="tel"],
+      .fb-dash-form-element select,
+      .fb-dash-form-element textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #c5ced7;
+        border-radius: 6px;
+        padding: 8px;
+      }
+      .radio-stack {
+        display: grid;
+        gap: 8px;
+      }
+      .combo {
+        position: relative;
+      }
+      .combo-list {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: #fff;
+        border: 1px solid #b8c4d0;
+        border-radius: 8px;
+        max-height: 180px;
+        overflow: auto;
+        z-index: 10001;
+      }
+      .combo-list [role="option"] {
+        padding: 8px 10px;
+      }
+      .combo-list [role="option"]:hover {
+        background: #eff4f9;
+      }
+      .artdeco-inline-feedback__message {
+        color: #b42318;
+        font-size: 13px;
+        min-height: 18px;
+        margin-bottom: 8px;
+        text-transform: lowercase;
+      }
+      .step {
+        margin-bottom: 12px;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .modal-actions .right-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .modal-btn {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #b7c2cc;
+        background: #f7fafc;
+      }
+      .modal-btn.primary {
+        background: #0a66c2;
+        border-color: #0a66c2;
+        color: #fff;
+      }
+      .meta-note {
+        font-size: 12px;
+        color: #5d6b79;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="left">
+        <div class="jobs-search-box__filters-bar">
+          <button
+            id="easy-filter-btn"
+            class="jobs-search-box__filter-pill-button"
+            aria-label="Easy Apply filter"
+            aria-pressed="true"
+            type="button"
+          >
+            Easy Apply
+          </button>
+          <button type="button" aria-label="All filters">All filters</button>
+        </div>
+
+        <ul>
+          <li class="jobs-search-results__list-item job-card-container" data-occludable-job-id="4364121484">
+            <a href="https://www.linkedin.com/jobs/view/4364121484/">
+              <span>Job</span>
+            </a>
+            <div class="job-card-container__primary-description">Crow</div>
+            <div class="job-card-container__metadata-item">Delhi, India</div>
+          </li>
+          <li class="jobs-search-results__list-item job-card-container" data-occludable-job-id="9900000001">
+            <a href="https://www.linkedin.com/jobs/view/9900000001/">
+              <span>Hard Easy Apply Specialist</span>
+            </a>
+            <div class="job-card-container__primary-description">Replica Labs</div>
+            <div class="job-card-container__metadata-item">Remote</div>
+          </li>
+        </ul>
+        <p class="meta-note">
+          First card intentionally has no Apply button. Second card contains hard Easy Apply flow.
+        </p>
+      </aside>
+
+      <main class="right">
+        <section class="jobs-search__job-details scaffold-layout__detail">
+          <h1 id="detail-title">Job</h1>
+          <a class="jobs-unified-top-card__company-name" href="#">Crow</a>
+          <div class="jobs-box__html-content" id="detail-description">
+            About the job: This card intentionally has no apply action.
+          </div>
+          <div class="jobs-company__company-description" id="detail-about-company">
+            About company: Placeholder company card used to verify NO_APPLY_BUTTON skip handling.
+          </div>
+          <button class="jobs-apply-button hidden" id="detail-easy-apply-btn" aria-label="Easy Apply" type="button">
+            Easy Apply
+          </button>
+        </section>
+      </main>
+    </div>
+
+    <div class="jobs-easy-apply-modal hidden" id="apply-modal">
+      <h2 class="jobs-easy-apply-content__title">Easy Apply</h2>
+      <div class="artdeco-inline-feedback__message" role="alert" id="modal-validation"></div>
+
+      <section class="step" data-step="1">
+        <div class="fb-dash-form-element" data-required="true">
+          <label>Current city</label>
+          <input type="text" id="q-city" />
+        </div>
+        <div class="fb-dash-form-element" data-required="true">
+          <label>Phone number</label>
+          <input type="tel" id="q-phone" />
+        </div>
+        <fieldset class="fb-dash-form-element" data-required="true" data-test-form-builder-radio-button-form-component="true">
+          <legend>
+            <span data-test-form-builder-radio-button-form-component__title>
+              Are you legally authorized to work in this country?
+            </span>
+          </legend>
+          <div class="radio-stack">
+            <label for="auth-yes"><input id="auth-yes" type="radio" name="q-auth" value="Yes" /> Yes</label>
+            <label for="auth-no"><input id="auth-no" type="radio" name="q-auth" value="No" /> No</label>
+          </div>
+        </fieldset>
+      </section>
+
+      <section class="step hidden" data-step="2">
+        <div class="fb-dash-form-element" data-required="true">
+          <label>How many years of experience do you have?</label>
+          <select id="q-years">
+            <option value="">Select an option</option>
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </div>
+        <div class="fb-dash-form-element" data-required="true">
+          <label>Are you comfortable with the salary range of 5000-12000?</label>
+          <select id="q-salary-ok">
+            <option value="">Select an option</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+        <div class="fb-dash-form-element combo" data-required="true">
+          <label>Preferred shift</label>
+          <button
+            id="q-shift-trigger"
+            class="artdeco-dropdown__trigger"
+            aria-haspopup="listbox"
+            role="combobox"
+            type="button"
+            data-selected=""
+          >
+            Select an option
+          </button>
+          <ul id="q-shift-list" class="combo-list hidden" role="listbox">
+            <li role="option" data-value="day">Day Shift</li>
+            <li role="option" data-value="night">Night Shift</li>
+          </ul>
+        </div>
+        <div class="fb-dash-form-element" data-required="true">
+          <select id="q-unlabeled-required">
+            <option value="">Select an option</option>
+            <option value="a">Option A</option>
+            <option value="b">Option B</option>
+          </select>
+        </div>
+        <div class="fb-dash-form-element" data-required="true">
+          <label>Available start date</label>
+          <button id="q-date-today" type="button" aria-label="This is today">This is today</button>
+          <input id="q-date-value" type="hidden" value="" />
+        </div>
+      </section>
+
+      <section class="step hidden" data-step="3">
+        <div class="fb-dash-form-element">
+          <label for="follow-company-checkbox">
+            <input id="follow-company-checkbox" type="checkbox" checked />
+            Follow Replica Labs to stay up to date with their page.
+          </label>
+        </div>
+        <div class="fb-dash-form-element" data-required="true">
+          <label for="q-rights">
+            <input id="q-rights" type="checkbox" />
+            Notice of Employment Rights.
+          </label>
+        </div>
+        <div class="fb-dash-form-element" data-required="true">
+          <label for="q-privacy">
+            <input id="q-privacy" type="checkbox" />
+            We automatically save your answers and resume to improve LinkedIn.
+          </label>
+        </div>
+      </section>
+
+      <div class="modal-actions">
+        <button class="modal-btn" type="button" aria-label="Dismiss" id="modal-dismiss">Dismiss</button>
+        <div class="right-actions">
+          <button class="modal-btn hidden" type="button" aria-label="continue to next step" id="modal-next">
+            <span>Next</span>
+          </button>
+          <button class="modal-btn hidden" type="button" aria-label="review your application" id="modal-review">
+            <span>Review</span>
+          </button>
+          <button class="modal-btn primary hidden" type="button" aria-label="submit application" id="modal-submit">
+            Submit application
+          </button>
+          <button class="modal-btn hidden" type="button" aria-label="Done" id="modal-done">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const jobs = [
+        {
+          id: "4364121484",
+          title: "Job",
+          company: "Crow",
+          location: "Delhi, India",
+          easyApply: false,
+          description: "About the job: This card intentionally has no apply action.",
+          aboutCompany: "About company: Placeholder company card used to verify NO_APPLY_BUTTON skip handling."
+        },
+        {
+          id: "9900000001",
+          title: "Hard Easy Apply Specialist",
+          company: "Replica Labs",
+          location: "Remote",
+          easyApply: true,
+          description:
+            "About the job: This hard replica includes custom controls, required consent blocks, and validation flow.",
+          aboutCompany: "About company: Replica Labs builds deterministic UI replicas for automation hardening."
+        }
+      ];
+
+      const cards = Array.from(document.querySelectorAll(".job-card-container"));
+      const detailTitle = document.getElementById("detail-title");
+      const detailCompany = document.querySelector(".jobs-unified-top-card__company-name");
+      const detailDescription = document.getElementById("detail-description");
+      const detailAboutCompany = document.getElementById("detail-about-company");
+      const detailEasyApplyBtn = document.getElementById("detail-easy-apply-btn");
+
+      const modal = document.getElementById("apply-modal");
+      const modalValidation = document.getElementById("modal-validation");
+      const steps = Array.from(document.querySelectorAll(".step"));
+      const nextBtn = document.getElementById("modal-next");
+      const reviewBtn = document.getElementById("modal-review");
+      const submitBtn = document.getElementById("modal-submit");
+      const doneBtn = document.getElementById("modal-done");
+      const dismissBtn = document.getElementById("modal-dismiss");
+
+      const shiftTrigger = document.getElementById("q-shift-trigger");
+      const shiftList = document.getElementById("q-shift-list");
+      const dateTodayBtn = document.getElementById("q-date-today");
+      const dateValue = document.getElementById("q-date-value");
+
+      let activeJob = jobs[0];
+      let stepIndex = 0;
+
+      function setValidation(message) {
+        modalValidation.textContent = message ? String(message).toLowerCase() : "";
+      }
+
+      function showStep(index) {
+        stepIndex = index;
+        steps.forEach((step, i) => step.classList.toggle("hidden", i !== stepIndex));
+
+        nextBtn.classList.add("hidden");
+        reviewBtn.classList.add("hidden");
+        submitBtn.classList.add("hidden");
+        doneBtn.classList.add("hidden");
+
+        if (stepIndex === 0) {
+          nextBtn.classList.remove("hidden");
+          nextBtn.setAttribute("aria-label", "continue to next step");
+          nextBtn.querySelector("span").textContent = "Next";
+        } else if (stepIndex === 1) {
+          nextBtn.classList.remove("hidden");
+          nextBtn.setAttribute("aria-label", "continue to next step");
+          nextBtn.querySelector("span").textContent = "Next";
+        } else if (stepIndex === 2) {
+          reviewBtn.classList.remove("hidden");
+          submitBtn.classList.remove("hidden");
+        }
+      }
+
+      function requiredCheckboxesFilled(root) {
+        const requiredBlocks = Array.from(root.querySelectorAll(".fb-dash-form-element[data-required='true']"));
+        for (const block of requiredBlocks) {
+          const checkboxes = Array.from(block.querySelectorAll("input[type='checkbox']"));
+          if (!checkboxes.length) continue;
+          for (const cb of checkboxes) {
+            if (!cb.checked) return false;
+          }
+        }
+        return true;
+      }
+
+      function validateStep(index) {
+        if (index === 0) {
+          const city = document.getElementById("q-city").value.trim();
+          const phone = document.getElementById("q-phone").value.trim();
+          const authSelected = Boolean(document.querySelector("input[name='q-auth']:checked"));
+          if (!city || !phone || !authSelected) {
+            setValidation("Please make a selection");
+            return false;
+          }
+          setValidation("");
+          return true;
+        }
+
+        if (index === 1) {
+          const yearsSelected = document.getElementById("q-years").value.trim();
+          const salarySelected = document.getElementById("q-salary-ok").value.trim();
+          const comboSelected = shiftTrigger.dataset.selected === "1";
+          const unlabeledSelected = document.getElementById("q-unlabeled-required").value.trim();
+          const pickedDate = dateValue.value.trim();
+          if (!yearsSelected || !salarySelected || !comboSelected || !unlabeledSelected || !pickedDate) {
+            setValidation("Please make a selection");
+            return false;
+          }
+          setValidation("");
+          return true;
+        }
+
+        if (index === 2) {
+          if (!requiredCheckboxesFilled(steps[2])) {
+            setValidation("Please make a selection");
+            return false;
+          }
+          setValidation("");
+          return true;
+        }
+        return true;
+      }
+
+      function openModal() {
+        modal.classList.remove("hidden");
+        showStep(0);
+        setValidation("");
+      }
+
+      function closeModal() {
+        modal.classList.add("hidden");
+        shiftList.classList.add("hidden");
+        doneBtn.classList.remove("hidden");
+      }
+
+      function selectJob(job) {
+        activeJob = job;
+        detailTitle.textContent = job.title;
+        detailCompany.textContent = job.company;
+        detailDescription.textContent = job.description;
+        detailAboutCompany.textContent = job.aboutCompany;
+        detailEasyApplyBtn.disabled = !job.easyApply;
+        detailEasyApplyBtn.setAttribute("aria-label", job.easyApply ? "Easy Apply" : "Apply");
+        detailEasyApplyBtn.classList.toggle("hidden", !job.easyApply);
+        cards.forEach((card) => {
+          card.classList.toggle("active", card.getAttribute("data-occludable-job-id") === job.id);
+        });
+      }
+
+      cards.forEach((card) => {
+        const jobId = card.getAttribute("data-occludable-job-id");
+        const job = jobs.find((j) => j.id === jobId);
+        card.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (job) selectJob(job);
+        });
+        const link = card.querySelector("a[href*='/jobs/view/']");
+        if (link) {
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            if (job) selectJob(job);
+          });
+        }
+      });
+
+      detailEasyApplyBtn.addEventListener("click", () => {
+        if (activeJob.easyApply) openModal();
+      });
+
+      nextBtn.addEventListener("click", () => {
+        if (!validateStep(stepIndex)) return;
+        if (stepIndex < 2) showStep(stepIndex + 1);
+      });
+
+      reviewBtn.addEventListener("click", () => {
+        if (!validateStep(stepIndex)) return;
+        showStep(2);
+      });
+
+      submitBtn.addEventListener("click", () => {
+        if (!validateStep(2)) return;
+        closeModal();
+      });
+
+      dismissBtn.addEventListener("click", () => {
+        closeModal();
+      });
+
+      doneBtn.addEventListener("click", () => {
+        closeModal();
+      });
+
+      shiftTrigger.addEventListener("click", () => {
+        shiftList.classList.toggle("hidden");
+      });
+
+      Array.from(shiftList.querySelectorAll("[role='option']")).forEach((option) => {
+        option.addEventListener("click", () => {
+          shiftTrigger.textContent = option.textContent.trim();
+          shiftTrigger.dataset.selected = "1";
+          shiftList.classList.add("hidden");
+          setValidation("");
+        });
+      });
+
+      dateTodayBtn.addEventListener("click", () => {
+        dateValue.value = new Date().toISOString().slice(0, 10);
+        setValidation("");
+      });
+
+      document.getElementById("easy-filter-btn").addEventListener("click", () => {
+        const pressed = document.getElementById("easy-filter-btn").getAttribute("aria-pressed") === "true";
+        document.getElementById("easy-filter-btn").setAttribute("aria-pressed", pressed ? "false" : "true");
+      });
+
+      selectJob(jobs[0]);
+    </script>
+  </body>
+</html>

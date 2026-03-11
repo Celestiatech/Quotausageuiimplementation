@@ -1,7 +1,7 @@
 const BRIDGE_VERSION = "2026.03.03";
-const EXTENSION_PROVIDER = "linkedin";
-const PLATFORM_STATUS_MESSAGE = "CP_LINKEDIN_STATUS";
-const PLATFORM_STATUS_KEY = "linkedIn";
+const EXTENSION_PROVIDER = "indeed";
+const PLATFORM_STATUS_MESSAGE = "CP_INDEED_STATUS";
+const PLATFORM_STATUS_KEY = "indeed";
 const BRIDGE_DEBUG = (() => {
   try {
     return localStorage.getItem("cpBridgeDebug") === "1";
@@ -270,7 +270,7 @@ window.addEventListener("message", async (event) => {
 
   const requestId = data.requestId || "";
   const defaultPlatformStatus = {
-    hasLinkedInTab: false,
+    hasIndeedTab: false,
     hasJobsTab: false,
   };
   const response = {
@@ -284,7 +284,7 @@ window.addEventListener("message", async (event) => {
     dailyCap: null,
     historySummary: null,
     currentRunSummary: null,
-    linkedIn: defaultPlatformStatus,
+    indeed: defaultPlatformStatus,
     pendingQuestions: [],
     history: {
       applied: [],
@@ -385,7 +385,7 @@ window.addEventListener("message", async (event) => {
       safePost(response);
       return;
     }
-    const linkedInStatus = await new Promise((resolve) => {
+    const platformStatus = await new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: PLATFORM_STATUS_MESSAGE }, (res) => {
         if (chrome.runtime.lastError) {
           resolve({ ok: false });
@@ -394,11 +394,11 @@ window.addEventListener("message", async (event) => {
         resolve(res || { ok: false });
       });
     });
-    if (linkedInStatus && linkedInStatus.ok) {
-      response[PLATFORM_STATUS_KEY] = linkedInStatus.data || response[PLATFORM_STATUS_KEY];
+    if (platformStatus && platformStatus.ok) {
+      response[PLATFORM_STATUS_KEY] = platformStatus.data || response[PLATFORM_STATUS_KEY];
     }
   } catch {
-    // Ignore linkedIn tab status failures.
+    // Ignore platform tab status failures.
   }
 
   logBridge("sending CP_WEB_PONG", {
@@ -407,7 +407,7 @@ window.addEventListener("message", async (event) => {
     runtimeBootstrapOk: response.runtimeBootstrapOk,
     runtimeId: response.runtimeId,
     extensionVersion: response.extensionVersion,
-    linkedIn: response.linkedIn,
+    indeed: response.indeed,
     error: response.error,
   });
   safePost(response);

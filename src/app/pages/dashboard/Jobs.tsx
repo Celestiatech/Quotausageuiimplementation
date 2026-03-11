@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
+import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
 import {
   DASHBOARD_TOUR_EVENT_NAME,
   DASHBOARD_TOUR_JOBS_EXTENSION,
@@ -54,8 +55,13 @@ type ExtensionStatus = {
   installed: boolean;
   runtimeId?: string;
   version?: string;
+  providers?: Partial<Record<"linkedin" | "indeed", { installed: boolean; version?: string }>>;
   linkedIn?: {
     hasLinkedInTab: boolean;
+    hasJobsTab: boolean;
+  };
+  indeed?: {
+    hasIndeedTab: boolean;
     hasJobsTab: boolean;
   };
   state?: {
@@ -590,12 +596,20 @@ function lookupCatalogField(...values: Array<string | undefined>) {
 export default function Jobs() {
   const { user } = useAuth();
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
+  const linkedInExtensionZipUrl = `${extensionZipUrl}?provider=linkedin`;
+  const indeedExtensionZipUrl = `${extensionZipUrl}?provider=indeed`;
   const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
   const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
     version: "1.1.3",
     displayName: "AutoApply CV LinkedIn Copilot",
     downloadFileName: formatExtensionPackageFileName("1.1.3"),
     downloadBaseName: formatExtensionPackageName("1.1.3"),
+  });
+  const [indeedExtensionRelease, setIndeedExtensionRelease] = useState<ExtensionReleaseMeta>({
+    version: "0.1.0",
+    displayName: "AutoApply CV Indeed Copilot Beta",
+    downloadFileName: "AutoApplyCVIndeedExtensionVersion0.1.0.zip",
+    downloadBaseName: "AutoApplyCVIndeedExtensionVersion0.1.0",
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -614,8 +628,6 @@ export default function Jobs() {
     extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.3");
   const currentPackageFileName =
     extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.3");
-  const installedPackageName =
-    extensionStatus.installed && extensionStatus.version ? formatExtensionPackageName(extensionStatus.version) : "";
   const versionBadgeRef = useRef<HTMLSpanElement | null>(null);
   const checkExtensionButtonRef = useRef<HTMLButtonElement | null>(null);
   const openLinkedInJobsButtonRef = useRef<HTMLAnchorElement | null>(null);
@@ -633,6 +645,20 @@ export default function Jobs() {
   const [syncingSettings, setSyncingSettings] = useState(false);
   const syncedAnswerRef = useRef<Record<string, string>>({});
   const reportedIssueRef = useRef<Record<string, string>>({});
+  const linkedInProviderStatus = extensionStatus.providers?.linkedin;
+  const indeedProviderStatus = extensionStatus.providers?.indeed;
+  const linkedInInstalled = Boolean(
+    linkedInProviderStatus?.installed ||
+      (extensionStatus.installed && !indeedProviderStatus),
+  );
+  const indeedInstalled = Boolean(indeedProviderStatus?.installed);
+  const linkedInInstalledVersion =
+    linkedInProviderStatus?.version || extensionStatus.version || extensionRelease.version;
+  const indeedInstalledVersion =
+    indeedProviderStatus?.version || indeedExtensionRelease.version;
+  const installedPackageName = linkedInInstalled
+    ? formatExtensionPackageName(linkedInInstalledVersion || "")
+    : "";
   const [criteria, setCriteria] = useState({
     keywords: "",
     location: "",
@@ -842,50 +868,43 @@ export default function Jobs() {
     if (typeof window === "undefined") return;
     setCheckingExtension(true);
     try {
-      const probeOnce = (timeoutMs: number) =>
-        new Promise<ExtensionStatus>((resolve) => {
-          const requestId = `cp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-          let settled = false;
-          const timeout = window.setTimeout(() => {
-            if (settled) return;
-            settled = true;
-            window.removeEventListener("message", onMessage);
-            resolve({ installed: false });
-          }, timeoutMs);
-
-          const onMessage = (event: MessageEvent) => {
-            const data = event.data as any;
-            if (!data || data.type !== "CP_WEB_PONG" || data.requestId !== requestId) return;
-            if (settled) return;
-            settled = true;
-            window.clearTimeout(timeout);
-            window.removeEventListener("message", onMessage);
-            const bridgeError = String(data.error || "").trim();
-            const runtimeBootstrapOk =
-              Boolean(data.state) &&
-              typeof data.state === "object" &&
-              !Array.isArray(data.state);
-            const installed = Boolean(data.installed) && !bridgeError && runtimeBootstrapOk;
-            resolve({
-              installed,
-              runtimeId: data.runtimeId || undefined,
-              version: String(data.extensionVersion || "").trim() || undefined,
-              linkedIn: data.linkedIn || undefined,
-              state: data.state || null,
-              pendingQuestions: Array.isArray(data.pendingQuestions) ? data.pendingQuestions : [],
-              screeningAnswers: data.screeningAnswers || {},
-              error: bridgeError || null,
-            });
-          };
-
-          window.addEventListener("message", onMessage);
-          window.postMessage({ type: "CP_WEB_PING", requestId }, window.location.origin);
+      let snapshot = await collectExtensionBridgeSnapshot({
+        timeoutMs: EXT_BRIDGE_PING_TIMEOUT_MS,
+        settleMs: 500,
+        requestIdPrefix: "cp_jobs",
+      });
+      if (!snapshot.installed) {
+        snapshot = await collectExtensionBridgeSnapshot({
+          timeoutMs: EXT_BRIDGE_PING_TIMEOUT_MS,
+          settleMs: 500,
+          requestIdPrefix: "cp_jobs_retry",
         });
-
-      let result = await probeOnce(EXT_BRIDGE_PING_TIMEOUT_MS);
-      if (!result.installed) {
-        result = await probeOnce(EXT_BRIDGE_PING_TIMEOUT_MS);
       }
+      const result: ExtensionStatus = {
+        installed: snapshot.installed,
+        runtimeId: snapshot.runtimeId,
+        version: snapshot.version,
+        providers: {
+          linkedin: snapshot.providers.linkedin
+            ? {
+                installed: Boolean(snapshot.providers.linkedin.installed),
+                version: snapshot.providers.linkedin.version,
+              }
+            : undefined,
+          indeed: snapshot.providers.indeed
+            ? {
+                installed: Boolean(snapshot.providers.indeed.installed),
+                version: snapshot.providers.indeed.version,
+              }
+            : undefined,
+        },
+        linkedIn: snapshot.linkedIn || undefined,
+        indeed: snapshot.indeed || undefined,
+        state: snapshot.state || null,
+        pendingQuestions: Array.isArray(snapshot.pendingQuestions) ? (snapshot.pendingQuestions as any) : [],
+        screeningAnswers: snapshot.screeningAnswers || {},
+        error: snapshot.error || null,
+      };
       setExtensionStatus(result);
       await syncExtensionAnswersToSite(result);
 
@@ -1221,13 +1240,26 @@ export default function Jobs() {
     let active = true;
     const loadExtensionMeta = async () => {
       try {
-        const res = await fetch("/api/public/extension-meta", { cache: "no-store" });
-        const data = await res.json();
-        if (!res.ok || !data?.success || !active) return;
-        setExtensionRelease((prev) => ({
-          ...prev,
-          ...(data.data || {}),
-        }));
+        const [linkedInRes, indeedRes] = await Promise.all([
+          fetch("/api/public/extension-meta?provider=linkedin", { cache: "no-store" }),
+          fetch("/api/public/extension-meta?provider=indeed", { cache: "no-store" }),
+        ]);
+        const [linkedInData, indeedData] = await Promise.all([
+          linkedInRes.json().catch(() => null),
+          indeedRes.json().catch(() => null),
+        ]);
+        if (linkedInRes.ok && linkedInData?.success && active) {
+          setExtensionRelease((prev) => ({
+            ...prev,
+            ...(linkedInData.data || {}),
+          }));
+        }
+        if (indeedRes.ok && indeedData?.success && active) {
+          setIndeedExtensionRelease((prev) => ({
+            ...prev,
+            ...(indeedData.data || {}),
+          }));
+        }
       } catch {
         // Best effort.
       }
@@ -1491,7 +1523,7 @@ export default function Jobs() {
     setInstallMessage("");
     const downloadFileName = currentPackageFileName;
     try {
-      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
+      const res = await fetch(`${linkedInExtensionZipUrl}&ts=${Date.now()}`, {
         method: "GET",
         cache: "no-store",
       });
@@ -1507,7 +1539,7 @@ export default function Jobs() {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch {
       const anchor = document.createElement("a");
-      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
+      anchor.href = `${linkedInExtensionZipUrl}&ts=${Date.now()}`;
       anchor.download = downloadFileName;
       document.body.appendChild(anchor);
       anchor.click();
@@ -1526,7 +1558,7 @@ export default function Jobs() {
     setError("");
     const downloadFileName = currentPackageFileName;
     try {
-      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
+      const res = await fetch(`${linkedInExtensionZipUrl}&ts=${Date.now()}`, {
         method: "GET",
         cache: "no-store",
       });
@@ -1542,7 +1574,7 @@ export default function Jobs() {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch {
       const anchor = document.createElement("a");
-      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
+      anchor.href = `${linkedInExtensionZipUrl}&ts=${Date.now()}`;
       anchor.download = downloadFileName;
       document.body.appendChild(anchor);
       anchor.click();
@@ -1675,10 +1707,16 @@ export default function Jobs() {
           <p className="text-gray-600">Showing {jobs.length} real jobs from your backend queue</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span ref={versionBadgeRef} className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">
-              Current ZIP: {currentPackageFileName || "loading..."}
+              LinkedIn ZIP: {currentPackageFileName || "loading..."}
+            </span>
+            <span className="rounded-full bg-orange-50 px-2.5 py-1 font-semibold text-orange-700">
+              Indeed ZIP: {indeedExtensionRelease.downloadFileName || "loading..."}
             </span>
             <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
-              Installed extension: {installedPackageName || "not detected"}
+              LinkedIn installed: {linkedInInstalled ? formatExtensionPackageName(linkedInInstalledVersion || "") : "not detected"}
+            </span>
+            <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
+              Indeed installed: {indeedInstalled ? indeedInstalledVersion || "detected" : "not detected"}
             </span>
           </div>
         </div>
@@ -1714,10 +1752,9 @@ export default function Jobs() {
       >
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">LinkedIn Extension Setup</h2>
-            <p className="text-sm text-gray-600">Login LinkedIn, install extension, then click Start inside extension panel.</p>
-            <p className="text-xs text-gray-500 mt-1">
-              Current package on site: {currentPackageBaseName}
+            <h2 className="text-xl font-bold text-gray-900">Extension Workspace</h2>
+            <p className="text-sm text-gray-600">
+              LinkedIn and Indeed now run as separate Chrome extensions, both syncing back to the same AutoApply CV account.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1727,7 +1764,7 @@ export default function Jobs() {
               className="px-4 py-2 rounded-xl bg-sky-600 text-white font-semibold shadow-sm transition-colors hover:bg-sky-700 inline-flex items-center gap-2"
             >
               <Play className="w-4 h-4" />
-              Start Install Guide
+              LinkedIn Install Guide
             </button>
             <button
               ref={checkExtensionButtonRef}
@@ -1735,98 +1772,229 @@ export default function Jobs() {
               disabled={checkingExtension}
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold disabled:opacity-60"
             >
-              {checkingExtension ? "Checking..." : "Check Extension"}
+              {checkingExtension ? "Checking..." : "Check Extensions"}
             </button>
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-3">
-          <div className={`rounded-xl border p-4 ${extensionStatus.installed ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
-            <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
-              {extensionStatus.installed ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
-              Extension Installed
+        <div className="grid gap-4 xl:grid-cols-2">
+          <section className="rounded-2xl border border-sky-200 bg-sky-50/70 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="inline-flex rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700">
+                  LinkedIn
+                </div>
+                <h3 className="mt-3 text-lg font-bold text-slate-950">LinkedIn Jobs Extension</h3>
+                <p className="mt-1 text-sm text-slate-700">
+                  Mature Easy Apply flow with install guide, screening sync, and resume handling.
+                </p>
+                <p className="mt-2 text-xs text-slate-600">
+                  Package on site: <span className="font-semibold">{currentPackageBaseName}</span>
+                </p>
+              </div>
+              <div className="rounded-xl border border-sky-200 bg-white px-3 py-2 text-right text-xs text-slate-600">
+                <div className="font-semibold text-slate-900">Detected version</div>
+                <div>{linkedInInstalled ? linkedInInstalledVersion : "Not detected"}</div>
+              </div>
             </div>
-            <p className="text-sm text-gray-700">
-              {extensionStatus.installed ? "Detected on dashboard." : "Not detected. Install/reload AutoApply CV extension."}
-            </p>
-          </div>
-          <div className={`rounded-xl border p-4 ${extensionStatus.linkedIn?.hasLinkedInTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
-            <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
-              {extensionStatus.linkedIn?.hasLinkedInTab ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
-              LinkedIn Open
-            </div>
-            <p className="text-sm text-gray-700">
-              {extensionStatus.linkedIn?.hasLinkedInTab ? "LinkedIn tab found." : "Open linkedin.com and login first."}
-            </p>
-          </div>
-          <div className={`rounded-xl border p-4 ${extensionStatus.linkedIn?.hasJobsTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
-            <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
-              {extensionStatus.linkedIn?.hasJobsTab ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
-              Jobs Page Ready
-            </div>
-            <p className="text-sm text-gray-700">
-              {extensionStatus.linkedIn?.hasJobsTab ? "LinkedIn Jobs tab found." : "Open LinkedIn Jobs page to run automation."}
-            </p>
-          </div>
-        </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <a
-            ref={openLinkedInJobsButtonRef}
-            href="https://www.linkedin.com/jobs/"
-            target="_blank"
-            rel="noreferrer"
-            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
-          >
-            <ExternalLink className="w-4 h-4" />
-            Open LinkedIn Jobs
-          </a>
-          <button
-            ref={downloadOpenButtonRef}
-            type="button"
-            onClick={onInstallOrReloadExtension}
-            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Download + Open Extensions
-          </button>
-          <a
-            ref={downloadZipButtonRef}
-            href={extensionZipUrl}
-            download={currentPackageFileName || undefined}
-            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Download Current ZIP
-          </a>
-          {extensionStoreUrl ? (
-            <a
-              href={extensionStoreUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Chrome Web Store
-            </a>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void copyLoadUnpackedSteps()}
-            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2"
-          >
-            <Copy className="w-4 h-4" />
-            Copy Setup Steps
-          </button>
-          <button
-            ref={syncProfileButtonRef}
-            onClick={() => void syncProfileToExtension()}
-            disabled={syncingSettings}
-            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold inline-flex items-center gap-2 disabled:opacity-60"
-          >
-            <Link2 className="w-4 h-4" />
-            {syncingSettings ? "Syncing..." : "Sync Profile to Extension"}
-          </button>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className={`rounded-xl border p-4 ${linkedInInstalled ? "border-green-200 bg-green-50" : "border-amber-200 bg-white"}`}>
+                <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                  {linkedInInstalled ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+                  Extension Installed
+                </div>
+                <p className="text-sm text-gray-700">
+                  {linkedInInstalled ? "LinkedIn extension detected on the dashboard." : "Install or reload the LinkedIn extension package."}
+                </p>
+              </div>
+              <div className={`rounded-xl border p-4 ${extensionStatus.linkedIn?.hasLinkedInTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-white"}`}>
+                <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                  {extensionStatus.linkedIn?.hasLinkedInTab ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+                  LinkedIn Open
+                </div>
+                <p className="text-sm text-gray-700">
+                  {extensionStatus.linkedIn?.hasLinkedInTab ? "LinkedIn tab found." : "Open linkedin.com and sign in first."}
+                </p>
+              </div>
+              <div className={`rounded-xl border p-4 ${extensionStatus.linkedIn?.hasJobsTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-white"}`}>
+                <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                  {extensionStatus.linkedIn?.hasJobsTab ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+                  Jobs Page Ready
+                </div>
+                <p className="text-sm text-gray-700">
+                  {extensionStatus.linkedIn?.hasJobsTab ? "LinkedIn Jobs tab found." : "Open LinkedIn Jobs before starting a run."}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a
+                ref={openLinkedInJobsButtonRef}
+                href="https://www.linkedin.com/jobs/"
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-lg border border-sky-200 bg-white hover:bg-sky-100 font-semibold inline-flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open LinkedIn Jobs
+              </a>
+              <button
+                ref={downloadOpenButtonRef}
+                type="button"
+                onClick={onInstallOrReloadExtension}
+                className="px-4 py-2 rounded-lg border border-sky-200 bg-white hover:bg-sky-100 font-semibold inline-flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download + Open Extensions
+              </button>
+              <a
+                ref={downloadZipButtonRef}
+                href={linkedInExtensionZipUrl}
+                download={currentPackageFileName || undefined}
+                className="px-4 py-2 rounded-lg border border-sky-200 bg-white hover:bg-sky-100 font-semibold inline-flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download LinkedIn ZIP
+              </a>
+              {extensionStoreUrl ? (
+                <a
+                  href={extensionStoreUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 rounded-lg border border-sky-200 bg-white hover:bg-sky-100 font-semibold inline-flex items-center gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Chrome Web Store
+                </a>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void copyLoadUnpackedSteps()}
+                className="px-4 py-2 rounded-lg border border-sky-200 bg-white hover:bg-sky-100 font-semibold inline-flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                Copy LinkedIn Setup Steps
+              </button>
+              <button
+                ref={syncProfileButtonRef}
+                onClick={() => void syncProfileToExtension()}
+                disabled={syncingSettings}
+                className="px-4 py-2 rounded-lg border border-sky-200 bg-white hover:bg-sky-100 font-semibold inline-flex items-center gap-2 disabled:opacity-60"
+              >
+                <Link2 className="w-4 h-4" />
+                {syncingSettings ? "Syncing..." : "Sync Profile to Extensions"}
+              </button>
+            </div>
+
+            <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-slate-700">
+              <li>Download <code>{currentPackageFileName}</code> and extract it.</li>
+              <li>Open <code>chrome://extensions</code>, enable Developer mode, then click <code>Load unpacked</code>.</li>
+              <li>Select the extracted LinkedIn folder, open LinkedIn Jobs, then click <code>Check Extensions</code>.</li>
+            </ol>
+
+            <div className="mt-4 rounded-xl border border-blue-200 bg-white p-4">
+              <div className="text-sm font-semibold text-blue-900">Resume Requirement Handling</div>
+              <div className="text-sm text-blue-800 mt-1">
+                If a job says resume is required, upload your resume in LinkedIn Easy Apply profile first.
+                The copilot automatically picks the latest attached resume option.
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-orange-200 bg-orange-50/80 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="inline-flex rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-orange-700">
+                  Indeed Beta
+                </div>
+                <h3 className="mt-3 text-lg font-bold text-slate-950">Indeed Jobs Extension Beta</h3>
+                <p className="mt-1 text-sm text-slate-700">
+                  Separate Indeed-specific automation beta with its own filters, job-page selectors, and dashboard sync.
+                </p>
+                <p className="mt-2 text-xs text-slate-600">
+                  Package on site: <span className="font-semibold">{indeedExtensionRelease.downloadBaseName}</span>
+                </p>
+              </div>
+              <div className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-right text-xs text-slate-600">
+                <div className="font-semibold text-slate-900">Detected version</div>
+                <div>{indeedInstalled ? indeedInstalledVersion : "Not detected"}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className={`rounded-xl border p-4 ${indeedInstalled ? "border-green-200 bg-green-50" : "border-amber-200 bg-white"}`}>
+                <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                  {indeedInstalled ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+                  Extension Installed
+                </div>
+                <p className="text-sm text-gray-700">
+                  {indeedInstalled ? `Detected version ${indeedInstalledVersion}.` : "Load the Indeed ZIP as a separate unpacked extension."}
+                </p>
+              </div>
+              <div className={`rounded-xl border p-4 ${extensionStatus.indeed?.hasIndeedTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-white"}`}>
+                <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                  {extensionStatus.indeed?.hasIndeedTab ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+                  Indeed Open
+                </div>
+                <p className="text-sm text-gray-700">
+                  {extensionStatus.indeed?.hasIndeedTab ? "Indeed tab found." : "Open indeed.com and keep the jobs tab available."}
+                </p>
+              </div>
+              <div className={`rounded-xl border p-4 ${extensionStatus.indeed?.hasJobsTab ? "border-green-200 bg-green-50" : "border-amber-200 bg-white"}`}>
+                <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                  {extensionStatus.indeed?.hasJobsTab ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertCircle className="w-4 h-4 text-amber-600" />}
+                  Jobs Page Ready
+                </div>
+                <p className="text-sm text-gray-700">
+                  {extensionStatus.indeed?.hasJobsTab ? "Indeed Jobs tab found." : "Open Indeed Jobs before starting an Indeed run."}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a
+                href="https://www.indeed.com/jobs"
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-100 font-semibold inline-flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Indeed Jobs
+              </a>
+              <a
+                href={indeedExtensionZipUrl}
+                download={indeedExtensionRelease.downloadFileName || undefined}
+                className="px-4 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-100 font-semibold inline-flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download Indeed ZIP
+              </a>
+              <button
+                type="button"
+                onClick={() => void checkExtensionStatus()}
+                disabled={checkingExtension}
+                className="px-4 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-100 font-semibold inline-flex items-center gap-2 disabled:opacity-60"
+              >
+                <RefreshCw className="w-4 h-4" />
+                {checkingExtension ? "Checking..." : "Refresh Indeed Status"}
+              </button>
+            </div>
+
+            <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-slate-700">
+              <li>Download <code>{indeedExtensionRelease.downloadFileName}</code> and extract it as a second extension folder.</li>
+              <li>Use <code>Load unpacked</code> again and select the extracted Indeed folder.</li>
+              <li>Open <code>indeed.com/jobs</code>, then click <code>Check Extensions</code> to confirm detection.</li>
+            </ol>
+
+            <div className="mt-4 rounded-xl border border-orange-200 bg-white p-4">
+              <div className="text-sm font-semibold text-orange-900">Indeed Filter Coverage</div>
+              <div className="text-sm text-orange-800 mt-1">
+                Search term, location, date posted, sort order, job type, company, title, salary, work mode, benefits,
+                commitments, and keyword filters now apply inside the Indeed extension before it submits.
+              </div>
+            </div>
+          </section>
         </div>
 
         {installMessage ? (

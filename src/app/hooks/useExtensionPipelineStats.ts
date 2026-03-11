@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
 
 export type ExtensionPipelineStats = {
   applied: number;
@@ -52,8 +53,12 @@ function normalizeImportEntry(entry: any, outcomeType: string) {
     ts: String(entry?.ts || ""),
     entryId: String(entry?.entryId || "").trim(),
     runId: String(entry?.runId || "").trim(),
+    provider: String(entry?.provider || entry?.data?.provider || "").trim().toLowerCase() || "linkedin",
     outcomeType: String(outcomeType || entry?.outcomeType || "").trim().toUpperCase(),
-    data: entry?.data && typeof entry.data === "object" ? entry.data : {},
+    data: {
+      ...(entry?.data && typeof entry.data === "object" ? entry.data : {}),
+      provider: String(entry?.provider || entry?.data?.provider || "").trim().toLowerCase() || "linkedin",
+    },
   };
 }
 
@@ -63,7 +68,7 @@ function importKeyForEntry(entry: ReturnType<typeof normalizeImportEntry>) {
   const jobId = String(data?.jobId || data?.externalJobId || "");
   const jobUrl = String(data?.jobUrl || "");
   const reasonCode = String(data?.reasonCode || "").toUpperCase();
-  return `${entry.outcomeType}:${jobId || jobUrl}:${reasonCode}:${entry.ts}`;
+  return `${entry.provider}:${entry.outcomeType}:${jobId || jobUrl}:${reasonCode}:${entry.ts}`;
 }
 
 export function useExtensionPipelineStats() {
@@ -86,106 +91,94 @@ export function useExtensionPipelineStats() {
       if (!active) return;
       setStats((prev) => ({ ...prev, loaded: true }));
     }, timeoutMs);
-    const requestPrefix = `cp_pipe_${Date.now()}_`;
 
     const requestSnapshot = () => {
       if (!active) return;
-      try {
-        window.postMessage(
-          {
-            type: "CP_WEB_PING",
-            requestId: `${requestPrefix}${Math.random().toString(36).slice(2, 8)}`,
-          },
-          window.location.origin,
-        );
-      } catch {
-        // ignore
-      }
+      void collectExtensionBridgeSnapshot({
+        timeoutMs,
+        settleMs: 500,
+        requestIdPrefix: "cp_pipe",
+      }).then((snapshot) => {
+        if (!active) return;
+
+        const history = (snapshot.history || {}) as Record<string, any[]>;
+        const historySummary =
+          Object.keys(snapshot.providers || {}).length === 1 &&
+          snapshot.historySummary &&
+          typeof snapshot.historySummary === "object"
+            ? snapshot.historySummary
+            : buildFallbackSummary(history);
+        const fallbackSummary = buildFallbackSummary(history);
+        const totals =
+          historySummary?.totals && typeof historySummary.totals === "object"
+            ? (historySummary.totals as Record<string, unknown>)
+            : (fallbackSummary.totals as Record<string, unknown>);
+        const today =
+          historySummary?.today && typeof historySummary.today === "object"
+            ? (historySummary.today as Record<string, unknown>)
+            : (fallbackSummary.today as Record<string, unknown>);
+
+        try {
+          const importedKey = "cpExtImportedOutcomeIdsV2";
+          const raw = localStorage.getItem(importedKey) || "[]";
+          const seen = new Set<string>(Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : []);
+          const candidates = [
+            ...(Array.isArray(history.applied) ? history.applied : []).map((item: any) => normalizeImportEntry(item, "APPLIED")),
+            ...(Array.isArray(history.skipped) ? history.skipped : []).map((item: any) => normalizeImportEntry(item, "SKIPPED")),
+            ...(Array.isArray(history.failed) ? history.failed : []).map((item: any) => normalizeImportEntry(item, "FAILED")),
+            ...(Array.isArray(history.external) ? history.external : []).map((item: any) => normalizeImportEntry(item, "EXTERNAL")),
+          ]
+            .filter((entry) => entry.ts && entry.outcomeType)
+            .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+            .slice(-200);
+          const delta = candidates.filter((entry) => !seen.has(importKeyForEntry(entry))).slice(0, 100);
+          if (delta.length) {
+            void fetch("/api/extension/import", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ entries: delta, limit: 100 }),
+              credentials: "include",
+            })
+              .then(() => {
+                for (const entry of delta) seen.add(importKeyForEntry(entry));
+                const next = Array.from(seen).slice(-5000);
+                localStorage.setItem(importedKey, JSON.stringify(next));
+                try {
+                  window.dispatchEvent(new Event("cp:extensionImported"));
+                } catch {
+                  // ignore
+                }
+              })
+              .catch(() => {
+                // ignore import failures
+              });
+          }
+        } catch {
+          // ignore import failures
+        }
+
+        setStats({
+          applied: normalizeCount(totals.applied),
+          skipped: normalizeCount(totals.skipped) + normalizeCount(totals.external),
+          failed: normalizeCount(totals.failed),
+          appliedToday: Math.max(normalizeCount(today.applied), normalizeCount(snapshot?.dailyCap?.used)),
+          skippedToday: normalizeCount(today.skipped) + normalizeCount(today.external),
+          failedToday: normalizeCount(today.failed),
+          loaded: true,
+        });
+        window.clearTimeout(timer);
+      });
     };
 
     const pingInterval = window.setInterval(() => {
       requestSnapshot();
     }, 10000);
 
-    function onMessage(event: MessageEvent) {
-      if (!active || event.source !== window) return;
-      const data = event.data as any;
-      if (!data || data.type !== "CP_WEB_PONG") return;
-      if (!String(data.requestId || "").startsWith(requestPrefix)) return;
-
-      const history = data.history || {};
-      const historySummary =
-        data.historySummary && typeof data.historySummary === "object"
-          ? data.historySummary
-          : buildFallbackSummary(history);
-      const totals =
-        historySummary?.totals && typeof historySummary.totals === "object"
-          ? historySummary.totals
-          : buildFallbackSummary(history).totals;
-      const today =
-        historySummary?.today && typeof historySummary.today === "object"
-          ? historySummary.today
-          : buildFallbackSummary(history).today;
-
-      // Best-effort: import extension outcomes into the web DB so dashboard pages can show recent activity.
-      // Use stable entry ids first so refreshes do not rebase the import window.
-      try {
-        const importedKey = "cpExtImportedOutcomeIdsV2";
-        const raw = localStorage.getItem(importedKey) || "[]";
-        const seen = new Set<string>(Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : []);
-        const candidates = [
-          ...(Array.isArray(history.applied) ? history.applied : []).map((item: any) => normalizeImportEntry(item, "APPLIED")),
-          ...(Array.isArray(history.skipped) ? history.skipped : []).map((item: any) => normalizeImportEntry(item, "SKIPPED")),
-          ...(Array.isArray(history.failed) ? history.failed : []).map((item: any) => normalizeImportEntry(item, "FAILED")),
-          ...(Array.isArray(history.external) ? history.external : []).map((item: any) => normalizeImportEntry(item, "EXTERNAL")),
-        ]
-          .filter((entry) => entry.ts && entry.outcomeType)
-          .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
-          .slice(-160);
-        const delta = candidates.filter((entry) => !seen.has(importKeyForEntry(entry))).slice(0, 80);
-        if (delta.length) {
-          void fetch("/api/extension/import", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ entries: delta, limit: 80 }),
-            credentials: "include",
-          })
-            .then(() => {
-              for (const entry of delta) seen.add(importKeyForEntry(entry));
-              const next = Array.from(seen).slice(-5000);
-              localStorage.setItem(importedKey, JSON.stringify(next));
-              try {
-                window.dispatchEvent(new Event("cp:extensionImported"));
-              } catch {
-                // ignore
-              }
-            })
-            .catch(() => {
-              // ignore import failures
-            });
-        }
-      } catch {
-        // ignore import failures
-      }
-
-      setStats({
-        applied: normalizeCount(totals.applied),
-        skipped: normalizeCount(totals.skipped) + normalizeCount(totals.external),
-        failed: normalizeCount(totals.failed),
-        appliedToday: Math.max(normalizeCount(today.applied), normalizeCount(data?.dailyCap?.used)),
-        skippedToday: normalizeCount(today.skipped) + normalizeCount(today.external),
-        failedToday: normalizeCount(today.failed),
-        loaded: true,
-      });
-      window.clearTimeout(timer);
-    }
-
     const onImported = () => requestSnapshot();
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") requestSnapshot();
     };
 
-    window.addEventListener("message", onMessage);
     window.addEventListener("cp:extensionImported", onImported as EventListener);
     document.addEventListener("visibilitychange", onVisibilityChange);
     requestSnapshot();
@@ -194,7 +187,6 @@ export function useExtensionPipelineStats() {
       active = false;
       window.clearTimeout(timer);
       window.clearInterval(pingInterval);
-      window.removeEventListener("message", onMessage);
       window.removeEventListener("cp:extensionImported", onImported as EventListener);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };

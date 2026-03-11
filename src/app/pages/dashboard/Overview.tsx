@@ -135,21 +135,21 @@ export default function Overview() {
                         <div className="mt-2 flex items-center gap-2">
                           <button
                             type="button"
-                            disabled={!app.linkedInUrl}
+                            disabled={!app.sourceUrl}
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (!app.linkedInUrl) return;
-                              window.open(app.linkedInUrl, "_blank", "noopener,noreferrer");
+                              if (!app.sourceUrl) return;
+                              window.open(app.sourceUrl, "_blank", "noopener,noreferrer");
                             }}
                             className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                              app.linkedInUrl
+                              app.sourceUrl
                                 ? "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
                                 : "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed"
                             }`}
-                            title={app.linkedInUrl ? "Open on LinkedIn" : "LinkedIn link not available for this item"}
+                            title={app.sourceUrl ? `Open on ${app.sourceLabel}` : `${app.sourceLabel} link not available for this item`}
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
-                            LinkedIn
+                            {app.sourceLabel}
                           </button>
                           <button
                             type="button"
@@ -170,7 +170,7 @@ export default function Overview() {
                                 ? "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
                                 : "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed"
                             }`}
-                            title={app.externalJobId ? "Copy LinkedIn Job ID" : "Job ID not available for this item"}
+                            title={app.externalJobId ? `Copy ${app.sourceLabel} Job ID` : "Job ID not available for this item"}
                           >
                             {copiedJobId === app.externalJobId ? (
                               <Check className="w-3.5 h-3.5 text-green-600" />

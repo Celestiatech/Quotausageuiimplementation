@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AutoApply CV Copilot</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="head">
+        <div
+          id="popupToggle"
+          class="brand"
+          role="button"
+          tabindex="0"
+          aria-label="Toggle popup content"
+          aria-expanded="true"
+          title="Hide popup content"
+        >
+          <img class="brand-logo" src="../icons/icon128.png" alt="AutoApply CV" />
+          <div>
+            <h1>AutoApply CV Copilot Beta</h1>
+            <p class="sub">Indeed job assistant beta</p>
+          </div>
+        </div>
+        <span id="statusBadge" class="status-badge idle">Idle</span>
+      </header>
+
+      <section id="popupContent" class="popup-content">
+        <section id="accountCard" class="account-card disconnected">
+          <div class="account-head">
+            <div class="account-title-wrap">
+              <strong id="accountTitle">Account</strong>
+            </div>
+            <span id="accountBadge" class="account-badge disconnected">Disconnected</span>
+          </div>
+          <p id="accountText" class="account-text">
+            Sign in to connect your profile and enable auto-apply controls.
+          </p>
+          <div class="actions account-actions">
+            <button id="accountAction" class="btn-primary">Sign in to AutoApply CV</button>
+          </div>
+        </section>
+
+        <section id="runArea">
+          <section class="now-card">
+            <p id="nowTitle" class="now-title">Loading run state...</p>
+            <p id="nowDetail" class="now-detail">Connecting to extension service worker.</p>
+          </section>
+
+          <div class="stats">
+            <article class="stat">
+              <span class="stat-k">Applied</span>
+              <span id="applied" class="stat-v">0</span>
+            </article>
+            <article class="stat">
+              <span class="stat-k">Skipped</span>
+              <span id="skipped" class="stat-v">0</span>
+            </article>
+            <article class="stat">
+              <span class="stat-k">Failed</span>
+              <span id="failed" class="stat-v">0</span>
+            </article>
+          </div>
+
+          <div class="mode-control">
+            <label class="mode-switch" for="liveModeToggle">
+              <input id="liveModeToggle" type="checkbox" />
+              <span class="mode-switch-ui" aria-hidden="true"></span>
+              <span class="mode-switch-text">Live Auto Submit</span>
+            </label>
+            <span id="modeBadge" class="mode-badge">Dry Run</span>
+          </div>
+
+          <div class="actions primary">
+            <button id="start">Start</button>
+            <button id="pause">Pause</button>
+            <button id="stop">Stop</button>
+          </div>
+        </section>
+
+        <p id="status" class="status"></p>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

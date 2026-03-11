@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
+import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
 import {
   DASHBOARD_TOUR_EVENT_NAME,
   DASHBOARD_TOUR_ONBOARDING_EXTENSION,
@@ -74,6 +75,10 @@ type ExtensionStatus = {
   version?: string;
   linkedIn?: {
     hasLinkedInTab: boolean;
+    hasJobsTab: boolean;
+  };
+  indeed?: {
+    hasIndeedTab: boolean;
     hasJobsTab: boolean;
   };
 };
@@ -682,41 +687,18 @@ export default function Onboarding() {
     const silent = Boolean(opts?.silent);
     setCheckingExtension(true);
     try {
-      const result = await new Promise<ExtensionStatus>((resolve) => {
-        const requestId = `cp_onboarding_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        let settled = false;
-
-        const timeout = window.setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          window.removeEventListener("message", onMessage);
-          resolve({ installed: false });
-        }, EXT_BRIDGE_PING_TIMEOUT_MS);
-
-        const onMessage = (event: MessageEvent) => {
-          const data = event.data as any;
-          if (!data || data.type !== "CP_WEB_PONG" || data.requestId !== requestId) return;
-          if (settled) return;
-          settled = true;
-          window.clearTimeout(timeout);
-          window.removeEventListener("message", onMessage);
-          const bridgeError = String(data.error || "").trim();
-          const runtimeBootstrapOk =
-            Boolean(data.state) &&
-            typeof data.state === "object" &&
-            !Array.isArray(data.state);
-          const installed = Boolean(data.installed) && !bridgeError && runtimeBootstrapOk;
-          resolve({
-            installed,
-            runtimeId: data.runtimeId || undefined,
-            version: data.extensionVersion || undefined,
-            linkedIn: data.linkedIn || undefined,
-          });
-        };
-
-        window.addEventListener("message", onMessage);
-        window.postMessage({ type: "CP_WEB_PING", requestId }, window.location.origin);
+      const snapshot = await collectExtensionBridgeSnapshot({
+        timeoutMs: EXT_BRIDGE_PING_TIMEOUT_MS,
+        settleMs: 500,
+        requestIdPrefix: "cp_onboarding",
       });
+      const result: ExtensionStatus = {
+        installed: snapshot.installed,
+        runtimeId: snapshot.runtimeId,
+        version: snapshot.version,
+        linkedIn: snapshot.linkedIn || undefined,
+        indeed: snapshot.indeed || undefined,
+      };
 
       setExtensionStatus(result);
       if (!silent && !result.installed) {
