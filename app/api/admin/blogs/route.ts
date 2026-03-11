@@ -4,6 +4,7 @@ import { requireAdmin } from "src/lib/guards";
 import { fail, handleApiError, ok, parsePagination } from "src/lib/api";
 import { writeAuditLog } from "src/lib/audit";
 import { normalizeBlogKeywords, slugifyBlogTitle, stripHtmlToText } from "src/lib/blog";
+import { syncFacebookPublishState } from "src/lib/facebook";
 
 const createBlogSchema = z.object({
   title: z.string().trim().min(3).max(180),
@@ -13,6 +14,7 @@ const createBlogSchema = z.object({
   contentHtml: z.string().min(1),
   keywords: z.array(z.string().trim().max(80)).optional().default([]),
   status: z.enum(["draft", "published"]).default("draft"),
+  socialAutoPostEnabled: z.boolean().optional().default(false),
 });
 
 async function resolveUniqueSlug(baseSlug: string, excludeId = "") {
@@ -50,6 +52,10 @@ export async function GET(req: Request) {
           excerpt: true,
           coverImage: true,
           status: true,
+          socialAutoPostEnabled: true,
+          facebookPostId: true,
+          facebookPostedAt: true,
+          facebookPostError: true,
           publishedAt: true,
           createdAt: true,
           updatedAt: true,
@@ -97,9 +103,10 @@ export async function POST(req: Request) {
       payload.excerpt.trim() || stripHtmlToText(normalizedContent).slice(0, 220);
     const keywords = normalizeBlogKeywords(payload.keywords);
     const status = payload.status;
+    const socialAutoPostEnabled = payload.socialAutoPostEnabled;
     const publishedAt = status === "published" ? new Date() : null;
 
-    const post = await prisma.blogPost.create({
+    let post = await prisma.blogPost.create({
       data: {
         title: normalizedTitle,
         slug,
@@ -108,10 +115,14 @@ export async function POST(req: Request) {
         contentHtml: normalizedContent,
         keywordsJson: keywords,
         status,
+        socialAutoPostEnabled,
         publishedAt,
         authorId: authResult.auth.user.id,
       },
     });
+
+    const facebookSync = await syncFacebookPublishState(req, post);
+    post = facebookSync.post;
 
     await writeAuditLog({
       actorUserId: authResult.auth.user.id,
@@ -121,10 +132,21 @@ export async function POST(req: Request) {
       metadataJson: {
         slug: post.slug,
         status: post.status,
+        socialAutoPostEnabled: post.socialAutoPostEnabled,
+        facebookPostId: post.facebookPostId,
+        facebookPostedAt: post.facebookPostedAt,
+        facebookPostError: post.facebookPostError,
       },
     });
 
-    return ok("Blog post created", { post }, 201);
+    const message =
+      facebookSync.result.attempted && facebookSync.result.ok
+        ? "Blog post created and posted to Facebook"
+        : facebookSync.result.attempted && !facebookSync.result.ok
+        ? `Blog post created, but Facebook auto-post failed: ${facebookSync.result.error}`
+        : "Blog post created";
+
+    return ok(message, { post, facebook: facebookSync.result }, 201);
   } catch (error) {
     return handleApiError(error, "Failed to create blog post");
   }

@@ -57,6 +57,7 @@ import Support from './pages/admin/Support';
 import Health from './pages/admin/Health';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminBlogs from './pages/admin/Blogs';
+import AdminBlogEditor from './pages/admin/BlogEditor';
 
 // Protected Route Components
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -166,6 +167,8 @@ export default function App() {
             <Route path="support" element={<Support />} />
             <Route path="health" element={<Health />} />
             <Route path="blogs" element={<AdminBlogs />} />
+            <Route path="blogs/new" element={<AdminBlogEditor />} />
+            <Route path="blogs/:id/edit" element={<AdminBlogEditor />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Routes>

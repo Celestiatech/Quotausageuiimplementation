@@ -216,6 +216,20 @@ model UserSecret {
   @@unique([userId, provider])
 }
 
+model SocialIntegration {
+  id               String   @id @default(cuid())
+  provider         String   @unique
+  enabled          Boolean  @default(false)
+  publicConfigJson Json?
+  encryptedSecrets String?
+  keyVersion       Int      @default(1)
+  updatedById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([provider, enabled])
+}
+
 model AutoApplyJob {
   id              String      @id @default(cuid())
   userId           String
@@ -346,6 +360,10 @@ model BlogPost {
   contentHtml  String         @db.Text
   keywordsJson Json?
   status       BlogPostStatus @default(draft)
+  socialAutoPostEnabled Boolean @default(false)
+  facebookPostId String?
+  facebookPostedAt DateTime?
+  facebookPostError String?
   publishedAt  DateTime?
   authorId     String?
   createdAt    DateTime       @default(now())

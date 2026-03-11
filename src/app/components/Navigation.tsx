@@ -42,9 +42,12 @@ export function Navigation() {
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <img
-                src="/logos/android-chrome-192x192.png"
-                alt="AutoApply CV"
+                src="/logos/brandmark-80.png"
+                alt=""
+                aria-hidden="true"
                 className="w-10 h-10 rounded-xl shadow-lg"
+                width={40}
+                height={40}
                 loading="eager"
                 decoding="async"
               />
@@ -122,8 +125,12 @@ export function Navigation() {
             </div>
 
             {/* Mobile Menu Button */}
-            <button 
+            <button
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-site-menu"
               className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -132,7 +139,7 @@ export function Navigation() {
 
           {/* Mobile Menu */}
           {mobileMenuOpen && (
-            <div className="lg:hidden py-4 border-t border-gray-200 animate-in slide-in-from-top duration-200">
+            <div id="mobile-site-menu" className="lg:hidden py-4 border-t border-gray-200 animate-in slide-in-from-top duration-200">
               <div className="flex flex-col gap-4">
                 <Link 
                   to="/product" 

@@ -8,6 +8,7 @@ export function middleware(req: NextRequest) {
   const requestId = req.headers.get("x-request-id") || createRequestId();
   const path = req.nextUrl.pathname;
   const isProd = process.env.NODE_ENV === "production";
+  const hasGoogleAnalytics = Boolean(String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim());
 
   if (isProd && path.startsWith("/downloads/")) {
     return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
@@ -42,11 +43,11 @@ export function middleware(req: NextRequest) {
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    "img-src 'self' data: blob: https:",
+    `img-src 'self' data: blob: https:${hasGoogleAnalytics ? " https://www.google-analytics.com https://www.googletagmanager.com" : ""}`,
     "font-src 'self' data:",
     "style-src 'self' 'unsafe-inline'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
-    "connect-src 'self' https://api.razorpay.com https://*.razorpay.com https://db.prisma.io https://*.upstash.io",
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com${hasGoogleAnalytics ? " https://www.googletagmanager.com" : ""}`,
+    `connect-src 'self' https://api.razorpay.com https://*.razorpay.com https://db.prisma.io https://*.upstash.io${hasGoogleAnalytics ? " https://www.google-analytics.com https://www.googletagmanager.com" : ""}`,
     "frame-src https://api.razorpay.com https://checkout.razorpay.com",
     "form-action 'self' https://api.razorpay.com https://checkout.razorpay.com",
     ...(isProd ? ["upgrade-insecure-requests"] : []),

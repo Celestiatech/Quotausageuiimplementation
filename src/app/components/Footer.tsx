@@ -1,4 +1,4 @@
-﻿import { Link } from 'react-router';
+import { Link } from 'react-router';
 import { Twitter, Linkedin, Github, Mail } from 'lucide-react';
 
 export function Footer() {
@@ -10,9 +10,12 @@ export function Footer() {
           <div className="lg:col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
               <img
-                src="/logos/android-chrome-192x192.png"
-                alt="AutoApply CV"
+                src="/logos/brandmark-80.png"
+                alt=""
+                aria-hidden="true"
                 className="w-10 h-10 rounded-xl shadow-lg"
+                width={40}
+                height={40}
                 loading="lazy"
                 decoding="async"
               />
@@ -26,24 +29,32 @@ export function Footer() {
             <div className="flex gap-3">
               <a
                 href="#"
+                aria-label="Twitter"
+                title="Twitter"
                 className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] hover:from-[#8B5CF6] hover:to-[#A855F7] text-white flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-md"
               >
                 <Twitter className="w-5 h-5" />
               </a>
               <a
                 href="#"
+                aria-label="LinkedIn"
+                title="LinkedIn"
                 className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] hover:from-[#8B5CF6] hover:to-[#A855F7] text-white flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-md"
               >
                 <Linkedin className="w-5 h-5" />
               </a>
               <a
                 href="#"
+                aria-label="GitHub"
+                title="GitHub"
                 className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] hover:from-[#8B5CF6] hover:to-[#A855F7] text-white flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-md"
               >
                 <Github className="w-5 h-5" />
               </a>
               <a
                 href="#"
+                aria-label="Email"
+                title="Email"
                 className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] hover:from-[#8B5CF6] hover:to-[#A855F7] text-white flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-md"
               >
                 <Mail className="w-5 h-5" />
@@ -53,7 +64,7 @@ export function Footer() {
 
           {/* Links */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-4">Product</h4>
+            <h2 className="font-semibold text-gray-900 mb-4">Product</h2>
             <ul className="space-y-3">
               <li>
                 <Link to="/product" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
@@ -84,7 +95,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="font-semibold text-gray-900 mb-4">Company</h4>
+            <h2 className="font-semibold text-gray-900 mb-4">Company</h2>
             <ul className="space-y-3">
               <li>
                 <Link to="/about" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
@@ -110,7 +121,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="font-semibold text-gray-900 mb-4">Resources</h4>
+            <h2 className="font-semibold text-gray-900 mb-4">Resources</h2>
             <ul className="space-y-3">
               <li>
                 <Link to="/blog" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">

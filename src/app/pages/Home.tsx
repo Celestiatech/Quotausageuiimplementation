@@ -141,28 +141,13 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6 lg:px-8 relative">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Left Column */}
-            <motion.div 
-              className="space-y-8"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <motion.div 
-                className="inline-flex items-center gap-2 px-4 py-2 glass rounded-full text-purple-700 text-sm font-semibold shadow-premium"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5, delay: 0.2 }}
-              >
+            <div className="space-y-8">
+              <div className="inline-flex items-center gap-2 px-4 py-2 glass rounded-full text-purple-700 text-sm font-semibold shadow-premium">
                 <Sparkles className="w-4 h-4" />
                 Trusted by 50,000+ Engineers
-              </motion.div>
+              </div>
               
-              <motion.h1 
-                className="text-5xl lg:text-7xl font-bold text-gray-900 leading-tight"
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-              >
+              <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 leading-tight">
                 LinkedIn Auto Apply Bot
                 <br />
                 for Your{' '}
@@ -170,23 +155,13 @@ export default function Home() {
                   Tech Job
                 </span>{' '}
                 Faster
-              </motion.h1>
+              </h1>
               
-              <motion.p 
-                className="text-xl text-gray-600 leading-relaxed"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-              >
+              <p className="text-xl text-gray-600 leading-relaxed">
                 Use AI-powered job search automation to apply to LinkedIn jobs automatically, optimize your ATS resume, and manage everything in one job application tracker.
-              </motion.p>
+              </p>
 
-              <motion.div 
-                className="flex flex-col sm:flex-row gap-4"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.5 }}
-              >
+              <div className="flex flex-col sm:flex-row gap-4">
                 <button 
                   onClick={() => navigate('/pricing')}
                   className="group btn-premium px-8 py-4 gradient-primary text-white rounded-xl font-semibold text-lg shadow-premium hover:shadow-premium-lg hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
@@ -200,42 +175,27 @@ export default function Home() {
                 >
                   See Auto Apply Demo
                 </button>
-              </motion.div>
+              </div>
 
               {/* Stats */}
-              <motion.div 
-                className="flex items-center gap-8 pt-4"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.6, delay: 0.6 }}
-              >
+              <div className="flex items-center gap-8 pt-4">
                 {[
                   { value: '50K+', label: 'Active Users' },
                   { value: '3x', label: 'More Interviews' },
                   { value: '60%', label: 'Faster Results' }
                 ].map((stat, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.7 + index * 0.1 }}
-                  >
+                  <div key={index}>
                     <div className="text-3xl font-bold text-gradient">
                       {stat.value}
                     </div>
                     <div className="text-sm text-gray-600">{stat.label}</div>
-                  </motion.div>
+                  </div>
                 ))}
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
 
             {/* Right Column */}
-            <motion.div 
-              className="relative"
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-            >
+            <div className="relative">
               <div className="relative rounded-3xl overflow-hidden shadow-premium-lg border-8 border-white hover-lift">
                 <MediaSlot
                   videoSrc={mediaAssets.heroVideoSrc}
@@ -249,12 +209,7 @@ export default function Home() {
                   videoControls={false}
                 />
                 {/* Floating Card */}
-                <motion.div 
-                  className="absolute bottom-6 left-6 right-6 glass backdrop-blur-md rounded-2xl shadow-premium-lg p-5"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, delay: 1 }}
-                >
+                <div className="absolute bottom-6 left-6 right-6 glass backdrop-blur-md rounded-2xl shadow-premium-lg p-5">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-sm text-gray-600 mb-1">Match Score</div>
@@ -266,12 +221,12 @@ export default function Home() {
                       <TrendingUp className="w-8 h-8 text-white" />
                     </div>
                   </div>
-                </motion.div>
+                </div>
               </div>
               {/* Decorative blurs */}
               <div className="absolute -top-10 -right-10 w-40 h-40 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full blur-3xl opacity-20 animate-pulse-slow"></div>
               <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-full blur-3xl opacity-20 animate-float"></div>
-            </motion.div>
+            </div>
           </div>
         </div>
       </section>
@@ -279,12 +234,12 @@ export default function Home() {
       {/* Trust Logos */}
       <section className="py-12 bg-white border-y border-gray-200">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <p className="text-center text-sm text-gray-500 mb-8 font-semibold">
+          <p className="text-center text-sm text-gray-600 mb-8 font-semibold">
             ENGINEERS FROM TOP COMPANIES TRUST US
           </p>
-          <div className="flex flex-wrap justify-center items-center gap-12 opacity-50">
+          <div className="flex flex-wrap justify-center items-center gap-12">
             {['Google', 'Meta', 'Amazon', 'Microsoft', 'Apple', 'Netflix'].map((company) => (
-              <div key={company} className="text-2xl font-bold text-gray-400">
+              <div key={company} className="text-2xl font-bold text-gray-600">
                 {company}
               </div>
             ))}

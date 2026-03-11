@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { KeyRound, Loader2, Plus, RefreshCw, Share2, ShieldCheck, Trash2 } from "lucide-react";
 
 type MeUser = {
   id: string;
@@ -46,6 +46,42 @@ type DiscountForm = {
   active: boolean;
 };
 
+type SocialProvider = "facebook" | "linkedin" | "twitter";
+type SocialCapability = "live_publish" | "stored_only";
+
+type SocialIntegrationSummary = {
+  provider: SocialProvider;
+  label: string;
+  description: string;
+  capability: SocialCapability;
+  enabled: boolean;
+  configured: boolean;
+  updatedAt?: string | null;
+  publicConfig: Record<string, string>;
+  secretMasks: Record<string, string | null>;
+};
+
+type SocialForms = {
+  facebook: {
+    enabled: boolean;
+    pageId: string;
+    pageAccessToken: string;
+  };
+  linkedin: {
+    enabled: boolean;
+    organizationUrn: string;
+    accessToken: string;
+  };
+  twitter: {
+    enabled: boolean;
+    handle: string;
+    apiKey: string;
+    apiSecret: string;
+    accessToken: string;
+    accessTokenSecret: string;
+  };
+};
+
 const EMPTY_DISCOUNT_FORM: DiscountForm = {
   code: "",
   description: "",
@@ -62,14 +98,133 @@ const EMPTY_DISCOUNT_FORM: DiscountForm = {
   active: true,
 };
 
+const DEFAULT_SOCIAL_INTEGRATIONS: SocialIntegrationSummary[] = [
+  {
+    provider: "facebook",
+    label: "Facebook Page",
+    description: "Used by blog auto-publish when a post is published.",
+    capability: "live_publish",
+    enabled: false,
+    configured: false,
+    updatedAt: null,
+    publicConfig: { pageId: "" },
+    secretMasks: { pageAccessToken: null },
+  },
+  {
+    provider: "linkedin",
+    label: "LinkedIn Company Page",
+    description: "Stores organization publishing credentials for future social workflows.",
+    capability: "stored_only",
+    enabled: false,
+    configured: false,
+    updatedAt: null,
+    publicConfig: { organizationUrn: "" },
+    secretMasks: { accessToken: null },
+  },
+  {
+    provider: "twitter",
+    label: "X / Twitter",
+    description: "Stores app and account credentials for future publishing workflows.",
+    capability: "stored_only",
+    enabled: false,
+    configured: false,
+    updatedAt: null,
+    publicConfig: { handle: "" },
+    secretMasks: {
+      apiKey: null,
+      apiSecret: null,
+      accessToken: null,
+      accessTokenSecret: null,
+    },
+  },
+];
+
+const EMPTY_SOCIAL_FORMS: SocialForms = {
+  facebook: {
+    enabled: false,
+    pageId: "",
+    pageAccessToken: "",
+  },
+  linkedin: {
+    enabled: false,
+    organizationUrn: "",
+    accessToken: "",
+  },
+  twitter: {
+    enabled: false,
+    handle: "",
+    apiKey: "",
+    apiSecret: "",
+    accessToken: "",
+    accessTokenSecret: "",
+  },
+};
+
+function normalizeSocialIntegrations(items: unknown): SocialIntegrationSummary[] {
+  const incoming = Array.isArray(items) ? (items as SocialIntegrationSummary[]) : [];
+  const byProvider = new Map(incoming.map((item) => [item.provider, item]));
+  return DEFAULT_SOCIAL_INTEGRATIONS.map((fallback) => {
+    const next = byProvider.get(fallback.provider);
+    return {
+      ...fallback,
+      ...next,
+      publicConfig: {
+        ...fallback.publicConfig,
+        ...(next?.publicConfig || {}),
+      },
+      secretMasks: {
+        ...fallback.secretMasks,
+        ...(next?.secretMasks || {}),
+      },
+    };
+  });
+}
+
+function socialFormsFromIntegrations(integrations: SocialIntegrationSummary[]): SocialForms {
+  const byProvider = new Map(integrations.map((item) => [item.provider, item]));
+  const facebook = byProvider.get("facebook");
+  const linkedin = byProvider.get("linkedin");
+  const twitter = byProvider.get("twitter");
+
+  return {
+    facebook: {
+      enabled: Boolean(facebook?.enabled),
+      pageId: String(facebook?.publicConfig?.pageId || ""),
+      pageAccessToken: "",
+    },
+    linkedin: {
+      enabled: Boolean(linkedin?.enabled),
+      organizationUrn: String(linkedin?.publicConfig?.organizationUrn || ""),
+      accessToken: "",
+    },
+    twitter: {
+      enabled: Boolean(twitter?.enabled),
+      handle: String(twitter?.publicConfig?.handle || ""),
+      apiKey: "",
+      apiSecret: "",
+      accessToken: "",
+      accessTokenSecret: "",
+    },
+  };
+}
+
+function formatSettingsDate(value?: string | null) {
+  if (!value) return "Never";
+  return new Date(value).toLocaleString();
+}
+
 export default function AdminSettings() {
   const [user, setUser] = useState<MeUser | null>(null);
   const [mailHealth, setMailHealth] = useState<{ success: boolean; message: string } | null>(null);
   const [allowedOriginsText, setAllowedOriginsText] = useState("");
+  const [socialIntegrations, setSocialIntegrations] = useState<SocialIntegrationSummary[]>(DEFAULT_SOCIAL_INTEGRATIONS);
+  const [socialForms, setSocialForms] = useState<SocialForms>(EMPTY_SOCIAL_FORMS);
   const [discountCodes, setDiscountCodes] = useState<AdminDiscountCode[]>([]);
   const [discountForm, setDiscountForm] = useState<DiscountForm>(EMPTY_DISCOUNT_FORM);
   const [loading, setLoading] = useState(true);
   const [savingOrigins, setSavingOrigins] = useState(false);
+  const [savingSocialProvider, setSavingSocialProvider] = useState<SocialProvider | "">("");
+  const [clearingSocialProvider, setClearingSocialProvider] = useState<SocialProvider | "">("");
   const [savingDiscount, setSavingDiscount] = useState(false);
   const [updatingDiscountId, setUpdatingDiscountId] = useState("");
   const [error, setError] = useState("");
@@ -90,22 +245,45 @@ export default function AdminSettings() {
   };
 
   const originCount = useMemo(() => parseOrigins(allowedOriginsText).length, [allowedOriginsText]);
+  const socialReadyCount = useMemo(
+    () => socialIntegrations.filter((item) => item.configured).length,
+    [socialIntegrations],
+  );
+  const socialByProvider = useMemo(
+    () =>
+      Object.fromEntries(
+        socialIntegrations.map((item) => [item.provider, item]),
+      ) as Record<SocialProvider, SocialIntegrationSummary>,
+    [socialIntegrations],
+  );
+
+  const updateSocialForm = <P extends SocialProvider>(provider: P, patch: Partial<SocialForms[P]>) => {
+    setSocialForms((prev) => ({
+      ...prev,
+      [provider]: {
+        ...prev[provider],
+        ...patch,
+      },
+    }));
+  };
 
   const load = async () => {
     try {
       setLoading(true);
       setError("");
       setSuccess("");
-      const [meRes, mailRes, extRes, discountRes] = await Promise.all([
+      const [meRes, mailRes, extRes, socialRes, discountRes] = await Promise.all([
         fetch("/api/auth/me", { credentials: "include" }),
         fetch("/api/auth/mail-health", { credentials: "include" }),
         fetch("/api/admin/settings/extension", { credentials: "include" }),
+        fetch("/api/admin/settings/social-integrations", { credentials: "include" }),
         fetch("/api/admin/discount-codes?limit=200", { credentials: "include" }),
       ]);
-      const [meData, mailData, extData, discountData] = await Promise.all([
+      const [meData, mailData, extData, socialData, discountData] = await Promise.all([
         meRes.json(),
         mailRes.json(),
         extRes.json(),
+        socialRes.json(),
         discountRes.json(),
       ]);
       if (meRes.ok && meData?.success) setUser(meData?.data?.user || meData?.user);
@@ -119,6 +297,14 @@ export default function AdminSettings() {
           : [];
         setAllowedOriginsText(origins.join("\n"));
       }
+      if (socialRes.ok && socialData?.success) {
+        const integrations = normalizeSocialIntegrations(socialData?.data?.integrations);
+        setSocialIntegrations(integrations);
+        setSocialForms(socialFormsFromIntegrations(integrations));
+      } else {
+        setSocialIntegrations(DEFAULT_SOCIAL_INTEGRATIONS);
+        setSocialForms(EMPTY_SOCIAL_FORMS);
+      }
       if (discountRes.ok && discountData?.success) {
         const codes = Array.isArray(discountData?.data?.codes)
           ? (discountData.data.codes as AdminDiscountCode[])
@@ -129,6 +315,106 @@ export default function AdminSettings() {
       setError(e instanceof Error ? e.message : "Failed to load settings");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveSocialIntegration = async (provider: SocialProvider) => {
+    try {
+      setSavingSocialProvider(provider);
+      setError("");
+      setSuccess("");
+
+      let payload: Record<string, unknown>;
+      if (provider === "facebook") {
+        payload = {
+          provider,
+          enabled: socialForms.facebook.enabled,
+          publicConfig: {
+            pageId: socialForms.facebook.pageId,
+          },
+          secrets: {
+            pageAccessToken: socialForms.facebook.pageAccessToken,
+          },
+        };
+      } else if (provider === "linkedin") {
+        payload = {
+          provider,
+          enabled: socialForms.linkedin.enabled,
+          publicConfig: {
+            organizationUrn: socialForms.linkedin.organizationUrn,
+          },
+          secrets: {
+            accessToken: socialForms.linkedin.accessToken,
+          },
+        };
+      } else {
+        payload = {
+          provider,
+          enabled: socialForms.twitter.enabled,
+          publicConfig: {
+            handle: socialForms.twitter.handle,
+          },
+          secrets: {
+            apiKey: socialForms.twitter.apiKey,
+            apiSecret: socialForms.twitter.apiSecret,
+            accessToken: socialForms.twitter.accessToken,
+            accessTokenSecret: socialForms.twitter.accessTokenSecret,
+          },
+        };
+      }
+
+      const res = await fetch("/api/admin/settings/social-integrations", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to save social integration");
+
+      const updated = data?.data?.integration as SocialIntegrationSummary | undefined;
+      const nextIntegrations = normalizeSocialIntegrations(
+        socialIntegrations
+          .filter((item) => item.provider !== provider)
+          .concat(updated ? [updated] : []),
+      );
+      setSocialIntegrations(nextIntegrations);
+      setSocialForms(socialFormsFromIntegrations(nextIntegrations));
+      setSuccess(`${socialByProvider[provider]?.label || provider} settings saved.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save social integration");
+    } finally {
+      setSavingSocialProvider("");
+    }
+  };
+
+  const clearIntegration = async (provider: SocialProvider) => {
+    const label = socialByProvider[provider]?.label || provider;
+    if (!window.confirm(`Clear ${label} credentials and settings?`)) return;
+
+    try {
+      setClearingSocialProvider(provider);
+      setError("");
+      setSuccess("");
+      const res = await fetch("/api/admin/settings/social-integrations", {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to clear social integration");
+
+      const nextIntegrations = normalizeSocialIntegrations(
+        socialIntegrations.filter((item) => item.provider !== provider),
+      );
+      setSocialIntegrations(nextIntegrations);
+      setSocialForms(socialFormsFromIntegrations(nextIntegrations));
+      setSuccess(`${label} settings cleared.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to clear social integration");
+    } finally {
+      setClearingSocialProvider("");
     }
   };
 
@@ -241,7 +527,7 @@ export default function AdminSettings() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-1">Admin Settings</h1>
-          <p className="text-gray-600">Environment checks and extension dashboard URL controls</p>
+          <p className="text-gray-600">Environment checks, social integrations, and extension dashboard URL controls</p>
         </div>
         <button
           onClick={() => void load()}
@@ -307,6 +593,324 @@ export default function AdminSettings() {
             {savingOrigins ? "Saving..." : "Save Origins"}
           </button>
           <span className="text-xs text-gray-500">Extension picks this up on next page refresh/check.</span>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border-2 border-gray-200 p-6 space-y-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-gray-900">Social Integrations</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Save social platform tokens securely in admin settings. Facebook is live for blog auto-post. LinkedIn and X are stored and ready for future publishing flows.
+            </p>
+          </div>
+          <div className="text-xs text-gray-500">{socialReadyCount} ready / {socialIntegrations.length} total</div>
+        </div>
+
+        <div className="grid xl:grid-cols-3 gap-4">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-blue-600" />
+                  <h3 className="font-semibold text-gray-900">{socialByProvider.facebook.label}</h3>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">{socialByProvider.facebook.description}</p>
+              </div>
+              <span
+                className={`px-2 py-1 rounded-full text-[11px] font-semibold border ${
+                  socialByProvider.facebook.enabled
+                    ? socialByProvider.facebook.configured
+                      ? "bg-green-100 text-green-700 border-green-200"
+                      : "bg-amber-100 text-amber-700 border-amber-200"
+                    : "bg-gray-100 text-gray-600 border-gray-200"
+                }`}
+              >
+                {socialByProvider.facebook.enabled
+                  ? socialByProvider.facebook.configured
+                    ? "ready"
+                    : "incomplete"
+                  : "disabled"}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-white px-3 py-2">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-700">
+                <ShieldCheck className="w-4 h-4" />
+                Live blog publish
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={socialForms.facebook.enabled}
+                  onChange={(e) => updateSocialForm("facebook", { enabled: e.target.checked })}
+                />
+                Enabled
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Page ID</label>
+              <input
+                value={socialForms.facebook.pageId}
+                onChange={(e) => updateSocialForm("facebook", { pageId: e.target.value })}
+                placeholder="123456789012345"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Replace Page Access Token</label>
+              <input
+                type="password"
+                value={socialForms.facebook.pageAccessToken}
+                onChange={(e) => updateSocialForm("facebook", { pageAccessToken: e.target.value })}
+                placeholder="Leave blank to keep existing token"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Current token: {socialByProvider.facebook.secretMasks.pageAccessToken || "not saved"}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Last updated: {formatSettingsDate(socialByProvider.facebook.updatedAt)}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => void saveSocialIntegration("facebook")}
+                disabled={savingSocialProvider === "facebook"}
+                className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2"
+              >
+                {savingSocialProvider === "facebook" ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                Save Facebook
+              </button>
+              <button
+                onClick={() => void clearIntegration("facebook")}
+                disabled={clearingSocialProvider === "facebook"}
+                className="px-4 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 font-semibold hover:bg-red-100 disabled:opacity-60 inline-flex items-center gap-2"
+              >
+                {clearingSocialProvider === "facebook" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-slate-600" />
+                  <h3 className="font-semibold text-gray-900">{socialByProvider.linkedin.label}</h3>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">{socialByProvider.linkedin.description}</p>
+              </div>
+              <span
+                className={`px-2 py-1 rounded-full text-[11px] font-semibold border ${
+                  socialByProvider.linkedin.enabled
+                    ? socialByProvider.linkedin.configured
+                      ? "bg-green-100 text-green-700 border-green-200"
+                      : "bg-amber-100 text-amber-700 border-amber-200"
+                    : "bg-gray-100 text-gray-600 border-gray-200"
+                }`}
+              >
+                {socialByProvider.linkedin.enabled
+                  ? socialByProvider.linkedin.configured
+                    ? "ready"
+                    : "incomplete"
+                  : "disabled"}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                <ShieldCheck className="w-4 h-4" />
+                Stored for future use
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={socialForms.linkedin.enabled}
+                  onChange={(e) => updateSocialForm("linkedin", { enabled: e.target.checked })}
+                />
+                Enabled
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Organization URN</label>
+              <input
+                value={socialForms.linkedin.organizationUrn}
+                onChange={(e) => updateSocialForm("linkedin", { organizationUrn: e.target.value })}
+                placeholder="urn:li:organization:123456"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Replace Access Token</label>
+              <input
+                type="password"
+                value={socialForms.linkedin.accessToken}
+                onChange={(e) => updateSocialForm("linkedin", { accessToken: e.target.value })}
+                placeholder="Leave blank to keep existing token"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Current token: {socialByProvider.linkedin.secretMasks.accessToken || "not saved"}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Last updated: {formatSettingsDate(socialByProvider.linkedin.updatedAt)}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => void saveSocialIntegration("linkedin")}
+                disabled={savingSocialProvider === "linkedin"}
+                className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 disabled:opacity-60 inline-flex items-center gap-2"
+              >
+                {savingSocialProvider === "linkedin" ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                Save LinkedIn
+              </button>
+              <button
+                onClick={() => void clearIntegration("linkedin")}
+                disabled={clearingSocialProvider === "linkedin"}
+                className="px-4 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 font-semibold hover:bg-red-100 disabled:opacity-60 inline-flex items-center gap-2"
+              >
+                {clearingSocialProvider === "linkedin" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-slate-600" />
+                  <h3 className="font-semibold text-gray-900">{socialByProvider.twitter.label}</h3>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">{socialByProvider.twitter.description}</p>
+              </div>
+              <span
+                className={`px-2 py-1 rounded-full text-[11px] font-semibold border ${
+                  socialByProvider.twitter.enabled
+                    ? socialByProvider.twitter.configured
+                      ? "bg-green-100 text-green-700 border-green-200"
+                      : "bg-amber-100 text-amber-700 border-amber-200"
+                    : "bg-gray-100 text-gray-600 border-gray-200"
+                }`}
+              >
+                {socialByProvider.twitter.enabled
+                  ? socialByProvider.twitter.configured
+                    ? "ready"
+                    : "incomplete"
+                  : "disabled"}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                <ShieldCheck className="w-4 h-4" />
+                Stored for future use
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={socialForms.twitter.enabled}
+                  onChange={(e) => updateSocialForm("twitter", { enabled: e.target.checked })}
+                />
+                Enabled
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Handle</label>
+              <input
+                value={socialForms.twitter.handle}
+                onChange={(e) => updateSocialForm("twitter", { handle: e.target.value })}
+                placeholder="@brandname"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Replace API Key</label>
+                <input
+                  type="password"
+                  value={socialForms.twitter.apiKey}
+                  onChange={(e) => updateSocialForm("twitter", { apiKey: e.target.value })}
+                  placeholder="Leave blank to keep existing"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <div className="text-xs text-gray-500 mt-1">
+                  Current: {socialByProvider.twitter.secretMasks.apiKey || "not saved"}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Replace API Secret</label>
+                <input
+                  type="password"
+                  value={socialForms.twitter.apiSecret}
+                  onChange={(e) => updateSocialForm("twitter", { apiSecret: e.target.value })}
+                  placeholder="Leave blank to keep existing"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <div className="text-xs text-gray-500 mt-1">
+                  Current: {socialByProvider.twitter.secretMasks.apiSecret || "not saved"}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Replace Access Token</label>
+                <input
+                  type="password"
+                  value={socialForms.twitter.accessToken}
+                  onChange={(e) => updateSocialForm("twitter", { accessToken: e.target.value })}
+                  placeholder="Leave blank to keep existing"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <div className="text-xs text-gray-500 mt-1">
+                  Current: {socialByProvider.twitter.secretMasks.accessToken || "not saved"}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Replace Access Token Secret</label>
+                <input
+                  type="password"
+                  value={socialForms.twitter.accessTokenSecret}
+                  onChange={(e) => updateSocialForm("twitter", { accessTokenSecret: e.target.value })}
+                  placeholder="Leave blank to keep existing"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <div className="text-xs text-gray-500 mt-1">
+                  Current: {socialByProvider.twitter.secretMasks.accessTokenSecret || "not saved"}
+                </div>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-500">Last updated: {formatSettingsDate(socialByProvider.twitter.updatedAt)}</div>
+
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => void saveSocialIntegration("twitter")}
+                disabled={savingSocialProvider === "twitter"}
+                className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 disabled:opacity-60 inline-flex items-center gap-2"
+              >
+                {savingSocialProvider === "twitter" ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                Save X
+              </button>
+              <button
+                onClick={() => void clearIntegration("twitter")}
+                disabled={clearingSocialProvider === "twitter"}
+                className="px-4 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 font-semibold hover:bg-red-100 disabled:opacity-60 inline-flex items-center gap-2"
+              >
+                {clearingSocialProvider === "twitter" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Clear
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

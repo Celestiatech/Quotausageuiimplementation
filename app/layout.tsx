@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 
-const GOOGLE_TAG_ID = "G-L6QMNGGDVH";
+const GOOGLE_TAG_ID = String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim();
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.autoapplycv.in"),
@@ -23,18 +23,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_TAG_ID}`}
-          strategy="afterInteractive"
-        />
-        <Script id="google-tag-manager" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', '${GOOGLE_TAG_ID}');
-          `}
-        </Script>
+        {GOOGLE_TAG_ID ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_TAG_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-tag-manager" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GOOGLE_TAG_ID}');
+              `}
+            </Script>
+          </>
+        ) : null}
       </head>
       <body>{children}</body>
     </html>

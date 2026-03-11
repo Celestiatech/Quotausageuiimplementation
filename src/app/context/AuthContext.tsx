@@ -55,6 +55,14 @@ type AuthContextType = {
 
 const SESSION_KEY = 'user';
 
+function routeRequiresAuthBootstrap(pathname: string) {
+  if (!pathname) return false;
+  if (pathname.startsWith('/dashboard')) return true;
+  if (pathname === '/admin/login') return false;
+  if (pathname.startsWith('/admin')) return true;
+  return false;
+}
+
 function readStoredUser() {
   if (typeof window === 'undefined') return null;
   try {
@@ -105,6 +113,12 @@ const useAuthStore = create<AuthStore>((set, get) => ({
     const storedUser = readStoredUser();
     if (storedUser) {
       set({ user: storedUser });
+    }
+
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (!routeRequiresAuthBootstrap(pathname) && !storedUser) {
+      set({ isBootstrapping: false });
+      return;
     }
 
     try {

@@ -4,6 +4,7 @@ import { requireAdmin } from "src/lib/guards";
 import { fail, handleApiError, ok } from "src/lib/api";
 import { writeAuditLog } from "src/lib/audit";
 import { normalizeBlogKeywords, slugifyBlogTitle, stripHtmlToText } from "src/lib/blog";
+import { syncFacebookPublishState } from "src/lib/facebook";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -18,6 +19,7 @@ const updateBlogSchema = z
     contentHtml: z.string().min(1).optional(),
     keywords: z.array(z.string().trim().max(80)).optional(),
     status: z.enum(["draft", "published"]).optional(),
+    socialAutoPostEnabled: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",
@@ -80,6 +82,10 @@ export async function PATCH(req: Request, { params }: RouteParams) {
     const slug = await resolveUniqueSlug(requestedSlug || nextTitle, existing.id);
 
     const status = payload.status || existing.status;
+    const socialAutoPostEnabled =
+      payload.socialAutoPostEnabled !== undefined
+        ? payload.socialAutoPostEnabled
+        : existing.socialAutoPostEnabled;
     const publishedAt =
       status === "published"
         ? existing.publishedAt || new Date()
@@ -95,7 +101,7 @@ export async function PATCH(req: Request, { params }: RouteParams) {
         ? normalizeBlogKeywords(existing.keywordsJson)
         : [];
 
-    const post = await prisma.blogPost.update({
+    let post = await prisma.blogPost.update({
       where: { id: existing.id },
       data: {
         title: nextTitle,
@@ -108,9 +114,13 @@ export async function PATCH(req: Request, { params }: RouteParams) {
         contentHtml: nextContent,
         keywordsJson: keywords,
         status,
+        socialAutoPostEnabled,
         publishedAt,
       },
     });
+
+    const facebookSync = await syncFacebookPublishState(req, post);
+    post = facebookSync.post;
 
     await writeAuditLog({
       actorUserId: authResult.auth.user.id,
@@ -120,10 +130,21 @@ export async function PATCH(req: Request, { params }: RouteParams) {
       metadataJson: {
         slug: post.slug,
         status: post.status,
+        socialAutoPostEnabled: post.socialAutoPostEnabled,
+        facebookPostId: post.facebookPostId,
+        facebookPostedAt: post.facebookPostedAt,
+        facebookPostError: post.facebookPostError,
       },
     });
 
-    return ok("Blog post updated", { post });
+    const message =
+      facebookSync.result.attempted && facebookSync.result.ok
+        ? "Blog post updated and posted to Facebook"
+        : facebookSync.result.attempted && !facebookSync.result.ok
+        ? `Blog post updated, but Facebook auto-post failed: ${facebookSync.result.error}`
+        : "Blog post updated";
+
+    return ok(message, { post, facebook: facebookSync.result });
   } catch (error) {
     return handleApiError(error, "Failed to update blog post");
   }
