@@ -960,8 +960,8 @@ const DEFAULT_SETTINGS = {
   authToken: "",
   enableBackendSync: false,
   aiAnswerPath: "/ai/answer",
-  dryRun: true,
-  autoSubmit: false,
+  dryRun: false,
+  autoSubmit: true,
   liveModeAcknowledged: true,
   autoResumeOnAnswer: true,
   runNonStop: false,
@@ -999,7 +999,7 @@ const DEFAULT_SETTINGS = {
   badWords: [],
   currentExperience: -1,
   didMasters: false,
-  securityClearance: false,
+  securityClearance: true,
   followCompanies: false,
   pauseBeforeSubmit: false,
   pauseAtFailedQuestion: true,
@@ -1242,6 +1242,12 @@ async function getSettings() {
       // Keep debug off by default unless the user explicitly enabled it.
       if (cpSettings && typeof cpSettings.debugMode === "undefined") {
         patch.debugMode = false;
+      }
+      // Migration: Reset onSite filter if it was incorrectly set to only "Remote"
+      const currentOnSite = normalizeArray(merged.onSite);
+      if (currentOnSite.length === 1 && currentOnSite[0].toLowerCase() === 'remote') {
+        console.log('[Indeed Migration] Resetting onSite filter from ["Remote"] to []');
+        patch.onSite = [];
       }
     }
     if (Object.keys(patch).length > 0) {

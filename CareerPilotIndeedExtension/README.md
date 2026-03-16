@@ -59,21 +59,25 @@ The replica test validates:
 - Required consent checkbox auto-selection
 - Dry-run reaching submit stage without pending-question pause
 
-## Real LinkedIn Smoke Test (Dry-Run Only)
-You can run an opt-in smoke test on real LinkedIn pages using your own local logged-in profile.
+## Real Indeed Smoke Test (Dry-Run Only)
+You can run an opt-in smoke test on real Indeed pages using your own local profile.
 
-Do not share LinkedIn credentials in chat or commit them in code.
+Do not share account credentials in chat or commit them in code.
 
-1. Create/use a dedicated Chromium profile folder and login to LinkedIn once manually.
+1. Create/use a dedicated Chromium profile folder. If you want to apply, login to Indeed once manually.
 2. Run:
 
 ```bash
-export CP_LINKEDIN_PROFILE_DIR="/absolute/path/to/chromium-profile"
-npm run test:e2e:live:dry
+export CP_INDEED_PROFILE_DIR="/absolute/path/to/chromium-profile"
+export CP_INDEED_SEARCH="software engineer"
+export CP_INDEED_LOCATION=""
+export CP_INDEED_HEADLESS="1"
+npm run test:e2e:live:indeed:dry
 ```
 
 What this live test does:
-- Loads the extension on real LinkedIn Jobs search
+- Loads the extension on real Indeed Jobs search
 - Forces safe mode (`dryRun=true`, `autoSubmit=false`)
-- Starts a run and verifies automation engine startup
+- Starts a run and waits for "Automation engine initialized"
+- Attempts to detect a live apply flow without submitting
 - Stops run after smoke verification
