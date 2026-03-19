@@ -1,0 +1,17 @@
+{
+  "name": "jobs-smart-outreach-extension",
+  "version": "1.0.0",
+  "description": "Jobs Smart Outreach — LinkedIn HR contact collector extension",
+  "scripts": {
+    "build": "cp -r src popup icons manifest.json dist/",
+    "zip": "cd dist && zip -r ../jobs-smart-outreach-v1.0.0.zip .",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:real:linkedin": "playwright test tests/real-linkedin.spec.js --headed",
+    "test:feed:replica": "playwright test tests/feed-replica.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

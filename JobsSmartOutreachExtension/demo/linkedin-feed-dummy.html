@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkedIn Feed Dummy Replica</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f3f2ef; }
+    .topbar { background: #0a66c2; color: #fff; padding: 14px 18px; font-weight: 700; }
+    .wrap { max-width: 760px; margin: 24px auto; padding: 0 12px; }
+    .feed-shared-update-v2 {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+    .update-components-actor__name { font-weight: 700; display: block; color: #111; }
+    .update-components-actor__description { color: #666; margin-top: 3px; font-size: 14px; }
+    .update-components-text { margin-top: 10px; line-height: 1.45; color: #222; }
+    .update-components-actor__meta { margin-top: 7px; }
+    .update-components-actor__meta a { color: #0a66c2; text-decoration: none; }
+    .hashtags { margin-top: 8px; }
+    .hashtags a { color: #0a66c2; text-decoration: none; margin-right: 10px; font-size: 13px; }
+    .hint {
+      background: #eef6ff;
+      border: 1px solid #cfe6ff;
+      color: #0a3f7a;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">LinkedIn Feed Dummy Replica (for extension testing)</div>
+  <div class="wrap">
+    <div class="hint">
+      This page intentionally uses LinkedIn-like selectors used by <b>Jobs Smart Outreach</b> content script.
+      It contains valid test emails for extraction and one duplicate email for dedupe verification.
+    </div>
+
+    <article class="feed-shared-update-v2" data-testid="post-a">
+      <span class="update-components-actor__name">Anita Sharma</span>
+      <div class="update-components-actor__description">HR Manager at Acme Labs</div>
+      <div class="update-components-actor__meta"><a href="/in/anita-sharma-hr/">View profile</a></div>
+      <div class="update-components-text">
+        We are hiring frontend engineers. Send resume to <b>anita@acmelabs.com</b>.
+      </div>
+      <div class="hashtags">
+        <a href="/feed/hashtag/?keywords=hiring">#hiring</a>
+        <a href="/feed/hashtag/?keywords=frontend">#frontend</a>
+      </div>
+    </article>
+
+    <article class="feed-shared-update-v2" data-testid="post-b">
+      <span class="update-components-actor__name">Rahul Verma</span>
+      <div class="update-components-actor__description">Talent Acquisition at CloudNest</div>
+      <div class="update-components-actor__meta"><a href="/in/rahul-verma-ta/">View profile</a></div>
+      <div class="update-components-text">
+        #WeAreHiring backend developers and SRE. Contact <b>careers@cloudnest.io</b>.
+      </div>
+      <div class="hashtags">
+        <a href="/feed/hashtag/?keywords=wearehiring">#wearehiring</a>
+        <a href="/feed/hashtag/?keywords=backend">#backend</a>
+      </div>
+    </article>
+
+    <article class="feed-shared-update-v2" data-testid="post-c">
+      <span class="update-components-actor__name">Anita Sharma</span>
+      <div class="update-components-actor__description">HR Manager at Acme Labs</div>
+      <div class="update-components-actor__meta"><a href="/in/anita-sharma-hr/">View profile</a></div>
+      <div class="update-components-text">
+        Repost — we are hiring again. Mail <b>anita@acmelabs.com</b>.
+      </div>
+      <div class="hashtags">
+        <a href="/feed/hashtag/?keywords=hiring">#hiring</a>
+      </div>
+    </article>
+  </div>
+</body>
+</html>

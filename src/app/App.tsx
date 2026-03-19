@@ -45,6 +45,9 @@ import Settings from './pages/dashboard/Settings';
 import Profile from './pages/dashboard/Profile';
 import Billing from './pages/dashboard/Billing';
 import Onboarding from './pages/dashboard/Onboarding';
+import Marketing from './pages/dashboard/Marketing';
+import HROutreach from './pages/dashboard/HROutreach';
+import ColdEmails from './pages/dashboard/ColdEmails';
 
 // Admin Pages
 import AdminOverview from './pages/admin/Overview';
@@ -146,6 +149,9 @@ export default function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="profile" element={<Profile />} />
             <Route path="billing" element={<Billing />} />
+            <Route path="marketing" element={<Marketing />} />
+            <Route path="hr-outreach" element={<HROutreach />} />
+            <Route path="cold-emails" element={<ColdEmails />} />
             <Route path="onboarding" element={<Onboarding />} />
           </Route>
 

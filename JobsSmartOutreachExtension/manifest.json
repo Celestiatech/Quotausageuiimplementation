@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "name": "Jobs Smart Outreach",
+  "version": "1.0.0",
+  "description": "Collect HR contacts from LinkedIn 'We are hiring' posts and send targeted cold emails — right from your browser.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://autoapplycv.in/*",
+    "https://www.autoapplycv.in/*",
+    "https://autoapplycv.vercel.app/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3001/*",
+    "http://127.0.0.1:3001/*",
+    "http://localhost/*",
+    "https://localhost/*",
+    "http://127.0.0.1/*",
+    "https://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Jobs Smart Outreach"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png"],
+      "matches": ["https://www.linkedin.com/*"]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/*"],
+      "js": ["src/content.js"],
+      "css": ["src/panel.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://autoapplycv.in/*",
+        "https://www.autoapplycv.in/*",
+        "https://autoapplycv.vercel.app/*",
+        "http://localhost:3000/*",
+        "http://localhost:3001/*",
+        "http://127.0.0.1:3000/*",
+        "http://127.0.0.1:3001/*"
+      ],
+      "js": ["src/bridge.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

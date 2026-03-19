@@ -1,6 +1,16 @@
 function sendMessage(message) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(message, (res) => resolve(res || { ok: false }));
+    try {
+      chrome.runtime.sendMessage(message, (res) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(res || { ok: false });
+      });
+    } catch (err) {
+      resolve({ ok: false, error: String(err?.message || err) });
+    }
   });
 }
 
@@ -480,19 +490,32 @@ function waitForTabComplete(tabId, timeoutMs = 20000) {
   });
 }
 
+function getIndeedJobsUrl(fromUrl) {
+  try {
+    const u = new URL(String(fromUrl || ""));
+    if (u.hostname.endsWith(".indeed.com") || u.hostname === "indeed.com") {
+      return `https://${u.hostname}/jobs`;
+    }
+  } catch { /* ignore */ }
+  return JOBS_SEARCH_URL;
+}
+
 async function focusOrOpenLinkedInJobs() {
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  // Prefer reusing the active tab if it's already on LinkedIn.
+  // Derive the jobs base URL from the active tab's Indeed hostname (supports in.indeed.com, etc.)
+  const jobsUrl = getIndeedJobsUrl(active?.url) || JOBS_SEARCH_URL;
+
+  // Prefer reusing the active tab if it's already on Indeed.
   if (active?.id && isLinkedInUrl(active.url)) {
     if (!isLinkedInJobsUrl(active.url)) {
-      await chrome.tabs.update(active.id, { url: JOBS_SEARCH_URL, active: true });
+      await chrome.tabs.update(active.id, { url: jobsUrl, active: true });
       await waitForTabComplete(active.id);
     }
     return active.id;
   }
 
-  // Otherwise, activate an existing LinkedIn Jobs tab if present.
+  // Otherwise, activate an existing Indeed Jobs tab if present.
   const tabs = await chrome.tabs.query({ url: ["https://www.indeed.com/*", "https://*.indeed.com/*"] });
   const jobsTab = tabs.find((t) => t?.id && isLinkedInJobsUrl(t.url)) || null;
   if (jobsTab?.id) {
@@ -500,8 +523,8 @@ async function focusOrOpenLinkedInJobs() {
     return jobsTab.id;
   }
 
-  // Fallback: create a new Jobs tab.
-  const created = await chrome.tabs.create({ url: JOBS_SEARCH_URL, active: true });
+  // Fallback: create a new Jobs tab (prefer same subdomain as active tab).
+  const created = await chrome.tabs.create({ url: jobsUrl, active: true });
   if (created?.id) await waitForTabComplete(created.id);
   return created?.id || null;
 }

@@ -1,0 +1,21 @@
+/* Jobs Smart Outreach — panel.css */
+/* Floating collection status panel styles (injected into LinkedIn) */
+
+#jso-panel {
+  /* Base styles are applied inline in content.js for CSP compatibility */
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+#jso-panel.jso-hidden {
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+
+#jso-panel-stop:hover {
+  background: #dc2626 !important;
+}
+
+#jso-panel-stop:active {
+  transform: scale(0.96);
+}

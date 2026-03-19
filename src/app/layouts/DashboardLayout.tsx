@@ -17,7 +17,10 @@ import {
   CreditCard,
   ChevronDown,
   Zap,
-  PlayCircle
+  PlayCircle,
+  Mail,
+  Send,
+  MailCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
@@ -63,6 +66,9 @@ export default function DashboardLayout() {
     { name: 'Resume Builder', href: '/dashboard/resume', icon: FileText },
     { name: 'Interview Prep', href: '/dashboard/interview', icon: MessageSquare },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+    { name: 'Marketing', href: '/dashboard/marketing', icon: Mail },
+    { name: 'HR Outreach', href: '/dashboard/hr-outreach', icon: Send },
+    { name: 'Cold Emails', href: '/dashboard/cold-emails', icon: MailCheck },
     onboardingComplete
       ? { name: 'Billing', href: '/dashboard/billing', icon: CreditCard }
       : { name: 'Onboarding', href: '/dashboard/onboarding', icon: FileText },

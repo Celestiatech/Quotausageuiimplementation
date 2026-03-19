@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("PRISMA_DATABASE_URL")
 }
 
 enum UserRole {
@@ -139,6 +139,8 @@ model User {
   blogPosts     BlogPost[] @relation("blogPostAuthor")
   createdDiscountCodes DiscountCode[] @relation("discountCodeCreator")
   discountRedemptions  DiscountRedemption[]
+  emailTemplates       EmailTemplate[]
+  marketingCampaigns   MarketingCampaign[]
 }
 
 model EmailOtp {
@@ -419,4 +421,66 @@ model DiscountRedemption {
 
   @@index([discountCodeId, userId])
   @@index([context, createdAt])
+}
+
+model EmailTemplate {
+  id           String   @id @default(cuid())
+  userId       String?
+  name         String
+  subject      String
+  htmlContent  String   @db.Text
+  textContent  String   @db.Text
+  category     String   @default("general")
+  isGlobal     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns    MarketingCampaign[]
+
+  @@index([userId])
+  @@index([category])
+  @@index([isGlobal])
+}
+
+model MarketingCampaign {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  subject       String
+  status        String   @default("draft") // draft, scheduled, sending, sent, paused
+  templateId    String?
+  recipientList Json     @default("[]")
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+  stats         Json     @default("{\"sent\":0,\"delivered\":0,\"opened\":0,\"clicked\":0,\"bounced\":0,\"unsubscribed\":0}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template      EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  emails        CampaignEmail[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model CampaignEmail {
+  id         String   @id @default(cuid())
+  campaignId String
+  email      String
+  status     String   @default("pending") // pending, sent, delivered, opened, clicked, bounced, failed
+  sentAt     DateTime?
+  deliveredAt DateTime?
+  openedAt   DateTime?
+  clickedAt  DateTime?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  campaign   MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([email])
+  @@index([status])
 }

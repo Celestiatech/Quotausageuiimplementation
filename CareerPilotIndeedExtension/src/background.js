@@ -27,6 +27,21 @@ const PORTAL_ISSUE_REPORTED_KEY = "cpPortalIssueReported";
 const PORTAL_LAST_SYNC_SNAPSHOT_KEY = "cpPortalLastSyncSnapshot";
 const EXTENSION_PROVIDER = "indeed";
 
+// Cloudflare & Bot Detection Handling
+const CLOUDFLARE_BYPASS_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "no-cache",
+  "Pragma": "no-cache",
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
+};
+
 // Best-effort portal sync (AutoApply CV web app). This is fed by dashboard-bridge.js running on the site origin.
 let portalQuotaCache = {
   ts: 0,
@@ -53,12 +68,33 @@ let lastPortalSyncSnapshot = {
   lastChargedJobCompany: "",
 };
 
+
+// Centralized logging utility
+function logDetails(level, message, data = null) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    data,
+  };
+  console[level](JSON.stringify(logEntry));
+}
+
 function normalizePortalOrigin(value) {
+  logDetails("info", "Normalizing portal origin", { value });
+
   const raw = String(value || "").trim();
-  if (!raw) return "";
+  if (!raw) {
+    logDetails("warn", "Empty portal origin provided.");
+    return "";
+  }
+
   try {
-    return new URL(raw).origin;
-  } catch {
+    const normalized = new URL(raw).origin;
+    logDetails("info", "Normalized portal origin", { normalized });
+    return normalized;
+  } catch (error) {
+    logDetails("error", "Failed to normalize portal origin", { error: error.message });
     return "";
   }
 }
@@ -97,6 +133,45 @@ async function markPortalOriginFailure(origin) {
   };
   if (!portalOriginState.origin) portalOrigin = "";
   await persistPortalOriginState();
+}
+
+/**
+ * Check if a response indicates Cloudflare challenge
+ * @param {Response} response - Fetch response object
+ * @returns {boolean} - True if Cloudflare challenge detected
+ */
+function isCloudflareChallenge(response) {
+  if (!response) return false;
+  
+  // Check status code
+  if (response.status === 403 || response.status === 503) {
+    return true;
+  }
+  
+  // Check for Cloudflare headers
+  const serverHeader = response.headers?.get?.('server') || '';
+  if (serverHeader.includes('cloudflare')) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Log Cloudflare challenge with Ray ID
+ * @param {string} url - URL that triggered challenge
+ * @param {Response} response - Response object
+ */
+function logCloudflareChallenge(url, response) {
+  const rayId = response?.headers?.get?.('CF-Ray') || 'unknown';
+  const statusCode = response?.status || 'unknown';
+  
+  console.warn("[CareerPilot] ⚠️  Cloudflare Challenge Detected", {
+    url,
+    rayId,
+    statusCode,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 function normalizeLastPortalSyncSnapshot(raw) {
@@ -1899,6 +1974,99 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (!message || !message.type) return;
+
+    // Cloudflare challenge detection handler
+    if (message.type === "CP_CLOUDFLARE_CHALLENGE_DETECTED") {
+      const challenge = message.payload || {};
+      console.warn("[CareerPilot] 🚨 Cloudflare Challenge Alert", {
+        timestamp: new Date().toISOString(),
+        url: challenge.url,
+        rayId: challenge.rayId,
+        pageTitle: challenge.pageTitle,
+      });
+
+      // Store challenge info for debugging
+      const storedChallenges = await chrome.storage.local.get("cpCloudflareHistory") || {};
+      const history = storedChallenges.cpCloudflareHistory || [];
+      
+      history.unshift({
+        ...challenge,
+        storedAt: new Date().toISOString(),
+      });
+
+      // Keep last 10 challenges
+      if (history.length > 10) history.pop();
+      
+      await chrome.storage.local.set({ cpCloudflareHistory: history });
+
+      sendResponse({ ok: true, stored: true });
+      return;
+    }
+
+    // Safe SmartApply redirect handler
+    if (message.type === "CP_SAFE_REDIRECT_SMARTAPPLY") {
+      const url = String(message.url || "").trim();
+      
+      if (!url) {
+        console.error("[CareerPilot] Safe redirect: URL missing");
+        sendResponse({ ok: false, error: "URL missing" });
+        return;
+      }
+
+      try {
+        const urlObj = new URL(url);
+        
+        // Strict whitelist: only smartapply.indeed.com
+        if (urlObj.hostname !== "smartapply.indeed.com" && !urlObj.hostname.endsWith(".smartapply.indeed.com")) {
+          console.error("[CareerPilot] Security: Blocked redirect to untrusted domain:", urlObj.hostname);
+          sendResponse({ ok: false, error: "Untrusted domain" });
+          return;
+        }
+
+        // Validate path
+        const pathname = urlObj.pathname;
+        const validPaths = ['/beta/indeedapply/applybyapplyablejobid', '/resume-selection', '/questions'];
+        const isValidPath = validPaths.some(path => pathname.includes(path)) || pathname.includes('/beta/');
+        
+        if (!isValidPath) {
+          console.error("[CareerPilot] Security: Invalid SmartApply path:", pathname);
+          sendResponse({ ok: false, error: "Invalid path" });
+          return;
+        }
+
+        // For applybyapplyablejobid, validate parameters
+        if (pathname.includes('applybyapplyablejobid')) {
+          const params = urlObj.searchParams;
+          if (!params.has('indeedApplyableJobId')) {
+            console.error("[CareerPilot] Security: Missing indeedApplyableJobId parameter");
+            sendResponse({ ok: false, error: "Missing required parameter" });
+            return;
+          }
+        }
+
+        console.log("[CareerPilot] ✅ Safe redirect validated:", {
+          domain: urlObj.hostname,
+          path: pathname,
+        });
+
+        // Open in new tab safely
+        chrome.tabs.create({ url, active: true }, (tab) => {
+          if (tab) {
+            console.log("[CareerPilot] ✅ Opened SmartApply in tab:", tab.id);
+            sendResponse({ ok: true, tabId: tab.id });
+          } else {
+            const error = chrome.runtime.lastError?.message || "Unknown error";
+            console.error("[CareerPilot] Failed to open tab:", error);
+            sendResponse({ ok: false, error });
+          }
+        });
+
+      } catch (error) {
+        console.error("[CareerPilot] Redirect validation error:", error?.message || error);
+        sendResponse({ ok: false, error: error?.message || "Invalid URL" });
+      }
+      return;
+    }
 
     if (message.type === "CP_GET_BOOTSTRAP") {
       const dailyCap = await getDailyCapState();

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jobs Smart Outreach</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 340px;
+      min-height: 420px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #fafbfc;
+      color: #1e293b;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      padding: 16px 16px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-icon { font-size: 22px; }
+    .header-title { color: #fff; font-weight: 700; font-size: 15px; }
+    .header-sub { color: rgba(255,255,255,0.75); font-size: 11px; margin-top: 1px; }
+
+    /* ── Progress Ring ── */
+    .progress-section {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      background: #fff;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .progress-ring-wrap { position: relative; width: 56px; height: 56px; flex-shrink: 0; }
+    .progress-ring-wrap svg { transform: rotate(-90deg); }
+    .ring-bg { fill: none; stroke: #e2e8f0; stroke-width: 5; }
+    .ring-fill {
+      fill: none;
+      stroke: url(#ringGradient);
+      stroke-width: 5;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.5s ease;
+    }
+    .ring-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .ring-count { font-size: 15px; font-weight: 800; color: #6366f1; line-height: 1; }
+    .ring-max { font-size: 9px; color: #94a3b8; margin-top: 1px; }
+    .progress-info { flex: 1; }
+    .progress-label { font-size: 12px; font-weight: 600; color: #475569; }
+    .progress-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+    .cap-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #10b981;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 99px;
+      padding: 2px 8px;
+      margin-top: 4px;
+    }
+
+    /* ── Keyword Row ── */
+    .section { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; }
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #1e293b;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: #6366f1; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+
+    /* ── Buttons ── */
+    .actions { padding: 12px 16px; display: flex; gap: 8px; }
+    .btn {
+      flex: 1;
+      padding: 9px 0;
+      border: none;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+    }
+    .btn-stop { background: #ef4444; color: #fff; }
+    .btn-reset {
+      background: #f59e0b;
+      color: #fff;
+      font-size: 11px;
+      flex: 0 0 auto;
+      padding: 9px 10px;
+    }
+    .btn-outline {
+      background: #fff;
+      color: #6366f1;
+      border: 1px solid #c7d2fe;
+    }
+    .btn-outline:hover { background: #eef2ff; }
+
+    /* ── Status message ── */
+    .status-bar {
+      margin: 0 16px 10px;
+      padding: 8px 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #475569;
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid #e2e8f0;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Footer links ── */
+    .footer {
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .footer a {
+      font-size: 11px;
+      color: #94a3b8;
+      text-decoration: none;
+    }
+    .footer a:hover { color: #6366f1; text-decoration: underline; }
+    .footer-right { font-size: 10px; color: #cbd5e1; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <span class="header-icon">🎯</span>
+    <div>
+      <div class="header-title">Jobs Smart Outreach</div>
+      <div class="header-sub">LinkedIn HR Contact Collector</div>
+    </div>
+  </div>
+
+  <!-- Progress Ring -->
+  <div class="progress-section">
+    <div class="progress-ring-wrap">
+      <svg width="56" height="56" viewBox="0 0 56 56">
+        <defs>
+          <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#6366f1" />
+            <stop offset="100%" stop-color="#a855f7" />
+          </linearGradient>
+        </defs>
+        <circle class="ring-bg" cx="28" cy="28" r="24" />
+        <circle id="ringFill" class="ring-fill" cx="28" cy="28" r="24"
+          stroke-dasharray="150.8"
+          stroke-dashoffset="150.8" />
+      </svg>
+      <div class="ring-label">
+        <span class="ring-count" id="countDisplay">0</span>
+        <span class="ring-max">/ 100</span>
+      </div>
+    </div>
+    <div class="progress-info">
+      <div class="progress-label">HR Contacts Collected</div>
+      <div class="progress-sub" id="progressSub">Not started yet</div>
+      <div class="cap-badge hidden" id="capBadge">✓ Cap reached!</div>
+    </div>
+  </div>
+
+  <!-- Config -->
+  <div class="section">
+    <div class="section-label">Search Settings</div>
+    <input type="text" id="keyword" value="we are hiring" placeholder="Search keyword on LinkedIn" />
+    <div class="row-2">
+      <select id="category">
+        <option value="">All Categories</option>
+        <option>Software Engineering</option>
+        <option>Product Management</option>
+        <option>Design / UX</option>
+        <option>Data Science / AI</option>
+        <option>Marketing</option>
+        <option>Sales</option>
+        <option>Finance</option>
+        <option>HR / People Ops</option>
+        <option>Operations</option>
+        <option>DevOps / Cloud</option>
+      </select>
+      <select id="platform">
+        <option value="linkedin">LinkedIn</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn btn-primary" id="btnStart">▶ Start</button>
+    <button class="btn btn-stop hidden" id="btnStop">■ Stop</button>
+    <button class="btn btn-reset hidden" id="btnReset" title="Fix stuck state">↺</button>
+    <button class="btn btn-outline" id="btnDashboard" title="Open Cold Emails dashboard">📬 Dashboard</button>
+    <button class="btn btn-outline" id="btnClear" title="Clear all collected contacts">🗑</button>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar" id="statusBar">
+    <span id="statusText">Ready to collect. Click ▶ Start.</span>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div style="display:flex; gap:10px; align-items:center;">
+      <a href="#" id="exportBtn">⬇ Export CSV</a>
+      <a href="#" id="copyLogsBtn">📋 Copy Logs</a>
+      <a href="#" id="clearLogsBtn">🧹 Clear Logs</a>
+    </div>
+    <span class="footer-right">Jobs Smart Outreach v1.0</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

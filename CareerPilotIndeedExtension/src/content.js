@@ -2,6 +2,7 @@ const PANEL_ID = "cp-linkedin-copilot-panel";
 const TOGGLE_ID = "cp-linkedin-copilot-toggle";
 const EXTENSION_PROVIDER = "indeed";
 const JOBS_SEARCH_URL = "https://www.indeed.com/jobs";
+const SMARTAPPLY_BASE = "https://smartapply.indeed.com";
 const PANEL_POLL_MS = 1200;
 const CARD_OPEN_DELAY_MS = 1400;
 const APPLY_STEP_DELAY_MS = 2500;
@@ -36,6 +37,148 @@ function normalizeLabel(value) {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Centralized logging utility
+function logDetails(level, message, data = null) {
+  const logEntry = {
+    timestamp: nowIso(),
+    level,
+    message,
+    data,
+  };
+  console[level](JSON.stringify(logEntry));
+}
+
+/**
+ * Detect Cloudflare challenge on current page
+ * @returns {object|null} - Challenge info or null if not detected
+ */
+function detectCloudflareChallenge() {
+  logDetails("info", "Detecting Cloudflare challenge...");
+
+  const hasChallengeForm = !!document.querySelector(
+    '#challenge-form, #cf-challenge-running, #cf-please-wait, .cf-browser-verification'
+  );
+  const hasChallengeSpinner = !!document.querySelector(
+    '[class*="cf-browser"], [id^="cf-"][class*="challenge"], .cf-challenge-body'
+  );
+  const hasRayIdEl = !!document.querySelector(
+    '.ray-id, [data-ray], #cf-error-details'
+  );
+
+  const title = document.title || "";
+  const isChallengeTitle =
+    title === "Just a moment..." ||
+    title === "Attention Required! | Cloudflare" ||
+    /^Checking your browser/i.test(title);
+
+  if (!hasChallengeForm && !hasChallengeSpinner && !hasRayIdEl && !isChallengeTitle) {
+    logDetails("info", "No Cloudflare challenge detected.");
+    return null;
+  }
+
+  let cfRayId = null;
+  const rayEl = document.querySelector('.ray-id, [data-ray]');
+  if (rayEl) {
+    const m = (rayEl.textContent || "").match(/([a-f0-9]{16,})/i);
+    if (m) cfRayId = m[1];
+  }
+  if (!cfRayId) {
+    const m = (document.body?.innerText || "").match(/Ray ID[:\s]+([a-f0-9]{16,})/i);
+    if (m) cfRayId = m[1];
+  }
+
+  logDetails("warn", "Cloudflare challenge detected", { cfRayId });
+  return { cfRayId, hasChallengeForm, hasChallengeSpinner, hasRayIdEl, isChallengeTitle };
+}
+
+/**
+ * Monitor for Cloudflare challenges and alert background
+ */
+function startCloudflareMonitoring() {
+  const checkInterval = setInterval(() => {
+    const challenge = detectCloudflareChallenge();
+    if (challenge) {
+      console.warn(
+        "[CareerPilot] 🚨 Cloudflare Challenge Detected — Ray ID:",
+        challenge.cfRayId,
+        "| URL:", window.location.href
+      );
+
+      // Signal to background script (use callback API to avoid Promise rejection noise)
+      try {
+        chrome.runtime.sendMessage(
+          { type: "CP_CLOUDFLARE_CHALLENGE_DETECTED", payload: challenge },
+          (res) => { void chrome.runtime.lastError; void res; }
+        );
+      } catch (_) { /* extension context may be invalidated */ }
+
+      clearInterval(checkInterval);
+    }
+  }, 2000);
+
+  // Stop monitoring after 5 minutes
+  setTimeout(() => clearInterval(checkInterval), 300000);
+}
+
+/**
+ * Safely redirect to SmartApply URL with validation
+ * @param {string} url - The SmartApply URL to redirect to
+ * @returns {boolean} - True if redirect was safe and performed
+ */
+function safeRedirectToSmartApply(url) {
+  if (!url) {
+    console.warn("[Indeed Debug] ⚠️ Redirect: URL is empty");
+    return false;
+  }
+
+  try {
+    const urlObj = new URL(url);
+    
+    // Only allow smartapply.indeed.com domain
+    if (!urlObj.hostname.includes("smartapply.indeed.com")) {
+      console.error("[Indeed Debug] 🚨 Security: Attempted redirect to non-SmartApply domain:", urlObj.hostname);
+      return false;
+    }
+
+    // Validate required parameters for SmartApply
+    const pathname = urlObj.pathname;
+    const params = urlObj.searchParams;
+    
+    // Check for valid SmartApply paths
+    const validPaths = ['/beta/indeedapply/applybyapplyablejobid', '/resume-selection', '/questions'];
+    const isValidPath = validPaths.some(path => pathname.includes(path));
+    
+    if (!isValidPath && !pathname.includes('/beta/')) {
+      console.error("[Indeed Debug] 🚨 Security: Invalid SmartApply path:", pathname);
+      return false;
+    }
+
+    // For applybyapplyablejobid, verify required parameters
+    if (pathname.includes('applybyapplyablejobid')) {
+      if (!params.has('indeedApplyableJobId') && !params.has('iaUid')) {
+        console.error("[Indeed Debug] 🚨 Security: Missing required SmartApply parameters");
+        return false;
+      }
+    }
+
+    // Log safe redirect
+    console.log("[Indeed Debug] ✅ Safe redirect to SmartApply:", {
+      domain: urlObj.hostname,
+      path: pathname,
+      hasJobId: params.has('indeedApplyableJobId'),
+      hasIaUid: params.has('iaUid'),
+    });
+
+    // Perform the redirect
+    window.location.href = url;
+    return true;
+
+  } catch (error) {
+    console.error("[Indeed Debug] 🚨 Redirect validation error:", error?.message || error);
+    return false;
+  }
 }
 
 function parseListSetting(value) {
@@ -88,6 +231,15 @@ function isRemoteLikeValue(value) {
 
 function listHasRemoteValue(values) {
   return parseListSetting(values).some((value) => isRemoteLikeValue(value));
+}
+
+function isRemoteOnlyWorkMode(configuredValues) {
+  const values = uniqueNormalizedValues(configuredValues);
+  if (!values.length) return false;
+  const hasRemote = values.includes("remote");
+  const hasHybrid = values.includes("hybrid");
+  const hasOnSite = values.includes("on site") || values.includes("onsite");
+  return hasRemote && !hasHybrid && !hasOnSite;
 }
 
 function workModeMatches(text, configuredValues) {
@@ -285,14 +437,33 @@ function buildSearchUrl(settings = {}, pageStart = 0) {
     params.set("jt", jobTypeValues[0]);
   }
 
+  // If user wants remote-only work mode, request remote jobs directly from Indeed.
+  if (isRemoteOnlyWorkMode(settings?.onSite) || listHasRemoteValue(settings?.filterLocations)) {
+    params.set("remotejob", "1");
+  }
+
   if (Number(pageStart) > 0) params.set("start", String(pageStart));
-  return `${JOBS_SEARCH_URL}?${params.toString()}`;
+
+  // Use the current page's Indeed hostname (e.g. in.indeed.com) instead of hardcoded www
+  let baseUrl = JOBS_SEARCH_URL;
+  try {
+    const currentHost = window.location.hostname;
+    if (currentHost.endsWith("indeed.com") && !currentHost.startsWith("smartapply.")) {
+      baseUrl = `https://${currentHost}/jobs`;
+    }
+  } catch { /* ignore, use fallback */ }
+
+  return `${baseUrl}?${params.toString()}`;
 }
 
 function isJobsPage() {
   try {
     const url = new URL(window.location.href);
-    return url.hostname.endsWith("indeed.com") && (url.pathname.startsWith("/jobs") || url.pathname.startsWith("/viewjob"));
+    return (
+      url.hostname.endsWith("indeed.com") &&
+      !url.hostname.startsWith("smartapply.") &&
+      (url.pathname.startsWith("/jobs") || url.pathname.startsWith("/viewjob"))
+    );
   } catch {
     return false;
   }
@@ -1251,6 +1422,32 @@ async function runIndeedApplyFlow(applyButton, settings, token) {
   
   console.log("[Indeed Debug] 🔍 Button details - target:", target, "href:", href, "aria-label:", ariaLabel);
   
+  // Check if href is a SmartApply URL - use safe redirect if so
+  if (href && href.includes('smartapply.indeed.com')) {
+    console.log("[Indeed Debug] 🔗 SmartApply URL detected, using safe redirect handler");
+    
+    const redirectSuccess = await sendMessage({ 
+      type: "CP_SAFE_REDIRECT_SMARTAPPLY", 
+      url: href 
+    }).then(response => response?.ok === true).catch(() => false);
+    
+    if (redirectSuccess) {
+      console.log("[Indeed Debug] ✅ Safe redirect to SmartApply completed");
+      return { 
+        status: "pending", 
+        reasonCode: "SMARTAPPLY_REDIRECT",
+        message: "Safely redirected to SmartApply"
+      };
+    } else {
+      console.error("[Indeed Debug] 🚨 Safe redirect failed - URL may be malicious");
+      return { 
+        status: "failed", 
+        reasonCode: "UNSAFE_URL",
+        message: "SmartApply URL failed security validation"
+      };
+    }
+  }
+  
   // If it opens in new tab, try to prevent that and open in modal instead
   if (target === "_blank" || ariaLabel.includes("new tab")) {
     console.log("[Indeed Debug] ⚠️ Button opens in new tab, attempting to open in current page");
@@ -1538,6 +1735,14 @@ async function runEngine(token) {
       return;
     }
 
+    // Keep search URL aligned with remote-only filter so cards are actually eligible.
+    if (isRemoteOnlyWorkMode(settings?.onSite) && url.searchParams.get("remotejob") !== "1") {
+      await pushLog("Refreshing search to remote-only results.", "info", { reasonCode: "REMOTE_FILTER_SYNC" });
+      url.searchParams.set("remotejob", "1");
+      window.location.href = `${url.origin}${url.pathname}?${url.searchParams.toString()}`;
+      return;
+    }
+
     const pageIndex = Math.max(0, Math.floor(Number(url.searchParams.get("start") || 0) / 10));
     const cards = getJobCards();
     await pushLog(`Found ${cards.length} job cards`, "info");
@@ -1727,6 +1932,167 @@ window.cpCopyLogs = async function() {
 console.log("🔧 Debug helpers loaded! Use cpDebugCapture(), cpGetLogs(), or cpCopyLogs() in console");
 
 // ======================== SmartApply Form Handler ========================
+const SMARTAPPLY_ACTIVE_JOB_KEY = "cpSmartApplyActiveJob";
+const SMARTAPPLY_LOCK_TTL_MS = 20 * 60 * 1000;
+
+function getSmartApplyJobIdFromUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl || window.location.href);
+    const jobId =
+      url.searchParams.get("indeedApplyableJobId") ||
+      url.searchParams.get("iaUid") ||
+      url.searchParams.get("jk") ||
+      "";
+    return String(jobId || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function acquireSmartApplyJobLock(jobId) {
+  const now = Date.now();
+  const safeJobId = String(jobId || "").trim() || "unknown";
+  try {
+    const snap = await chrome.storage.local.get(SMARTAPPLY_ACTIVE_JOB_KEY);
+    const active = snap?.[SMARTAPPLY_ACTIVE_JOB_KEY];
+    const activeJobId = String(active?.jobId || "").trim();
+    const activeTabId = Number(active?.tabId || 0);
+    const activeTs = Number(active?.ts || 0);
+    const expired = !activeTs || now - activeTs > SMARTAPPLY_LOCK_TTL_MS;
+
+    // Same job can continue (navigation between SmartApply steps).
+    if (!expired && activeJobId && activeJobId === safeJobId) {
+      await chrome.storage.local.set({
+        [SMARTAPPLY_ACTIVE_JOB_KEY]: {
+          jobId: safeJobId,
+          tabId: activeTabId || 0,
+          ts: now,
+          by: "content",
+        },
+      });
+      return { ok: true, reused: true, activeJobId: safeJobId };
+    }
+
+    // If another active job is in progress, do not run parallel apply.
+    if (!expired && activeJobId && activeJobId !== safeJobId) {
+      return {
+        ok: false,
+        reused: false,
+        activeJobId,
+        reason: "another_job_in_progress",
+      };
+    }
+
+    await chrome.storage.local.set({
+      [SMARTAPPLY_ACTIVE_JOB_KEY]: {
+        jobId: safeJobId,
+        tabId: 0,
+        ts: now,
+        by: "content",
+      },
+    });
+    return { ok: true, reused: false, activeJobId: safeJobId };
+  } catch {
+    // Fail open: never block user flow if storage is unavailable.
+    return { ok: true, reused: false, activeJobId: safeJobId };
+  }
+}
+
+async function releaseSmartApplyJobLock(reason) {
+  try {
+    const snap = await chrome.storage.local.get(SMARTAPPLY_ACTIVE_JOB_KEY);
+    const active = snap?.[SMARTAPPLY_ACTIVE_JOB_KEY];
+    if (!active) return;
+    await chrome.storage.local.remove(SMARTAPPLY_ACTIVE_JOB_KEY);
+    console.log("[Indeed SmartApply] 🔓 Released active job lock", {
+      reason: reason || "unknown",
+      jobId: active?.jobId || "",
+    });
+  } catch {
+    // no-op
+  }
+}
+
+function detectSmartApplyPageType(currentUrl, doc = document) {
+  const url = String(currentUrl || "");
+  const path = (() => {
+    try {
+      return new URL(url).pathname;
+    } catch {
+      return "";
+    }
+  })();
+
+  // Count form elements for detailed logging
+  const radios = doc.querySelectorAll('input[type="radio"]');
+  const textInputs = doc.querySelectorAll('input[type="text"], textarea');
+  const selects = doc.querySelectorAll('select');
+  const checkboxes = doc.querySelectorAll('input[type="checkbox"]');
+  const allInputs = doc.querySelectorAll('input, textarea, select');
+  const buttons = doc.querySelectorAll('button');
+  
+  console.log("[Indeed SmartApply] 📊 Form inventory:", {
+    radios: radios.length,
+    textInputs: textInputs.length,
+    selects: selects.length,
+    checkboxes: checkboxes.length,
+    totalInputs: allInputs.length,
+    buttons: buttons.length,
+    path: path
+  });
+
+  const hasResumeSignals =
+    !!doc.querySelector('input[type="radio"], [role="radio"], [data-testid*="resume" i], [class*="resume" i]') ||
+    /resume/i.test(doc.body?.textContent || "");
+  const hasQuestionsSignals =
+    !!doc.querySelector('textarea, select, input[type="text"], [data-testid*="question" i]') ||
+    /question|qualification|email|phone|name/i.test(doc.body?.textContent || "");
+  const hasReviewSignals =
+    !!doc.querySelector('[data-testid*="review" i], [class*="review" i]') ||
+    /review application|submit application/i.test(doc.body?.textContent || "");
+  const hasSubmittedSignals = /application submitted|you applied|thank you for applying/i.test(
+    (doc.body?.textContent || "").toLowerCase()
+  );
+
+  console.log("[Indeed SmartApply] 🔍 Page signals detected:", {
+    hasResumeSignals,
+    hasQuestionsSignals,
+    hasReviewSignals,
+    hasSubmittedSignals
+  });
+
+  // applybyapplyablejobid can be either resume picker or full details/questions form.
+  // Prefer questions when form inputs exist so we actually fill user details.
+  if (path.includes("/applybyapplyablejobid")) {
+    const pageType = hasQuestionsSignals || textInputs.length > 0 || selects.length > 0 ? "questions" : "resume-selection";
+    console.log("[Indeed SmartApply] ✅ Page type for applybyapplyablejobid:", pageType);
+    return pageType;
+  }
+
+  if (path.includes("/resume-selection") || hasResumeSignals) {
+    console.log("[Indeed SmartApply] ✅ Page type: resume-selection");
+    return "resume-selection";
+  }
+  if (path.includes("/questions") || path.includes("qualification-questions") || hasQuestionsSignals) {
+    console.log("[Indeed SmartApply] ✅ Page type: questions");
+    return "questions";
+  }
+  if (path.includes("/contact-info") || path.includes("/contact-information")) {
+    console.log("[Indeed SmartApply] ✅ Page type: contact-info");
+    return "contact-info";
+  }
+  if (path.includes("/review") || hasReviewSignals) {
+    console.log("[Indeed SmartApply] ✅ Page type: review");
+    return "review";
+  }
+  if (path.includes("/confirmation") || hasSubmittedSignals) {
+    console.log("[Indeed SmartApply] ✅ Page type: submitted");
+    return "submitted";
+  }
+  console.log("[Indeed SmartApply] ⚠️ Page type: unknown");
+  return "unknown";
+}
+
 async function handleSmartApplyForm() {
   const currentUrl = window.location.href;
   
@@ -1737,6 +2103,24 @@ async function handleSmartApplyForm() {
   
   console.log("[Indeed SmartApply] 🎯 Detected SmartApply form page");
   console.log("[Indeed SmartApply] 📍 URL:", currentUrl);
+  console.log("[Indeed SmartApply] 📍 Full URL with params:", currentUrl);
+
+  const smartApplyJobId = getSmartApplyJobIdFromUrl(currentUrl);
+  console.log("[Indeed SmartApply] 🆔 Job ID:", smartApplyJobId || "unknown");
+
+  const lock = await acquireSmartApplyJobLock(smartApplyJobId);
+  if (!lock.ok) {
+    console.log("[Indeed SmartApply] ⛔ Another job already in progress, focusing on one active job", {
+      activeJobId: lock.activeJobId,
+      incomingJobId: smartApplyJobId || "unknown",
+      reason: lock.reason,
+    });
+    return;
+  }
+  console.log(
+    `[Indeed SmartApply] 🔒 Active job lock ${lock.reused ? "reused" : "acquired"}:`,
+    lock.activeJobId || "unknown"
+  );
   
   const settings = await loadSettings();
   
@@ -1750,8 +2134,8 @@ async function handleSmartApplyForm() {
   console.log("[Indeed SmartApply] ⏳ Waiting for page to fully load...");
   
   let loadAttempts = 0;
-  const maxLoadAttempts = 20; // 20 seconds max wait
-  let foundResumeUI = false;
+  const maxLoadAttempts = 25; // 25 seconds max wait
+  let pageContentReady = false;
   
   while (loadAttempts < maxLoadAttempts) {
     await sleep(1000);
@@ -1760,37 +2144,65 @@ async function handleSmartApplyForm() {
     // Check if page has loaded content
     const hasButtons = document.querySelectorAll('button').length > 0;
     const hasRadios = document.querySelectorAll('input[type="radio"]').length > 0;
+    const hasTextInputs = document.querySelectorAll('input[type="text"], textarea').length > 0;
+    const hasSelects = document.querySelectorAll('select').length > 0;
+    const hasInputFields = hasTextInputs || hasSelects || hasRadios;
     const bodyText = document.body.textContent || '';
     const hasResumeText = bodyText.includes('resume') || bodyText.includes('Resume');
     const hasContent = bodyText.length > 100;
+    const hasFormIndicators = hasRadios || hasResumeText || hasInputFields;
     
-    // For resume selection page, wait for specific content
-    if (currentUrl.includes('/applybyapplyablejobid') || currentUrl.includes('/resume-selection')) {
-      if (hasRadios || hasResumeText) {
-        console.log(`[Indeed SmartApply] ✅ Resume selection UI loaded after ${loadAttempts} seconds`);
-        foundResumeUI = true;
+    console.log(`[Indeed SmartApply] ⏳ Load check ${loadAttempts}s - buttons: ${hasButtons}, inputs: ${hasInputFields}, form: ${hasFormIndicators}`);
+    
+    // applybyapplyablejobid can have either resume UI or form fields
+    if (currentUrl.includes('/applybyapplyablejobid')) {
+      if (hasFormIndicators && hasButtons && hasContent) {
+        console.log(`[Indeed SmartApply] ✅ ApplyByApplyableJobId page loaded after ${loadAttempts}s`);
+        pageContentReady = true;
         break;
       }
-      console.log(`[Indeed SmartApply] ⏳ Waiting for resume UI... (${loadAttempts}s) - radios: ${hasRadios}, resume text: ${hasResumeText}`);
-    } else if (hasButtons || hasContent) {
-      console.log(`[Indeed SmartApply] ✅ Page content loaded after ${loadAttempts} seconds`);
+    } else if (currentUrl.includes('/resume-selection')) {
+      if (hasRadios || hasResumeText) {
+        console.log(`[Indeed SmartApply] ✅ Resume selection UI loaded after ${loadAttempts}s`);
+        pageContentReady = true;
+        break;
+      }
+    } else if (hasButtons && hasContent) {
+      console.log(`[Indeed SmartApply] ✅ Page content loaded after ${loadAttempts}s`);
+      pageContentReady = true;
       break;
-    } else {
-      console.log(`[Indeed SmartApply] ⏳ Still loading... (${loadAttempts}s)`);
     }
   }
   
-  if (!foundResumeUI && (currentUrl.includes('/applybyapplyablejobid') || currentUrl.includes('/resume-selection'))) {
-    console.log("[Indeed SmartApply] ⚠️ Resume UI did not appear after 20 seconds");
-    console.log("[Indeed SmartApply] 📊 Final check - Page text sample:", document.body.textContent.substring(0, 300));
+  if (!pageContentReady) {
+    console.log("[Indeed SmartApply] ⚠️ Page did not fully load after 25 seconds");
+    console.log("[Indeed SmartApply] 📊 Current page state:", {
+      hasButtons: document.querySelectorAll('button').length,
+      hasInputs: document.querySelectorAll('input, textarea, select').length,
+      bodyTextLength: (document.body.textContent || '').length,
+      textSample: document.body.textContent.substring(0, 300)
+    });
   }
   
   // Extra stabilization wait
   await sleep(2000);
   console.log("[Indeed SmartApply] ✅ Page fully stabilized, proceeding with automation");
   
+  // Diagnostic: Log current page structure before detection
+  console.log("[Indeed SmartApply] 📊 PRE-DETECTION PAGE STATE:");
+  console.log("[Indeed SmartApply]   - URL:", currentUrl);
+  console.log("[Indeed SmartApply]   - Buttons:", document.querySelectorAll('button').length);
+  console.log("[Indeed SmartApply]   - Text inputs:", document.querySelectorAll('input[type="text"], textarea').length);
+  console.log("[Indeed SmartApply]   - Selects:", document.querySelectorAll('select').length);
+  console.log("[Indeed SmartApply]   - Radios:", document.querySelectorAll('input[type="radio"]').length);
+  console.log("[Indeed SmartApply]   - Total form elements:", document.querySelectorAll('input, textarea, select').length);
+  console.log("[Indeed SmartApply]   - Body text length:", (document.body.textContent || '').length);
+
+  const pageType = detectSmartApplyPageType(currentUrl, document);
+  console.log("[Indeed SmartApply] 🧭 Detected page type:", pageType);
+  
   // Step 1: Handle resume selection page
-  if (currentUrl.includes('/resume-selection') || currentUrl.includes('/applybyapplyablejobid')) {
+  if (pageType === 'resume-selection') {
     console.log("[Indeed SmartApply] 📄 Resume selection page detected");
     
     // Check for iframes first
@@ -1926,7 +2338,7 @@ async function handleSmartApplyForm() {
   }
   
   // Step 2: Handle questions page (both types)
-  if (currentUrl.includes('/questions') || currentUrl.includes('qualification-questions')) {
+  if (pageType === 'questions') {
     console.log("[Indeed SmartApply] ❓ Questions page detected");
     console.log("[Indeed SmartApply] 📋 URL type:", currentUrl.includes('qualification-questions') ? 'Qualification Questions' : 'General Questions');
     
@@ -1937,36 +2349,100 @@ async function handleSmartApplyForm() {
     
     console.log(`[Indeed SmartApply] 📊 Found: ${textInputs.length} text fields, ${selects.length} dropdowns, ${radios.length} radio buttons`);
     
-    // Don't auto-fill questions - they're employer-specific
-    console.log("[Indeed SmartApply] ⏸️ Pausing - Questions require manual input");
-    console.log("[Indeed SmartApply] ℹ️ Fill out the form and click Continue/Submit when ready");
-    
+    // Auto-fill known profile answers from settings and pause only for unresolved required questions.
+    const pendingQuestions = fillBasicFields(document, settings);
+    console.log(`[Indeed SmartApply] 📝 Auto-fill complete. Pending required questions: ${pendingQuestions.length}`);
+
+    if (pendingQuestions.length) {
+      await sendMessage({ type: "CP_REGISTER_PENDING_QUESTIONS", questions: pendingQuestions }).catch(() => {});
+      console.log("[Indeed SmartApply] ⏸️ Manual input still required for unresolved fields");
+      console.log("[Indeed SmartApply] 📌 Pending:", pendingQuestions);
+      return;
+    }
+
+    // If everything required is filled, continue to next step.
+    const continueBtn = findPrimaryActionButton(document);
+    if (continueBtn) {
+      const text = normalizeText(continueBtn.textContent || continueBtn.getAttribute('aria-label') || 'Continue');
+      console.log(`[Indeed SmartApply] ➡️ Clicking action after auto-fill: "${text}"`);
+      continueBtn.click();
+      return;
+    }
+
+    console.log("[Indeed SmartApply] ⚠️ No action button found after auto-fill. Manual continue may be required.");
     return; // Stay on this page - don't navigate away
   }
   
   // Step 3: Handle contact info page
-  if (currentUrl.includes('/contact-info') || currentUrl.includes('/contact-information')) {
+  if (pageType === 'contact-info') {
     console.log("[Indeed SmartApply] 📱 Contact info page detected");
+    const pendingContactFields = fillBasicFields(document, settings);
+    console.log(`[Indeed SmartApply] 🧾 Contact auto-fill complete. Pending required fields: ${pendingContactFields.length}`);
+
+    if (!pendingContactFields.length) {
+      const continueBtn = findPrimaryActionButton(document);
+      if (continueBtn) {
+        const text = normalizeText(continueBtn.textContent || continueBtn.getAttribute('aria-label') || 'Continue');
+        console.log(`[Indeed SmartApply] ➡️ Clicking contact action: "${text}"`);
+        continueBtn.click();
+        return;
+      }
+    }
+
     console.log("[Indeed SmartApply] ℹ️ Verify your contact information and click Continue");
     
     return; // Let user verify contact info
   }
   
   // Step 4: Handle review page
-  if (currentUrl.includes('/review')) {
+  if (pageType === 'review') {
     console.log("[Indeed SmartApply] 👀 Review page detected");
     console.log("[Indeed SmartApply] ⚠️ Review application before submitting");
     
     return; // Let user review
   }
+
+  // Step 5: Handle confirmation/submitted page
+  if (pageType === 'submitted') {
+    console.log("[Indeed SmartApply] 🎉 Application submitted page detected");
+    await releaseSmartApplyJobLock("submitted");
+    return;
+  }
   
   // Unknown page type
   console.log("[Indeed SmartApply] ❓ Unknown SmartApply page type");
+  const signature = {
+    pathname: (() => {
+      try {
+        return new URL(currentUrl).pathname;
+      } catch {
+        return "";
+      }
+    })(),
+    title: document.title,
+    buttonCount: document.querySelectorAll('button').length,
+    inputCount: document.querySelectorAll('input, textarea, select').length,
+    firstButtons: Array.from(document.querySelectorAll('button'))
+      .slice(0, 8)
+      .map((b) => normalizeText(b.textContent || b.getAttribute('aria-label') || '')),
+  };
+  console.log("[Indeed SmartApply] 🧪 Unknown page signature:", signature);
   console.log("[Indeed SmartApply] ℹ️ Manual interaction required");
 }
 
 // Run SmartApply handler if we're on that page
 if (window.location.href.includes('smartapply.indeed.com')) {
+  try {
+    const smartApplyUrl = new URL(window.location.href);
+    if (smartApplyUrl.pathname.startsWith('/jobs')) {
+      const fallbackUrl = `https://www.indeed.com/jobs${smartApplyUrl.search || ''}`;
+      console.warn('[Indeed SmartApply] ⚠️ Invalid SmartApply jobs URL detected. Redirecting to Indeed jobs:', fallbackUrl);
+      window.location.replace(fallbackUrl);
+    }
+  } catch {
+    // no-op
+  }
+
   console.log("[Indeed SmartApply] 🚀 SmartApply page detected, initializing handler");
   
   // Prevent beforeunload dialogs from blocking navigation
@@ -1984,5 +2460,10 @@ if (window.location.href.includes('smartapply.indeed.com')) {
   });
 }
 
-// Always run boot to show the panel
+// Start Cloudflare challenge monitoring on all Indeed and SmartApply pages
+if (window.location.href.includes('indeed.com') || window.location.href.includes('smartapply.indeed.com')) {
+  startCloudflareMonitoring();
+}
+
+// Always run boot to show the floating panel on every Indeed page
 boot();

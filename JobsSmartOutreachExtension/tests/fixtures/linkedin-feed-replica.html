@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkedIn Feed Replica</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f3f2ef; margin: 0; padding: 24px; }
+    .feed-shared-update-v2 { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .update-components-actor__name { font-weight: 700; display: block; margin-bottom: 4px; }
+    .update-components-actor__description { color: #666; margin-bottom: 8px; }
+    .update-components-text { margin: 10px 0; line-height: 1.4; }
+    .hashtags a { color: #0a66c2; margin-right: 8px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main id="feed-main">
+    <article class="feed-shared-update-v2" data-testid="post-1">
+      <span class="update-components-actor__name">Anita Sharma</span>
+      <div class="update-components-actor__description">HR Manager at Acme Labs</div>
+      <div class="update-components-actor__meta">
+        <a href="/in/anita-sharma-hr/">Profile</a>
+      </div>
+      <div class="update-components-text">
+        We are hiring frontend engineers. Send your resume to anita@acmelabs.com and join our growing team.
+      </div>
+      <div class="hashtags">
+        <a href="/feed/hashtag/?keywords=hiring">#hiring</a>
+        <a href="/feed/hashtag/?keywords=frontend">#frontend</a>
+      </div>
+    </article>
+
+    <article class="feed-shared-update-v2" data-testid="post-2">
+      <span class="update-components-actor__name">Rahul Verma</span>
+      <div class="update-components-actor__description">Talent Acquisition at CloudNest</div>
+      <div class="update-components-actor__meta">
+        <a href="/in/rahul-verma-ta/">Profile</a>
+      </div>
+      <div class="update-components-text">
+        #WeAreHiring backend developers and SRE roles. Reach out at careers@cloudnest.io for details.
+      </div>
+      <div class="hashtags">
+        <a href="/feed/hashtag/?keywords=wearehiring">#wearehiring</a>
+        <a href="/feed/hashtag/?keywords=backend">#backend</a>
+      </div>
+    </article>
+
+    <article class="feed-shared-update-v2" data-testid="post-3">
+      <span class="update-components-actor__name">Anita Sharma</span>
+      <div class="update-components-actor__description">HR Manager at Acme Labs</div>
+      <div class="update-components-actor__meta">
+        <a href="/in/anita-sharma-hr/">Profile</a>
+      </div>
+      <div class="update-components-text">
+        Reposting: we are hiring again. Mail anita@acmelabs.com.
+      </div>
+      <div class="hashtags">
+        <a href="/feed/hashtag/?keywords=hiring">#hiring</a>
+      </div>
+    </article>
+  </main>
+</body>
+</html>

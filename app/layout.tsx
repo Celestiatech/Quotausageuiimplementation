@@ -6,9 +6,21 @@ const GOOGLE_TAG_ID = String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim()
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.autoapplycv.in"),
-  title: "AutoApply CV",
-  description: "AutoApply CV - quota usage and job application UI",
+  title: "Free Auto Apply CV | AI-Powered Job Application Automation",
+  description: "Free auto apply CV tool that automates job applications on LinkedIn and Indeed. Save hours with AI-powered resume matching, smart application tracking, and automated job search. Start applying to hundreds of jobs for free!",
   manifest: "/site.webmanifest",
+  keywords: ["free auto apply cv", "free job application automation", "auto apply jobs free", "automated job applications", "LinkedIn auto apply", "Indeed auto apply", "free AI job search", "resume automation free"],
+  openGraph: {
+    title: "Free Auto Apply CV | Automate Your Job Search",
+    description: "Apply to hundreds of jobs automatically for free! AI-powered job application automation for LinkedIn and Indeed. Smart resume matching and application tracking included.",
+    type: "website",
+    url: "https://www.autoapplycv.in",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Free Auto Apply CV | AI Job Application Automation",
+    description: "Free tool to auto-apply to jobs on LinkedIn & Indeed. Save time with AI-powered automation. Start now!",
+  },
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },

@@ -1,7 +1,7 @@
 {
-  "name": "AutoApply CV",
+  "name": "Free Auto Apply CV",
   "short_name": "AutoApply CV",
-  "description": "AutoApply CV job search automation platform",
+  "description": "Free AI-powered job application automation for LinkedIn and Indeed. Auto-apply to hundreds of jobs, track applications, and manage resumes - all for free!",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
