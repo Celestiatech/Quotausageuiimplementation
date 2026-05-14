@@ -45,6 +45,7 @@ from modules.open_chrome import *
 from modules.helpers import *
 from modules.clickers_and_finders import *
 from modules.validator import validate_config
+from modules.helpers import random_delay
 
 if use_AI:
     from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_close_openai_client
@@ -535,7 +536,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                     elif 'yes' in answer.lower():
                         possible_answer_phrases = ["Yes", "Agree", "I do", "I have", "Accept", "Consent", "Opt in"]
                     elif 'no' in answer.lower():
-                        possible_answer_phrases = ["No", "Disagree", "I don't", "I do not", "Decline", "Do not contact", "Opt out"]
+                        possible_answer_phrases = ["No", "Disagree", "I do not", "I do not", "Decline", "Do not contact", "Opt out"]
                     else:
                         # Try partial matching for any answer
                         possible_answer_phrases = [answer]

@@ -54,6 +54,83 @@ let knownAppliedJobIds = new Set();
 let knownAppliedLoadedAt = 0;
 let logAutoScrollPinnedToBottom = true;
 let lastLogRenderSignature = "";
+let lastAutoSubmitAtMs = 0;
+let activeSubmitPaceDelayMs = 0;
+let activeSubmitPaceStartMs = 0;
+let warnedDefaultYearsFallback = false;
+
+function clampNumber(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function getSubmitPaceRangeMs(settings) {
+  const minSec = clampNumber(settings?.submitRateMinSec, 40, 5, 600);
+  const maxSec = clampNumber(settings?.submitRateMaxSec, 70, minSec, 900);
+  return { minMs: Math.floor(minSec * 1000), maxMs: Math.floor(maxSec * 1000) };
+}
+
+function formatPaceLabel(range) {
+  const minSec = Math.round(range.minMs / 1000);
+  const maxSec = Math.round(range.maxMs / 1000);
+  if (minSec === maxSec) return `${minSec}s`;
+  return `${minSec}–${maxSec}s`;
+}
+
+function pickPaceDelayMs(range) {
+  const span = Math.max(0, Number(range.maxMs || 0) - Number(range.minMs || 0));
+  const jitter = span > 0 ? Math.floor(Math.random() * (span + 1)) : 0;
+  return Math.max(0, Number(range.minMs || 0) + jitter);
+}
+
+function setRateLimitUiText(text) {
+  try {
+    const el = panelEl?.querySelector?.("#cp-rate");
+    if (!el) return;
+    el.textContent = String(text || "");
+  } catch {
+    // ignore
+  }
+}
+
+async function enforceSubmitRateLimit(settings) {
+  if (!settings || settings.dryRun || !settings.autoSubmit) return { ok: true, waitedMs: 0 };
+  const range = getSubmitPaceRangeMs(settings);
+  const paceLabel = formatPaceLabel(range);
+  if (!lastAutoSubmitAtMs) {
+    setRateLimitUiText(`Rate limit: ${paceLabel} between submits`);
+    return { ok: true, waitedMs: 0 };
+  }
+
+  const now = Date.now();
+  if (!activeSubmitPaceDelayMs || !activeSubmitPaceStartMs || activeSubmitPaceStartMs < lastAutoSubmitAtMs) {
+    activeSubmitPaceStartMs = lastAutoSubmitAtMs;
+    activeSubmitPaceDelayMs = pickPaceDelayMs(range);
+  }
+  const nextAllowedAt = activeSubmitPaceStartMs + activeSubmitPaceDelayMs;
+  let remainingMs = Math.max(0, nextAllowedAt - now);
+  if (!remainingMs) {
+    setRateLimitUiText(`Rate limit: ${paceLabel} between submits`);
+    return { ok: true, waitedMs: 0 };
+  }
+
+  await logLine(`Rate limit: waiting ${Math.ceil(remainingMs / 1000)}s before next submit`, "info");
+  const startedWaitingAt = Date.now();
+  while (remainingMs > 0) {
+    const state = (await sendMessage({ type: "CP_GET_BOOTSTRAP" })).state;
+    if (!state?.running || state?.paused) {
+      setRateLimitUiText(`Rate limit: ${paceLabel} between submits`);
+      return { ok: false, waitedMs: Date.now() - startedWaitingAt, canceled: true };
+    }
+    setRateLimitUiText(`Rate limit: ${paceLabel} · next submit in ${Math.ceil(remainingMs / 1000)}s`);
+    const step = Math.min(1000, remainingMs);
+    await sleep(step);
+    remainingMs = Math.max(0, nextAllowedAt - Date.now());
+  }
+  setRateLimitUiText(`Rate limit: ${paceLabel} between submits`);
+  return { ok: true, waitedMs: Date.now() - startedWaitingAt };
+}
 let currentJobContext = {
   title: "",
   company: "",
@@ -853,7 +930,7 @@ function answerCommonQuestion(label, settings) {
   if (l.includes("gender") || l.includes("sex")) return settings.gender || "";
   if (l.includes("ethnicity") || l.includes("race")) return settings.ethnicity || "";
   if (isMarketingConsentQuestion(l)) {
-    return settings.marketingConsent || "No";
+    return settings.marketingConsent || "Yes";
   }
   if (l.includes("experience") && l.includes("year")) return yearsValue;
   if (l.includes("notice")) {
@@ -1558,6 +1635,23 @@ function optionFingerprint(value) {
   return normalizeLabel(value).replace(/[^a-z0-9]/g, "");
 }
 
+function isConsentLikeQuestion(label) {
+  const l = normalizeLabel(label);
+  return (
+    isMarketingConsentQuestion(l) ||
+    l.includes("consent") ||
+    l.includes("permission") ||
+    l.includes("opt in") ||
+    l.includes("opt-in") ||
+    (l.includes("receive") && (l.includes("email") || l.includes("sms") || l.includes("text") || l.includes("phone"))) ||
+    l.includes("contact you") ||
+    l.includes("do you agree") ||
+    l.includes("i agree") ||
+    l.includes("terms") ||
+    l.includes("privacy")
+  );
+}
+
 function selectBestOption(options, answer) {
   const phrases = buildAnswerPhrases(answer);
   if (!phrases.length) return null;
@@ -1575,12 +1669,18 @@ function selectBestOption(options, answer) {
   return null;
 }
 
-function selectFallbackOption(options) {
+function selectFallbackOption(options, contextLabel = "") {
   if (!Array.isArray(options) || !options.length) return null;
   const cleaned = options.filter((o) => !isPlaceholderOptionText(String(o?.text || "")));
   if (!cleaned.length) return null;
 
-  const safeNo = cleaned.find((o) => {
+  const isConsent = isConsentLikeQuestion(contextLabel);
+
+  const yesOption = cleaned.find((o) => {
+    const t = normalizeLabel(o.text || "");
+    return t === "yes" || t.startsWith("yes ") || t.endsWith(" yes") || t.includes(" yes ");
+  });
+  const noOption = cleaned.find((o) => {
     const t = normalizeLabel(o.text || "");
     return (
       t === "no" ||
@@ -1591,13 +1691,33 @@ function selectFallbackOption(options) {
       t.includes("prefer not")
     );
   });
-  if (safeNo) return safeNo;
+
+  // Default behavior: prefer YES when it's a classic yes/no question (except consent-like prompts).
+  if (!isConsent && yesOption && noOption) return yesOption;
+
+  if (isConsent) {
+    const safeNo = cleaned.find((o) => {
+      const t = normalizeLabel(o.text || "");
+      return (
+        t === "no" ||
+        t.includes(" no ") ||
+        t.startsWith("no ") ||
+        t.endsWith(" no") ||
+        t.includes("decline") ||
+        t.includes("prefer not")
+      );
+    });
+    if (safeNo) return safeNo;
+  }
 
   const notApplicable = cleaned.find((o) => {
     const t = normalizeLabel(o.text || "");
     return t.includes("not applicable") || t === "n/a";
   });
   if (notApplicable) return notApplicable;
+
+  const preferNot = cleaned.find((o) => normalizeLabel(o.text || "").includes("prefer not"));
+  if (preferNot) return preferNot;
 
   // Deterministic fallback avoids oscillating answers across retries.
   return cleaned[0];
@@ -2811,6 +2931,43 @@ async function handleChatCommand(input) {
     await botChat(`Saved city as ${city}.`);
     return;
   }
+  if (cmd === "clear city" || cmd === "reset city") {
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { currentCity: "", searchLocation: "" } });
+    await botChat("Cleared city + search location. LinkedIn search will no longer be forced to a specific location.", "info");
+    return;
+  }
+  if (cmd === "clear locations" || cmd === "reset locations") {
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { searchLocation: "", filterLocations: [] } });
+    await botChat("Cleared preferred locations (filterLocations) + search location. Runs will rely on LinkedIn UI filters.", "info");
+    return;
+  }
+  if (cmd.startsWith("set pace ")) {
+    const rawValue = raw.slice(9).trim();
+    const parts = rawValue.split(/\s+/).filter(Boolean);
+    const minSec = clampNumber(parts[0], NaN, 5, 900);
+    const maxSec = parts.length > 1 ? clampNumber(parts[1], minSec, 5, 900) : minSec;
+    if (!Number.isFinite(minSec) || !Number.isFinite(maxSec)) {
+      await botChat("Invalid pace. Use: set pace 60 90 (seconds between submits)", "warn");
+      return;
+    }
+    const min = Math.min(minSec, maxSec);
+    const max = Math.max(minSec, maxSec);
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { submitRateMinSec: min, submitRateMaxSec: max } });
+    await botChat(`Saved rate limit to ${min}${min === max ? "" : `-${max}`} seconds between submits.`, "info");
+    return;
+  }
+  if (cmd.startsWith("set years ")) {
+    const rawValue = raw.slice(10).trim();
+    const n = clampNumber(rawValue, NaN, 0, 60);
+    if (!Number.isFinite(n)) {
+      await botChat("Invalid years value. Use: set years 3", "warn");
+      return;
+    }
+    const asText = String(Math.round(n));
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { currentExperience: Number(asText), yearsOfExperienceAnswer: asText } });
+    await botChat(`Saved Years of Experience to ${asText}.`, "info");
+    return;
+  }
   if (cmd.startsWith("set phone ")) {
     const phone = raw.slice(10).trim();
     if (!phone) {
@@ -2864,7 +3021,10 @@ async function handleChatCommand(input) {
       return;
     }
   }
-  await botChat("Unknown command. Try: start, start live, restart, restart live, pause, resume, stop, set city <name>, set phone <num>, set email <mail>, dry run on/off", "warn");
+  await botChat(
+    "Unknown command. Try: start, start live, restart, restart live, pause, resume, stop, set city <name>, clear city, clear locations, set pace <minSec> <maxSec>, set years <n>, set phone <num>, set email <mail>, dry run on/off",
+    "warn"
+  );
 }
 
 function ensurePanel() {
@@ -2932,11 +3092,12 @@ function ensurePanel() {
       </div>
     </div>
     <div class="cp-stats">
-      <div class="cp-stat"><span class="cp-stat-k">Applied</span><span id="cp-applied">0</span></div>
-      <div class="cp-stat"><span class="cp-stat-k">Skipped</span><span id="cp-skipped">0</span></div>
-      <div class="cp-stat"><span class="cp-stat-k">Failed</span><span id="cp-failed">0</span></div>
+      <div class="cp-stat"><span class="cp-stat-k">Applied (this run)</span><span id="cp-applied">0</span></div>
+      <div class="cp-stat"><span class="cp-stat-k">Skipped (this run)</span><span id="cp-skipped">0</span></div>
+      <div class="cp-stat"><span class="cp-stat-k">Failed (this run)</span><span id="cp-failed">0</span></div>
     </div>
     <div class="cp-wallet" id="cp-wallet">Plan: - | Hires: - | Free today: -/-</div>
+    <div class="cp-rate" id="cp-rate">Rate limit: -</div>
     <div class="cp-run-mode">
       <label class="cp-run-mode-toggle" for="cp-auto-submit-toggle">
         <input id="cp-auto-submit-toggle" type="checkbox" />
@@ -3216,6 +3377,29 @@ function renderState(state) {
       : "-/-";
     const freeLeftLabel = Number.isFinite(freeRemaining) ? String(Math.max(0, freeRemaining)) : "-";
     walletEl.textContent = `Plan: ${planLabel} | ${plan === "pro" ? "Applies" : "Hires"}: ${hiresLabel} | Free today: ${freeUsedLabel} (left ${freeLeftLabel})`;
+  }
+
+  const rateEl = panelEl.querySelector("#cp-rate");
+  if (rateEl) {
+    if (s?.autoSubmit && !s?.dryRun) {
+      const range = getSubmitPaceRangeMs(s);
+      const paceLabel = formatPaceLabel(range);
+      const base = `Rate limit: ${paceLabel}`;
+      const hasActivePace = Boolean(lastAutoSubmitAtMs && activeSubmitPaceStartMs && activeSubmitPaceDelayMs);
+      if (hasActivePace) {
+        const nextAllowedAt = Number(activeSubmitPaceStartMs) + Number(activeSubmitPaceDelayMs);
+        const remainingMs = Math.max(0, nextAllowedAt - Date.now());
+        if (remainingMs > 0) {
+          rateEl.textContent = `${base} · next submit in ${Math.ceil(remainingMs / 1000)}s`;
+        } else {
+          rateEl.textContent = `${base} between submits`;
+        }
+      } else {
+        rateEl.textContent = `${base} between submits`;
+      }
+    } else {
+      rateEl.textContent = "Rate limit: off (not auto-submitting)";
+    }
   }
 
   const logEl = panelEl.querySelector("#cp-log");
@@ -4132,6 +4316,11 @@ function getYearsFallback(settings) {
   return "1";
 }
 
+function isYearsExperienceQuestion(label) {
+  const l = normalizeLabel(label);
+  return l.includes("year") && l.includes("experience");
+}
+
 function getStructuredTextFallback(label, settings) {
   const l = normalizeLabel(label);
   if (!l) return "";
@@ -4221,7 +4410,7 @@ function getSelectRuleAnswer(label, settings, optionsForMatch, currentOptionText
   if (l.includes("disability") || l.includes("handicapped")) return String(settings.disabilityStatus || "").trim();
   if (l.includes("gender") || l.includes("sex")) return String(settings.gender || "").trim();
   if (l.includes("ethnicity") || l.includes("race")) return String(settings.ethnicity || "").trim();
-  if (isMarketingConsentQuestion(l)) return String(settings.marketingConsent || "No").trim();
+  if (isMarketingConsentQuestion(l)) return String(settings.marketingConsent || "Yes").trim();
   if (l.includes("proficiency")) return "Professional";
   if (l.includes("salary") || l.includes("compensation") || l.includes("ctc") || l.includes("pay")) {
     return getSalaryAnswer(l, settings);
@@ -4279,7 +4468,7 @@ async function applyComboboxOption(block, label, answer, settings) {
     resolvedAnswer = await requestAiAnswer(label, "select", optionsForMatch.map((o) => o.text), getModalValidationMessage(getActiveModal()));
   }
   const matchedTarget = selectBestOption(optionsForMatch, resolvedAnswer);
-  const target = matchedTarget || selectFallbackOption(optionsForMatch);
+  const target = matchedTarget || selectFallbackOption(optionsForMatch, label);
   if (!target?.el) return false;
   if (normalizeLabel(target.text || "") === normalizeLabel(triggerText || "")) return false;
 
@@ -4436,7 +4625,17 @@ async function fillQuestionBlock(block, settings) {
     textInput.tagName.toLowerCase() !== "textarea" &&
     shouldUseNumericFallbackForTextInput(label, textInput)
   ) {
-    answer = getYearsFallback(settings);
+    const yearsFallback = getYearsFallback(settings);
+    if (isYearsExperienceQuestion(label) && yearsFallback === "1") {
+      const configured = String(settings?.yearsOfExperienceAnswer || "").trim();
+      const fromExperience = Number(settings?.currentExperience);
+      const isConfigured = Boolean(configured) || (Number.isFinite(fromExperience) && fromExperience >= 0);
+      if (!isConfigured && !warnedDefaultYearsFallback) {
+        warnedDefaultYearsFallback = true;
+        await logLine("Years of experience not configured in extension settings. Defaulting to 1 year.", "warn");
+      }
+    }
+    answer = yearsFallback;
   }
   if (textInput && answer) {
     const prev = String(textInput.value || "").trim();
@@ -4483,7 +4682,7 @@ async function fillQuestionBlock(block, settings) {
     }
 
     const matchedTarget = selectBestOption(optionsForMatch, answer);
-    const target = matchedTarget || selectFallbackOption(optionsForMatch);
+    const target = matchedTarget || selectFallbackOption(optionsForMatch, label);
     if (target) {
       if (select.value === target.value) return false;
       select.value = target.value;
@@ -4540,7 +4739,7 @@ async function fillQuestionBlock(block, settings) {
       answer = await requestAiAnswer(aiQuestionLabel, "radio", options.map((o) => o.text), validationMessage);
     }
     const matchedTarget = selectBestOption(options, answer);
-    const target = matchedTarget || selectFallbackOption(options);
+    const target = matchedTarget || selectFallbackOption(options, aiQuestionLabel);
     if (target) {
       if (target.input?.checked) {
         return false;
@@ -4885,7 +5084,19 @@ async function processEasyApplyModal(settings) {
         };
       }
       if (!settings.dryRun && settings.autoSubmit) {
+        const paced = await enforceSubmitRateLimit(activeSettings);
+        if (!paced.ok) {
+          return {
+            submitted: false,
+            skipped: true,
+            reachedSubmit: true,
+            reason: "Run paused/stopped during rate limit wait"
+          };
+        }
         const clicked = await resilientClick(submitBtn, "Submit");
+        lastAutoSubmitAtMs = Date.now();
+        activeSubmitPaceDelayMs = 0;
+        activeSubmitPaceStartMs = 0;
         await sleep(STEP_DELAY_MS);
         const submitCompleted = didSubmitComplete(modal);
         if (submitCompleted) {

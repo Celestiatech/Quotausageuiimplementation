@@ -21,11 +21,146 @@ import { MediaSlot } from '../components/marketing/MediaSlot';
 export default function Home() {
   const navigate = useNavigate();
   const mediaAssets = {
-    heroVideoSrc: '',
+    heroVideoSrc: '/uploads/resumes/AutoApplyMax.mp4',
     heroImageSrc: '',
-    valueImageSrc: '',
-    reliabilityEvidenceImageSrc: '',
+    valueImageSrc: '/marketing/value-dashboard.png',
+    reliabilityEvidenceImageSrc: '/marketing/reliability-evidence.png',
   };
+
+  const extensionDemo = {
+    name: 'AutoApplyCV',
+    version: 'v1.5',
+    status: 'Active',
+    runningLabel: 'Running...',
+    applied: 47,
+    skipped: 12,
+    progressLabel: 'Applying to jobs...',
+    progressPct: 78,
+    activity: [
+      { label: 'Software Engineer - Google', time: 'Just now' },
+      { label: 'Full Stack Dev - Microsoft', time: '2m ago' },
+      { label: 'Frontend Engineer - Meta', time: '5m ago' },
+    ],
+  };
+
+  const ExtensionDemoCard = ({ className = '' }: { className?: string }) => (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.35 }}
+      transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+      className={`glass backdrop-blur-md rounded-3xl shadow-2xl p-6 border border-white/50 ${className}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-sm">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="w-full h-full">
+              <rect width="24" height="24" rx="6" fill="url(#ext-grad)"></rect>
+              <path
+                d="M7 12L10 15L17 8"
+                stroke="white"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              ></path>
+              <defs>
+                <linearGradient id="ext-grad" x1="0" y1="0" x2="24" y2="24">
+                  <stop stopColor="#0a66c2"></stop>
+                  <stop offset="1" stopColor="#378fe9"></stop>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <div className="leading-tight">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-extrabold text-gray-900">{extensionDemo.name}</span>
+              <span className="text-xs font-semibold text-gray-500">{extensionDemo.version}</span>
+            </div>
+            <div className="text-xs text-gray-600">LinkedIn extension</div>
+          </div>
+        </div>
+
+        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+          {extensionDemo.status}
+        </span>
+      </div>
+
+      <div className="mt-5 grid grid-cols-3 gap-3">
+        <div className="rounded-2xl bg-white/75 border border-white/60 px-3 py-3">
+          <div className="text-[11px] text-gray-600 font-semibold">Status</div>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span className="text-sm font-bold text-emerald-700">{extensionDemo.runningLabel}</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-white/75 border border-white/60 px-3 py-3 text-center">
+          <div className="text-2xl font-extrabold text-gray-900 leading-none">{extensionDemo.applied}</div>
+          <div className="text-[11px] text-gray-600 font-semibold">Applied</div>
+        </div>
+
+        <div className="rounded-2xl bg-white/75 border border-white/60 px-3 py-3 text-center">
+          <div className="text-2xl font-extrabold text-gray-900 leading-none">{extensionDemo.skipped}</div>
+          <div className="text-[11px] text-gray-600 font-semibold">Skipped</div>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <div className="flex items-center justify-between text-xs text-gray-700">
+          <span className="font-semibold">{extensionDemo.progressLabel}</span>
+          <span className="font-bold">{extensionDemo.progressPct}%</span>
+        </div>
+        <div className="mt-2 h-2.5 rounded-full bg-gray-200/70 overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            whileInView={{ width: `${extensionDemo.progressPct}%` }}
+            viewport={{ once: true, amount: 0.35 }}
+            transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+            className="h-full rounded-full bg-gradient-to-r from-[#0a66c2] to-[#378fe9]"
+          />
+        </div>
+      </div>
+
+      <motion.div
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, amount: 0.35 }}
+        variants={{
+          hidden: { opacity: 0, y: 6 },
+          show: { opacity: 1, y: 0, transition: { delayChildren: 0.2, staggerChildren: 0.08 } },
+        }}
+        className="mt-5 space-y-2"
+      >
+        {extensionDemo.activity.map((item) => (
+          <motion.div
+            key={item.label}
+            variants={{ hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0 } }}
+            className="flex items-center justify-between gap-3 rounded-2xl bg-white/75 border border-white/60 px-3 py-2.5"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-emerald-600 shrink-0"
+              >
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              <span className="text-xs font-semibold text-gray-800 truncate">{item.label}</span>
+            </div>
+            <span className="text-[11px] font-semibold text-gray-500 shrink-0">{item.time}</span>
+          </motion.div>
+        ))}
+      </motion.div>
+    </motion.div>
+  );
 
   const features = [
     {
@@ -208,20 +343,6 @@ export default function Home() {
                   muted
                   videoControls={false}
                 />
-                {/* Floating Card */}
-                <div className="absolute bottom-6 left-6 right-6 glass backdrop-blur-md rounded-2xl shadow-premium-lg p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm text-gray-600 mb-1">Match Score</div>
-                      <div className="text-3xl font-bold text-gradient">
-                        92%
-                      </div>
-                    </div>
-                    <div className="w-16 h-16 rounded-xl gradient-primary flex items-center justify-center shadow-premium animate-pulse-slow">
-                      <TrendingUp className="w-8 h-8 text-white" />
-                    </div>
-                  </div>
-                </div>
               </div>
               {/* Decorative blurs */}
               <div className="absolute -top-10 -right-10 w-40 h-40 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full blur-3xl opacity-20 animate-pulse-slow"></div>
@@ -357,14 +478,7 @@ export default function Home() {
               </button>
             </div>
             <div className="relative">
-              <div className="rounded-3xl overflow-hidden shadow-2xl">
-                <MediaSlot
-                  imageSrc={mediaAssets.valueImageSrc}
-                  className="w-full h-[420px] object-cover"
-                  placeholderTitle="Value proposition image"
-                  placeholderHint="Add a real dashboard screenshot showing queue, applied/skipped counts, and reason codes."
-                />
-              </div>
+              <ExtensionDemoCard />
             </div>
           </div>
         </div>

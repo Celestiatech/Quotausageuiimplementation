@@ -5,9 +5,13 @@ import { MediaSlot } from '../components/marketing/MediaSlot';
 export default function HowItWorks() {
   const navigate = useNavigate();
   const mediaAssets = {
-    demoVideoSrc: '',
+    demoVideoSrc: '/uploads/resumes/AutoApplyMax.mp4',
     demoPosterSrc: '',
-    guardrailVideoSrcs: ['', '', ''],
+    guardrailVideoSrcs: [
+      '/uploads/resumes/AutoApplyMax.mp4',
+      '/uploads/resumes/AutoApplyMax.mp4',
+      '/uploads/resumes/AutoApplyMax.mp4',
+    ],
   };
 
   const steps = [
@@ -16,6 +20,7 @@ export default function HowItWorks() {
       icon: Download,
       title: 'Install Extension',
       description: 'Install the AutoApply CV Chrome extension, connect it to your account, and launch your LinkedIn automation flow in minutes.',
+      mediaImageSrc: '/marketing/howitworks-install.png',
       details: [
         'One-click Chrome extension setup',
         'Connect directly with AutoApply CV',
@@ -29,6 +34,7 @@ export default function HowItWorks() {
       icon: Target,
       title: 'Match & Customize',
       description: 'Get personalized job matches with compatibility scores. Auto-tailor your resume for each application with one click.',
+      mediaImageSrc: '/marketing/howitworks-match.png',
       details: [
         'AI job matching',
         'Compatibility scoring',
@@ -42,6 +48,7 @@ export default function HowItWorks() {
       icon: Rocket,
       title: 'Auto Apply & Track',
       description: 'Apply to LinkedIn jobs automatically, then manage your full pipeline with a built-in job application tracker and analytics.',
+      mediaImageSrc: '/marketing/howitworks-track.png',
       details: [
         'LinkedIn easy apply automation',
         'Pipeline management',
@@ -145,8 +152,13 @@ export default function HowItWorks() {
                   {/* Visual */}
                   <div className={index % 2 === 1 ? 'lg:order-1' : ''}>
                     <div className={`rounded-3xl bg-gradient-to-br ${step.gradient} p-1 shadow-2xl`}>
-                      <div className="rounded-3xl bg-white p-12 h-96 flex items-center justify-center">
-                        <step.icon className="w-32 h-32 text-gray-200" />
+                      <div className="rounded-3xl bg-white overflow-hidden h-96">
+                        <MediaSlot
+                          imageSrc={step.mediaImageSrc}
+                          className="w-full h-full object-cover"
+                          placeholderTitle={`${step.title} media`}
+                          placeholderHint="Add a real screenshot that matches this step."
+                        />
                       </div>
                     </div>
                   </div>

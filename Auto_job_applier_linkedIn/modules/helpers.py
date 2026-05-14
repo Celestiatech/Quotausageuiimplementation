@@ -299,3 +299,11 @@ def truncate_for_csv(data, max_length: int = 131000, suffix: str = "...[TRUNCATE
         return truncated
     except Exception as e:
         return f"[ERROR CONVERTING DATA: {e}]"
+
+def random_delay():
+    """
+    Introduces a random delay between 60 and 180 seconds to mimic human behavior.
+    """
+    delay = randint(60, 180)
+    print_lg(f"Sleeping for {delay} seconds to mimic human behavior.")
+    sleep(delay)

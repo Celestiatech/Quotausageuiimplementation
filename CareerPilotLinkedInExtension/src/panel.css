@@ -119,6 +119,13 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.35);
 }
 
+#cp-linkedin-copilot-panel .cp-rate {
+  padding: 8px 18px 0 18px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--cp-muted);
+}
+
 #cp-linkedin-copilot-panel.cp-dragging .cp-head {
   cursor: grabbing;
 }

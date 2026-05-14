@@ -21,7 +21,7 @@ export default function Pricing() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const navigate = useNavigate();
   const mediaAssets = {
-    billingEvidenceImageSrc: '',
+    billingEvidenceImageSrc: '/marketing/billing-evidence.png',
     billingEvidenceVideoSrc: '',
   };
 

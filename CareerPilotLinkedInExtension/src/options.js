@@ -230,6 +230,33 @@ async function init() {
   if (loaded.ok) setForm(loaded.settings || {});
 }
 
+function installAutoRefresh() {
+  try {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "local") return;
+      if (!changes || !changes.cpSettings) return;
+      void (async () => {
+        const loaded = await sendMessage({ type: "CP_LOAD_SETTINGS" });
+        if (loaded.ok) {
+          setForm(loaded.settings || {});
+          setStatus("Settings updated (synced).");
+        }
+      })();
+    });
+  } catch {
+    // ignore
+  }
+
+  try {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      void init();
+    });
+  } catch {
+    // ignore
+  }
+}
+
 document.getElementById("settings-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const settings = readForm();
@@ -243,3 +270,4 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
 });
 
 init().catch(() => setStatus("Failed to load settings", false));
+installAutoRefresh();

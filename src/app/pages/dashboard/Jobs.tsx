@@ -1019,6 +1019,7 @@ export default function Jobs() {
       const preferredYearsOfExperience = pickFirstNonEmpty(mergedAnswers, [
         "cp_pref_years_of_experience",
         "careerpilot_preference_years_of_experience",
+        "years_of_experience",
       ]);
       const preferredConfidenceLevel = pickFirstNonEmpty(mergedAnswers, [
         "cp_pref_confidence_level",
@@ -1042,6 +1043,9 @@ export default function Jobs() {
         if (!canonicalKey) continue;
         screeningAnswersForSync[canonicalKey] = answer;
       }
+      if (preferredYearsOfExperience) {
+        screeningAnswersForSync["years_of_experience"] = String(preferredYearsOfExperience).trim();
+      }
 
       const fullName =
         pickFirstNonEmpty(mergedAnswers, ["full_name", "full legal name"]) ||
@@ -1061,7 +1065,7 @@ export default function Jobs() {
       const resolvedSearchLocation =
         preferredSearchLocation ||
         preferredLocations[0] ||
-        (!remoteModeSelected ? preferredCountries[0] || currentCity : "");
+        (!remoteModeSelected ? currentCity || preferredCountries[0] : "");
       const filterLocations = sanitizeLocationFilterValues(
         remoteModeSelected ? preferredLocations : [...preferredLocations, ...preferredCountries],
       );
@@ -1076,16 +1080,19 @@ export default function Jobs() {
         contactEmail: user?.email || "",
         phoneNumber: derivePhoneNumber(phoneAnswer || user?.phone),
         phoneCountryCode: derivePhoneCountryCode(phoneAnswer || user?.phone),
-        marketingConsent: "No",
+        marketingConsent: "Yes",
         requireVisa: preferredRequireVisa || "No",
         usCitizenship: preferredUsCitizenship || "",
         yearsOfExperienceAnswer: preferredYearsOfExperience || "",
+        currentExperience: preferredYearsOfExperience ? Number.parseInt(String(preferredYearsOfExperience), 10) : -1,
         confidenceLevel: preferredConfidenceLevel || "",
         easyApplyOnly: true,
         debugMode: false,
         dryRun: false,
         autoSubmit: true,
         autoResumeOnAnswer: true,
+        submitRateMinSec: 40,
+        submitRateMaxSec: 70,
         maxApplicationsPerRun: 200,
         maxSkipsPerRun: 50,
         blacklistedCompanies: [],
