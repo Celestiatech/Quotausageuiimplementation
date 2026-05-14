@@ -59,6 +59,32 @@ let activeSubmitPaceDelayMs = 0;
 let activeSubmitPaceStartMs = 0;
 let warnedDefaultYearsFallback = false;
 
+function readPersistedNumber(key) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writePersistedNumber(key, value) {
+  try {
+    window.localStorage.setItem(key, String(Number(value) || 0));
+  } catch {
+    // ignore
+  }
+}
+
+function hydrateSubmitPaceFromStorage() {
+  if (lastAutoSubmitAtMs) return;
+  const persisted = readPersistedNumber("cpLastAutoSubmitAtMs");
+  if (persisted > 0) {
+    lastAutoSubmitAtMs = persisted;
+  }
+}
+
 function clampNumber(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -96,10 +122,18 @@ function setRateLimitUiText(text) {
 
 async function enforceSubmitRateLimit(settings) {
   if (!settings || settings.dryRun || !settings.autoSubmit) return { ok: true, waitedMs: 0 };
+  hydrateSubmitPaceFromStorage();
+  await debugLog(settings, "Rate limit check", {
+    dryRun: Boolean(settings?.dryRun),
+    autoSubmit: Boolean(settings?.autoSubmit),
+    lastAutoSubmitAtMs,
+    persistedLastAutoSubmitAtMs: readPersistedNumber("cpLastAutoSubmitAtMs") || 0,
+  });
   const range = getSubmitPaceRangeMs(settings);
   const paceLabel = formatPaceLabel(range);
   if (!lastAutoSubmitAtMs) {
-    setRateLimitUiText(`Rate limit: ${paceLabel} between submits`);
+    setRateLimitUiText(`Rate limit: ${paceLabel} between submits · first submit (no wait)`);
+    await debugLog(settings, "Rate limit decision: first submit (no wait)", { paceLabel });
     return { ok: true, waitedMs: 0 };
   }
 
@@ -107,11 +141,25 @@ async function enforceSubmitRateLimit(settings) {
   if (!activeSubmitPaceDelayMs || !activeSubmitPaceStartMs || activeSubmitPaceStartMs < lastAutoSubmitAtMs) {
     activeSubmitPaceStartMs = lastAutoSubmitAtMs;
     activeSubmitPaceDelayMs = pickPaceDelayMs(range);
+    await debugLog(settings, "Rate limit picked new delay", {
+      paceLabel,
+      activeSubmitPaceStartMs,
+      activeSubmitPaceDelayMs,
+    });
   }
   const nextAllowedAt = activeSubmitPaceStartMs + activeSubmitPaceDelayMs;
   let remainingMs = Math.max(0, nextAllowedAt - now);
   if (!remainingMs) {
-    setRateLimitUiText(`Rate limit: ${paceLabel} between submits`);
+    const elapsedSec = Math.max(0, Math.floor((now - lastAutoSubmitAtMs) / 1000));
+    const targetSec = Math.max(0, Math.floor(activeSubmitPaceDelayMs / 1000));
+    setRateLimitUiText(`Rate limit: ${paceLabel} between submits · ok (elapsed ${elapsedSec}s / target ${targetSec}s)`);
+    await debugLog(settings, "Rate limit decision: no wait needed", {
+      paceLabel,
+      elapsedSec,
+      targetSec,
+      lastAutoSubmitAtMs,
+      now,
+    });
     return { ok: true, waitedMs: 0 };
   }
 
@@ -128,7 +176,7 @@ async function enforceSubmitRateLimit(settings) {
     await sleep(step);
     remainingMs = Math.max(0, nextAllowedAt - Date.now());
   }
-  setRateLimitUiText(`Rate limit: ${paceLabel} between submits`);
+  setRateLimitUiText(`Rate limit: ${paceLabel} between submits · ok`);
   return { ok: true, waitedMs: Date.now() - startedWaitingAt };
 }
 let currentJobContext = {
@@ -901,10 +949,6 @@ function isMarketingConsentQuestion(label) {
 function answerCommonQuestion(label, settings) {
   const l = normalizeLabel(label);
   const key = questionKeyFromLabel(l);
-  const manualByKey = settings?.screeningAnswers?.[key];
-  if (manualByKey) return String(manualByKey);
-  const manualByLabel = settings?.screeningAnswers?.[l];
-  if (manualByLabel) return String(manualByLabel);
 
   const fullName = buildFullName(settings);
   const currentCity = normalizeCityAnswer(settings.currentCity, currentJobContext.workLocation);
@@ -914,6 +958,13 @@ function answerCommonQuestion(label, settings) {
   const noticeDays = normalizeNumberString(settings.noticePeriodDays);
   const noticeMonths = noticeDays ? String(Math.floor(Number(noticeDays) / 30)) : "";
   const noticeWeeks = noticeDays ? String(Math.floor(Number(noticeDays) / 7)) : "";
+
+  const identityKeys = new Set(["full_name", "first_name", "last_name", "phone_number", "email_address", "linkedin_url"]);
+  const manualByKey = settings?.screeningAnswers?.[key];
+  const manualByLabel = settings?.screeningAnswers?.[l];
+  const manualValue = manualByKey ? String(manualByKey) : manualByLabel ? String(manualByLabel) : "";
+  // Prefer explicit profile fields over screeningAnswers for identity fields to avoid bad/stale overrides.
+  if (manualValue && !identityKeys.has(String(key || "").trim())) return manualValue;
 
   if (l.includes("visa") || l.includes("sponsorship")) return settings.requireVisa || "No";
   if (
@@ -1524,6 +1575,8 @@ function shouldSkipByAboutCompany(aboutCompanyText, settings) {
   return { skip: false, reasonCode: "", reason: "" };
 }
 
+let lastDailyEasyApplyLimitEvidence = "";
+
 function hasDailyEasyApplyLimitSignal(root = document) {
   const candidates = getAllBySelectorList(
     [
@@ -1540,17 +1593,10 @@ function hasDailyEasyApplyLimitSignal(root = document) {
     root
   );
   const scopedText = normalizeLabel(candidates.map((el) => String(el?.textContent || "")).join(" "));
-  const rootText = normalizeLabel(
-    String(
-      root?.body?.innerText ||
-        root?.documentElement?.innerText ||
-        root?.innerText ||
-        document?.body?.innerText ||
-        ""
-    )
-  );
-  const combined = scopedText || rootText;
-  if (!combined) return false;
+  // Important: do not fall back to scanning the entire page body text.
+  // It causes false-positives when job descriptions or company pages mention "bots", "quality", or "apply tomorrow".
+  lastDailyEasyApplyLimitEvidence = "";
+  if (!scopedText) return false;
   const phrases = [
     "daily application limit",
     "exceeded the daily application limit",
@@ -1560,13 +1606,18 @@ function hasDailyEasyApplyLimitSignal(root = document) {
     "each application get the right attention",
     "each applications get the right attention",
   ];
-  if (phrases.some((phrase) => combined.includes(phrase))) return true;
+  const match = phrases.find((phrase) => scopedText.includes(phrase));
+  if (match) {
+    lastDailyEasyApplyLimitEvidence = `matched:${match}`;
+    return true;
+  }
   if (
-    combined.includes("limit") &&
-    combined.includes("daily") &&
-    combined.includes("submission") &&
-    combined.includes("tomorrow")
+    scopedText.includes("limit") &&
+    scopedText.includes("daily") &&
+    scopedText.includes("submission") &&
+    scopedText.includes("tomorrow")
   ) {
+    lastDailyEasyApplyLimitEvidence = "matched:limit+daily+submission+tomorrow";
     return true;
   }
   return false;
@@ -1587,7 +1638,7 @@ async function pauseRunForDailyEasyApplyLimit(settings, reason = "LinkedIn daily
   await reportProgress();
   await sendMessage({ type: "CP_PAUSE" });
   await botChat("LinkedIn daily submission limit reached. Run paused. Resume tomorrow.", "warn");
-  await debugLog(settings, "Paused due daily limit", { reason });
+  await debugLog(settings, "Paused due daily limit", { reason, evidence: lastDailyEasyApplyLimitEvidence });
   return true;
 }
 
@@ -3392,7 +3443,9 @@ function renderState(state) {
         if (remainingMs > 0) {
           rateEl.textContent = `${base} · next submit in ${Math.ceil(remainingMs / 1000)}s`;
         } else {
-          rateEl.textContent = `${base} between submits`;
+          const elapsedSec = Math.max(0, Math.floor((Date.now() - Number(lastAutoSubmitAtMs)) / 1000));
+          const targetSec = Math.max(0, Math.floor(Number(activeSubmitPaceDelayMs) / 1000));
+          rateEl.textContent = `${base} · ok (elapsed ${elapsedSec}s / target ${targetSec}s)`;
         }
       } else {
         rateEl.textContent = `${base} between submits`;
@@ -5095,6 +5148,7 @@ async function processEasyApplyModal(settings) {
         }
         const clicked = await resilientClick(submitBtn, "Submit");
         lastAutoSubmitAtMs = Date.now();
+        writePersistedNumber("cpLastAutoSubmitAtMs", lastAutoSubmitAtMs);
         activeSubmitPaceDelayMs = 0;
         activeSubmitPaceStartMs = 0;
         await sleep(STEP_DELAY_MS);

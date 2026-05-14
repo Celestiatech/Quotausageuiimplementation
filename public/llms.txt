@@ -1,0 +1,22 @@
+# AutoApply CV
+
+## What this site is
+AutoApply CV is an AI-assisted job search automation platform focused on LinkedIn Easy Apply workflows, reusable screening answers, and application tracking.
+
+## Key pages
+- Product: /product
+- Features: /features
+- How it works: /how-it-works
+- Pricing: /pricing
+- FAQ: /faq
+- Blog: /blog
+- Contact: /contact
+
+## Content types
+- Marketing pages describing product features and pricing
+- Help/troubleshooting content for extension + dashboard sync
+- Blog articles about job search automation and best practices
+
+## Data and privacy
+See: /privacy-policy
+

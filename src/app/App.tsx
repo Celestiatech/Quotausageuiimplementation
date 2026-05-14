@@ -1,4 +1,16 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router';
+"use client";
+
+import { Suspense, lazy, useMemo } from 'react';
+import {
+  createBrowserRouter,
+  createMemoryRouter,
+  createRoutesFromElements,
+  Navigate,
+  Outlet,
+  Route,
+  RouterProvider,
+  useLocation,
+} from 'react-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
 import { SeoManager } from './components/SeoManager';
@@ -60,7 +72,7 @@ import Support from './pages/admin/Support';
 import Health from './pages/admin/Health';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminBlogs from './pages/admin/Blogs';
-import AdminBlogEditor from './pages/admin/BlogEditor';
+const AdminBlogEditor = lazy(() => import('./pages/admin/BlogEditor'));
 
 // Protected Route Components
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -95,90 +107,113 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function App() {
+function AppChrome() {
+  return (
+    <>
+      <SeoManager />
+      <Outlet />
+    </>
+  );
+}
+
+const routes = createRoutesFromElements(
+  <>
+    <Route element={<AppChrome />}>
+    {/* Marketing Pages */}
+    <Route path="/" element={<Root />}>
+      <Route index element={<Home />} />
+      <Route path="product" element={<Product />} />
+      <Route path="features" element={<Features />} />
+      <Route path="how-it-works" element={<HowItWorks />} />
+      <Route path="pricing" element={<Pricing />} />
+      <Route path="about" element={<About />} />
+      <Route path="faq" element={<FAQ />} />
+      <Route path="roadmap" element={<Roadmap />} />
+      <Route path="careers" element={<Careers />} />
+      <Route path="contact" element={<Contact />} />
+      <Route path="press-kit" element={<PressKit />} />
+      <Route path="help-center" element={<HelpCenter />} />
+      <Route path="community" element={<Community />} />
+      <Route path="privacy-policy" element={<PrivacyPolicy />} />
+      <Route path="terms-of-service" element={<TermsOfService />} />
+      <Route path="cookie-policy" element={<CookiePolicy />} />
+      <Route path="extension-design" element={<ExtensionDesign />} />
+      <Route path="blog" element={<Blog />} />
+      <Route path="blog/:slug" element={<BlogPost />} />
+      <Route path="thank-you" element={<ThankYou />} />
+    </Route>
+
+    {/* Auth Pages */}
+    <Route path="/login" element={<Login />} />
+    <Route path="/forgot-password" element={<ForgotPassword />} />
+    <Route path="/admin/login" element={<AdminLogin />} />
+    <Route path="/signup" element={<Signup />} />
+
+    {/* Dashboard */}
+    <Route
+      path="/dashboard"
+      element={
+        <ProtectedRoute>
+          <DashboardLayout />
+        </ProtectedRoute>
+      }
+    >
+      <Route index element={<DashboardOverview />} />
+      <Route path="jobs" element={<Jobs />} />
+      <Route path="applications" element={<Applications />} />
+      <Route path="resume" element={<Resume />} />
+      <Route path="interview" element={<Interview />} />
+      <Route path="analytics" element={<DashboardAnalytics />} />
+      <Route path="settings" element={<Settings />} />
+      <Route path="profile" element={<Profile />} />
+      <Route path="billing" element={<Billing />} />
+      <Route path="marketing" element={<Marketing />} />
+      <Route path="hr-outreach" element={<HROutreach />} />
+      <Route path="cold-emails" element={<ColdEmails />} />
+      <Route path="onboarding" element={<Onboarding />} />
+    </Route>
+
+    {/* Admin */}
+    <Route
+      path="/admin"
+      element={
+        <AdminRoute>
+          <AdminLayout />
+        </AdminRoute>
+      }
+    >
+      <Route index element={<AdminOverview />} />
+      <Route path="users" element={<Users />} />
+      <Route path="analytics" element={<AdminAnalytics />} />
+      <Route path="jobs" element={<AdminJobs />} />
+      <Route path="applications" element={<AdminApplications />} />
+      <Route path="revenue" element={<Revenue />} />
+      <Route path="support" element={<Support />} />
+      <Route path="health" element={<Health />} />
+      <Route path="blogs" element={<AdminBlogs />} />
+      <Route path="blogs/new" element={<Suspense fallback={null}><AdminBlogEditor /></Suspense>} />
+      <Route path="blogs/:id/edit" element={<Suspense fallback={null}><AdminBlogEditor /></Suspense>} />
+      <Route path="settings" element={<AdminSettings />} />
+    </Route>
+    </Route>
+  </>,
+);
+
+type AppProps = {
+  initialPathname?: string;
+};
+
+export default function App({ initialPathname }: AppProps) {
+  const router = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return createMemoryRouter(routes, { initialEntries: [initialPathname || '/'] });
+    }
+    return createBrowserRouter(routes);
+  }, [initialPathname]);
+
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <SeoManager />
-        <Routes>
-          {/* Marketing Pages */}
-          <Route path="/" element={<Root />}>
-            <Route index element={<Home />} />
-            <Route path="product" element={<Product />} />
-            <Route path="features" element={<Features />} />
-            <Route path="how-it-works" element={<HowItWorks />} />
-            <Route path="pricing" element={<Pricing />} />
-            <Route path="about" element={<About />} />
-            <Route path="faq" element={<FAQ />} />
-            <Route path="roadmap" element={<Roadmap />} />
-            <Route path="careers" element={<Careers />} />
-            <Route path="contact" element={<Contact />} />
-            <Route path="press-kit" element={<PressKit />} />
-            <Route path="help-center" element={<HelpCenter />} />
-            <Route path="community" element={<Community />} />
-            <Route path="privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="terms-of-service" element={<TermsOfService />} />
-            <Route path="cookie-policy" element={<CookiePolicy />} />
-            <Route path="extension-design" element={<ExtensionDesign />} />
-            <Route path="blog" element={<Blog />} />
-            <Route path="blog/:slug" element={<BlogPost />} />
-            <Route path="thank-you" element={<ThankYou />} />
-          </Route>
-
-          {/* Auth Pages */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/signup" element={<Signup />} />
-
-          {/* Dashboard */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<DashboardOverview />} />
-            <Route path="jobs" element={<Jobs />} />
-            <Route path="applications" element={<Applications />} />
-            <Route path="resume" element={<Resume />} />
-            <Route path="interview" element={<Interview />} />
-            <Route path="analytics" element={<DashboardAnalytics />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="billing" element={<Billing />} />
-            <Route path="marketing" element={<Marketing />} />
-            <Route path="hr-outreach" element={<HROutreach />} />
-            <Route path="cold-emails" element={<ColdEmails />} />
-            <Route path="onboarding" element={<Onboarding />} />
-          </Route>
-
-          {/* Admin */}
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute>
-                <AdminLayout />
-              </AdminRoute>
-            }
-          >
-            <Route index element={<AdminOverview />} />
-            <Route path="users" element={<Users />} />
-            <Route path="analytics" element={<AdminAnalytics />} />
-            <Route path="jobs" element={<AdminJobs />} />
-            <Route path="applications" element={<AdminApplications />} />
-            <Route path="revenue" element={<Revenue />} />
-            <Route path="support" element={<Support />} />
-            <Route path="health" element={<Health />} />
-            <Route path="blogs" element={<AdminBlogs />} />
-            <Route path="blogs/new" element={<AdminBlogEditor />} />
-            <Route path="blogs/:id/edit" element={<AdminBlogEditor />} />
-            <Route path="settings" element={<AdminSettings />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </AuthProvider>
   );
 }

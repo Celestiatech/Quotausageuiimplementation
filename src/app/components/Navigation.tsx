@@ -43,8 +43,7 @@ export function Navigation() {
             <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <img
                 src="/logos/brandmark-80.png"
-                alt=""
-                aria-hidden="true"
+                alt="AutoApply CV logo"
                 className="w-10 h-10 rounded-xl shadow-lg"
                 width={40}
                 height={40}
@@ -78,9 +77,6 @@ export function Navigation() {
               </Link>
               <Link to="/faq" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
                 FAQ
-              </Link>
-              <Link to="/extension-design" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
-                Extension Design
               </Link>
               <Link to="/blog" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
                 Blog
@@ -196,13 +192,6 @@ export function Navigation() {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Blog
-                </Link>
-                <Link
-                  to="/extension-design"
-                  className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Extension Design
                 </Link>
                 <div className="pt-4 border-t border-gray-200 flex flex-col gap-2">
                   {isAuthenticated ? (

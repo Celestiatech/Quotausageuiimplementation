@@ -11,8 +11,7 @@ export function Footer() {
             <Link to="/" className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
               <img
                 src="/logos/brandmark-80.png"
-                alt=""
-                aria-hidden="true"
+                alt="AutoApply CV logo"
                 className="w-10 h-10 rounded-xl shadow-lg"
                 width={40}
                 height={40}
@@ -126,6 +125,11 @@ export function Footer() {
               <li>
                 <Link to="/blog" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
                   Blog
+                </Link>
+              </li>
+              <li>
+                <Link to="/extension-design" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
+                  Extension Design
                 </Link>
               </li>
               <li>
