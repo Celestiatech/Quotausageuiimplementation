@@ -2040,12 +2040,41 @@ function getEffectiveSearchLocation(settings, locationOverride = "") {
   const override = String(locationOverride || "").trim();
   if (override) return override;
   const explicitSearchLocation = String(settings?.searchLocation || "").trim();
+  // Treat remote-like values as "do not set location input".
+  // LinkedIn already has an explicit Remote workplace filter; typing "remote" into the location box
+  // creates confusing searches (e.g. "remote" location tokens) and can keep results pinned to a region.
+  if (isRemoteLikeSearchValue(explicitSearchLocation)) return "";
   if (shouldUseRemoteLocationKeywords(settings)) {
     // When remote mode is already selected, repeatedly typing "remote" back into
     // LinkedIn's location field causes avoidable reloads and search resets.
     return isRemoteLikeSearchValue(explicitSearchLocation) ? "" : explicitSearchLocation;
   }
   return explicitSearchLocation;
+}
+
+function buildSearchLocationDecisionMeta(settings, locationOverride = "", resolvedLocation = "") {
+  const override = String(locationOverride || "").trim();
+  const explicitSearchLocation = String(settings?.searchLocation || "").trim();
+  const filterLocations = parseListSetting(settings?.filterLocations);
+  const remoteModeSelected = isRemoteModeSelected(settings);
+  const useRemoteLocationKeywords = shouldUseRemoteLocationKeywords(settings);
+  const skipRemoteLocationTyping =
+    useRemoteLocationKeywords && isRemoteLikeSearchValue(explicitSearchLocation) && !override;
+
+  let source = "none";
+  if (override) source = "override";
+  else if (explicitSearchLocation) source = "settings.searchLocation";
+
+  return {
+    resolvedLocation: String(resolvedLocation || "").trim(),
+    source,
+    locationOverride: override || "",
+    settingsSearchLocation: explicitSearchLocation,
+    remoteModeSelected,
+    useRemoteLocationKeywords,
+    skipRemoteLocationTyping,
+    filterLocations
+  };
 }
 
 function shouldClearStaleLocationQueryParams(settings, url) {
@@ -2442,6 +2471,7 @@ async function gotoNextResultsPage(settings) {
 
 async function setSearchLocationIfNeeded(settings, locationOverride = "") {
   const location = getEffectiveSearchLocation(settings, locationOverride);
+  await debugLog(settings, "Search location decision", buildSearchLocationDecisionMeta(settings, locationOverride, location));
   if (!location) return;
   if (!locationOverride) {
     try {
@@ -2454,11 +2484,7 @@ async function setSearchLocationIfNeeded(settings, locationOverride = "") {
       // ignore URL parsing issues and fall through to input-based location setting
     }
   }
-  const input = getBySelectorList([
-    "input[aria-label*='City, state, or zip code']",
-    "input[placeholder*='City, state, or zip code']",
-    "input.jobs-search-box__text-input"
-  ]);
+  const input = getJobsSearchLocationInput();
   if (!input) {
     await debugLog(settings, "Search location input not found", { url: window.location.href });
     return;
@@ -2467,6 +2493,11 @@ async function setSearchLocationIfNeeded(settings, locationOverride = "") {
     await debugLog(settings, "Search location already set", { location, url: window.location.href });
     return;
   }
+  await debugLog(settings, "Setting search location input", {
+    before: String(input.value || ""),
+    next: location,
+    url: window.location.href
+  });
   input.focus();
   input.value = "";
   input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -2476,6 +2507,83 @@ async function setSearchLocationIfNeeded(settings, locationOverride = "") {
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   await logLine(`Search location set: ${location}`);
   await sleep(800);
+}
+
+function getJobsSearchLocationInput(root = document) {
+  // LinkedIn renders multiple inputs with the same class; avoid selecting the keywords input by mistake.
+  const byLabel = getBySelectorList(
+    ["input[aria-label*='City, state, or zip code']", "input[placeholder*='City, state, or zip code']"],
+    root
+  );
+  if (byLabel) return byLabel;
+
+  const candidates = Array.from(root.querySelectorAll("input.jobs-search-box__text-input"));
+  const locationLike = candidates.find((el) => {
+    const aria = String(el.getAttribute("aria-label") || "");
+    const placeholder = String(el.getAttribute("placeholder") || "");
+    const combined = normalizeLabel(`${aria} ${placeholder}`);
+    return combined.includes("city") || combined.includes("state") || combined.includes("zip") || combined.includes("location");
+  });
+  if (locationLike) return locationLike;
+
+  // Heuristic: when there are 2 search inputs, LinkedIn typically renders keywords first, location second.
+  if (candidates.length === 2) return candidates[1];
+  return null;
+}
+
+async function clearLinkedInSearchLocationInput(settings) {
+  const input = getJobsSearchLocationInput();
+  if (!input) {
+    await debugLog(settings, "Search location input not found for clearing", { url: window.location.href });
+    return false;
+  }
+  const before = String(input.value || "").trim();
+
+  // LinkedIn sometimes renders the selected location as a pill/token with an "X" button,
+  // while the actual input value can be empty. Try to remove any token first.
+  const container =
+    input.closest(".jobs-search-box__text-input")?.parentElement ||
+    input.closest(".jobs-search-box__inner") ||
+    input.closest("form") ||
+    input.parentElement;
+  const clearBtn = container
+    ? getBySelectorList(
+        [
+          "button[aria-label*='Clear location']",
+          "button[aria-label*='Clear']",
+          "button[aria-label*='Remove']",
+          "button[aria-label*='Dismiss']"
+        ],
+        container
+      )
+    : null;
+  if (clearBtn) {
+    const clicked = await resilientClick(clearBtn, "Clear location token");
+    if (clicked) {
+      await logLine("Cleared LinkedIn search location token/button", "info");
+      await sleep(500);
+    }
+  }
+
+  // If we still have a visible value, clear the text input.
+  const afterToken = String(input.value || "").trim();
+  if (!before && !afterToken && !clearBtn) {
+    await debugLog(settings, "Search location input already empty", { url: window.location.href });
+    return false;
+  }
+  input.focus();
+  input.value = "";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  // As a fallback, backspace a few times to remove any remaining tokenized value.
+  for (let i = 0; i < 5; i += 1) {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keyup", { key: "Backspace", bubbles: true }));
+  }
+  await logLine("Cleared LinkedIn search location input", "info", { before });
+  await sleep(800);
+  return true;
 }
 
 async function rotateRemoteLocationKeyword(settings) {
@@ -2978,13 +3086,30 @@ async function handleChatCommand(input) {
       await botChat("City value is empty. Use: set city New York", "warn");
       return;
     }
-    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { currentCity: city, searchLocation: city } });
-    await botChat(`Saved city as ${city}.`);
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { currentCity: city } });
+    await botChat(`Saved current city as ${city}. (This affects form questions like "current location", not the LinkedIn search location box.)`);
+    return;
+  }
+  if (cmd.startsWith("set search location ")) {
+    const location = raw.slice("set search location ".length).trim();
+    if (!location) {
+      await botChat("Search location value is empty. Use: set search location Ireland", "warn");
+      return;
+    }
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { searchLocation: location } });
+    await botChat(`Saved search location as ${location}.`);
     return;
   }
   if (cmd === "clear city" || cmd === "reset city") {
-    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { currentCity: "", searchLocation: "" } });
-    await botChat("Cleared city + search location. LinkedIn search will no longer be forced to a specific location.", "info");
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { currentCity: "" } });
+    await botChat("Cleared current city. (Search location box is unchanged.)", "info");
+    return;
+  }
+  if (cmd === "clear search location" || cmd === "reset search location") {
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { searchLocation: "" } });
+    await botChat("Cleared search location. LinkedIn search will no longer be forced to a specific location.", "info");
+    const boot = await getBootstrap();
+    await clearLinkedInSearchLocationInput(boot?.settings || {});
     return;
   }
   if (cmd === "clear locations" || cmd === "reset locations") {
@@ -4653,6 +4778,16 @@ async function fillQuestionBlock(block, settings) {
   const modal = getActiveModal();
   const validationMessage = getModalValidationMessage(modal);
   const aiQuestionLabel = labelRaw || label;
+
+  if (answer && (label.includes("location") || label.includes("city") || label.includes("address"))) {
+    await debugLog(settings, "Resolved location answer", {
+      questionLabel: aiQuestionLabel,
+      settingsCurrentCity: String(settings?.currentCity || ""),
+      jobWorkLocation: String(currentJobContext?.workLocation || ""),
+      normalizedFromSettingsOrJob: normalizeCityAnswer(settings?.currentCity, currentJobContext?.workLocation),
+      finalAnswer: String(answer || "")
+    });
+  }
 
   const textInput = getBySelectorList(
     ["input[type='text']", "input[type='email']", "input[type='tel']", "input[type='number']", "textarea"],
