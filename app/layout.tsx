@@ -3,7 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 
 const GOOGLE_TAG_ID = String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim();
-const CLARITY_TAG_ID = String(process.env.NEXT_PUBLIC_CLARITY_TAG_ID || "wsz3s6j92d").trim();
+const CLARITY_TAG_ID = String(process.env.NEXT_PUBLIC_CLARITY_TAG_ID || "").trim();
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.autoapplycv.in"),
