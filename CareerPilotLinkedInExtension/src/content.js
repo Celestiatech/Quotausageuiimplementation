@@ -1586,7 +1586,6 @@ function hasDailyEasyApplyLimitSignal(root = document) {
       "[aria-live='assertive']",
       ".artdeco-toast-item__message",
       ".artdeco-toast-item",
-      ".jobs-easy-apply-content",
       ".jobs-apply-button--top-card + .artdeco-inline-feedback__message",
       ".jobs-unified-top-card .artdeco-inline-feedback__message"
     ],
@@ -1597,27 +1596,25 @@ function hasDailyEasyApplyLimitSignal(root = document) {
   // It causes false-positives when job descriptions or company pages mention "bots", "quality", or "apply tomorrow".
   lastDailyEasyApplyLimitEvidence = "";
   if (!scopedText) return false;
-  const phrases = [
+  // Keep this detection strict: LinkedIn UIs frequently contain "apply tomorrow" or "quality" text in unrelated areas.
+  // Only treat it as a daily limit when we see the core "limit the number of applications you can submit in a day"
+  // wording (or close variants), plus a "try again tomorrow" signal.
+  const coreLimitPhrases = [
+    "we limit the number of applications you can submit in a day",
+    "limit the number of applications you can submit in a day",
+    "we limit the number of applications you can submit per day",
+    "limit the number of applications you can submit per day",
     "daily application limit",
     "exceeded the daily application limit",
-    "we limit daily submissions",
-    "apply tomorrow",
-    "maintain quality and prevent bots",
-    "each application get the right attention",
-    "each applications get the right attention",
+    "we limit daily submissions"
   ];
-  const match = phrases.find((phrase) => scopedText.includes(phrase));
-  if (match) {
-    lastDailyEasyApplyLimitEvidence = `matched:${match}`;
-    return true;
-  }
-  if (
-    scopedText.includes("limit") &&
-    scopedText.includes("daily") &&
-    scopedText.includes("submission") &&
-    scopedText.includes("tomorrow")
-  ) {
-    lastDailyEasyApplyLimitEvidence = "matched:limit+daily+submission+tomorrow";
+  const coreMatch = coreLimitPhrases.find((phrase) => scopedText.includes(phrase));
+  const hasTryTomorrow =
+    scopedText.includes("try again tomorrow") ||
+    scopedText.includes("please try again tomorrow") ||
+    (scopedText.includes("tomorrow") && scopedText.includes("try again"));
+  if (coreMatch && (hasTryTomorrow || scopedText.includes("submit in a day") || scopedText.includes("per day"))) {
+    lastDailyEasyApplyLimitEvidence = `matched:${coreMatch}${hasTryTomorrow ? "+tomorrow" : ""}`;
     return true;
   }
   return false;
@@ -1637,7 +1634,10 @@ async function pauseRunForDailyEasyApplyLimit(settings, reason = "LinkedIn daily
   });
   await reportProgress();
   await sendMessage({ type: "CP_PAUSE" });
-  await botChat("LinkedIn daily submission limit reached. Run paused. Resume tomorrow.", "warn");
+  await botChat(
+    "LinkedIn shows an Easy Apply daily submission limit message, so the run is paused. If you can still submit manually, click Resume and I’ll retry.",
+    "warn"
+  );
   await debugLog(settings, "Paused due daily limit", { reason, evidence: lastDailyEasyApplyLimitEvidence });
   return true;
 }
