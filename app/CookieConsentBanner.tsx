@@ -6,7 +6,9 @@ import Clarity from "@microsoft/clarity";
 type ConsentState = "unknown" | "granted" | "denied";
 
 const CONSENT_COOKIE = "cp_cookie_consent";
+const CONSENT_STORAGE_KEY = "cp_cookie_consent";
 const CONSENT_MAX_AGE_DAYS = 180;
+const EDIT_CONSENT_EVENT = "cp:cookie-consent:edit";
 
 function readCookie(name: string): string {
   if (typeof document === "undefined") return "";
@@ -20,10 +22,42 @@ function readCookie(name: string): string {
   return "";
 }
 
+function readStorage(key: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return String(window.localStorage.getItem(key) || "");
+  } catch {
+    return "";
+  }
+}
+
+function writeStorage(key: string, value: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures (e.g. blocked).
+  }
+}
+
+function clearStorage(key: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures (e.g. blocked).
+  }
+}
+
 function writeCookie(name: string, value: string, maxAgeDays: number) {
   if (typeof document === "undefined") return;
   const maxAgeSeconds = Math.max(1, Math.floor(maxAgeDays * 24 * 60 * 60));
   document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; SameSite=Lax`;
+}
+
+function clearCookie(name: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
 }
 
 function toConsentState(raw: string): ConsentState {
@@ -54,23 +88,41 @@ export default function CookieConsentBanner({ clarityProjectId }: { clarityProje
   const enabled = useMemo(() => Boolean(String(clarityProjectId || "").trim()), [clarityProjectId]);
 
   useEffect(() => {
-    const stored = toConsentState(readCookie(CONSENT_COOKIE));
+    const stored = toConsentState(readStorage(CONSENT_STORAGE_KEY) || readCookie(CONSENT_COOKIE));
     setConsent(stored);
     if (enabled) applyClarityConsent(clarityProjectId, stored);
   }, [clarityProjectId, enabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      clearStorage(CONSENT_STORAGE_KEY);
+      clearCookie(CONSENT_COOKIE);
+      setConsent("unknown");
+    };
+    window.addEventListener(EDIT_CONSENT_EVENT, handler);
+    return () => window.removeEventListener(EDIT_CONSENT_EVENT, handler);
+  }, []);
 
   if (!enabled) return null;
   if (consent !== "unknown") return null;
 
   const accept = () => {
+    writeStorage(CONSENT_STORAGE_KEY, "granted");
     writeCookie(CONSENT_COOKIE, "granted", CONSENT_MAX_AGE_DAYS);
     setConsent("granted");
     applyClarityConsent(clarityProjectId, "granted");
   };
 
   const reject = () => {
+    writeStorage(CONSENT_STORAGE_KEY, "denied");
     writeCookie(CONSENT_COOKIE, "denied", CONSENT_MAX_AGE_DAYS);
     setConsent("denied");
+    try {
+      Clarity.consentV2({ ad_Storage: "denied", analytics_Storage: "denied" });
+    } catch {
+      // Ignore.
+    }
   };
 
   return (
@@ -112,4 +164,3 @@ export default function CookieConsentBanner({ clarityProjectId }: { clarityProje
     </div>
   );
 }
-

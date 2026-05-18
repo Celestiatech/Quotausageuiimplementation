@@ -2,6 +2,24 @@ import { Link } from 'react-router';
 import { Twitter, Linkedin, Github, Mail } from 'lucide-react';
 
 export function Footer() {
+  const openCookieConsent = () => {
+    try {
+      window.localStorage.removeItem("cp_cookie_consent");
+    } catch {
+      // Ignore.
+    }
+    try {
+      document.cookie = "cp_cookie_consent=; Max-Age=0; Path=/; SameSite=Lax";
+    } catch {
+      // Ignore.
+    }
+    try {
+      window.dispatchEvent(new Event("cp:cookie-consent:edit"));
+    } catch {
+      // Ignore.
+    }
+  };
+
   return (
     <footer className="bg-gradient-to-br from-gray-50 to-purple-50/30 border-t border-gray-200">
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16">
@@ -166,6 +184,13 @@ export function Footer() {
             <Link to="/cookie-policy" className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors">
               Cookie Policy
             </Link>
+            <button
+              type="button"
+              onClick={openCookieConsent}
+              className="text-sm text-gray-600 hover:text-[#8B5CF6] transition-colors"
+            >
+              Cookie settings
+            </button>
           </div>
         </div>
       </div>
