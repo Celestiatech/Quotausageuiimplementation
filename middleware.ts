@@ -9,6 +9,9 @@ export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const isProd = process.env.NODE_ENV === "production";
   const hasGoogleAnalytics = Boolean(String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim());
+  // In development, allow GTM/GA endpoints so debugging tools (e.g. Tag Assistant)
+  // don't spam the console when GA isn't configured.
+  const allowGoogleAnalyticsEndpoints = hasGoogleAnalytics || !isProd;
 
   if (isProd && path.startsWith("/downloads/")) {
     return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
@@ -43,11 +46,11 @@ export function middleware(req: NextRequest) {
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    `img-src 'self' data: blob: https:${hasGoogleAnalytics ? " https://www.google-analytics.com https://www.googletagmanager.com" : ""}`,
+    `img-src 'self' data: blob: https:${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com https://www.googletagmanager.com" : ""}`,
     "font-src 'self' data:",
     "style-src 'self' 'unsafe-inline'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms${hasGoogleAnalytics ? " https://www.googletagmanager.com" : ""}`,
-    `connect-src 'self' https://api.razorpay.com https://*.razorpay.com https://db.prisma.io https://*.upstash.io https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms${hasGoogleAnalytics ? " https://www.google-analytics.com https://www.googletagmanager.com" : ""}`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms${allowGoogleAnalyticsEndpoints ? " https://www.googletagmanager.com" : ""}`,
+    `connect-src 'self' https://api.razorpay.com https://*.razorpay.com https://db.prisma.io https://*.upstash.io https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com https://www.googletagmanager.com" : ""}`,
     "frame-src https://api.razorpay.com https://checkout.razorpay.com",
     "form-action 'self' https://api.razorpay.com https://checkout.razorpay.com",
     ...(isProd ? ["upgrade-insecure-requests"] : []),
