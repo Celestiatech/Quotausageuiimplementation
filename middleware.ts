@@ -51,7 +51,7 @@ export function middleware(req: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms${allowGoogleAnalyticsEndpoints ? " https://www.googletagmanager.com" : ""}`,
     `connect-src 'self' https://api.razorpay.com https://*.razorpay.com https://db.prisma.io https://*.upstash.io https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com https://www.googletagmanager.com" : ""}`,
-    "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+    `frame-src https://api.razorpay.com https://checkout.razorpay.com${allowGoogleAnalyticsEndpoints ? " https://www.googletagmanager.com" : ""}`,
     "form-action 'self' https://api.razorpay.com https://checkout.razorpay.com",
     ...(isProd ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
