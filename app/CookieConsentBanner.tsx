@@ -180,7 +180,7 @@ export default function CookieConsentBanner({
               <button
                 type="button"
                 onClick={acceptAll}
-                className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-900"
+                className="rounded-xl border border-black bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-900"
               >
                 Accept all
               </button>
