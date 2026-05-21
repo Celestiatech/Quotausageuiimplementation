@@ -27,18 +27,16 @@ function applyClarityConsent(projectId: string, prefs: ConsentPreferences | null
 
 export default function AnalyticsScripts({
   googleTagId,
-  gtmId,
   clarityProjectId,
 }: {
   googleTagId: string;
-  gtmId: string;
   clarityProjectId: string;
 }) {
   const [prefs, setPrefs] = useState<ConsentPreferences | null>(null);
 
   const hasAnyTracking = useMemo(() => {
-    return Boolean(String(googleTagId || "").trim() || String(gtmId || "").trim() || String(clarityProjectId || "").trim());
-  }, [clarityProjectId, googleTagId, gtmId]);
+    return Boolean(String(googleTagId || "").trim() || String(clarityProjectId || "").trim());
+  }, [clarityProjectId, googleTagId]);
 
   useEffect(() => {
     if (!hasAnyTracking) return;
@@ -65,32 +63,9 @@ export default function AnalyticsScripts({
   if (!prefs?.analytics) return null;
 
   const normalizedGoogleTagId = String(googleTagId || "").trim();
-  const normalizedGtmId = String(gtmId || "").trim();
 
   return (
     <>
-      {normalizedGtmId ? (
-        <>
-          <Script id="gtm-init" strategy="afterInteractive">
-            {`
-              (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-              new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-              j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-              'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-              })(window,document,'script','dataLayer','${normalizedGtmId}');
-            `}
-          </Script>
-          <noscript>
-            <iframe
-              src={`https://www.googletagmanager.com/ns.html?id=${normalizedGtmId}`}
-              height="0"
-              width="0"
-              style={{ display: "none", visibility: "hidden" }}
-            />
-          </noscript>
-        </>
-      ) : null}
-
       {normalizedGoogleTagId ? (
         <>
           <Script src={`https://www.googletagmanager.com/gtag/js?id=${normalizedGoogleTagId}`} strategy="afterInteractive" />
