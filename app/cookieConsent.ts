@@ -1,6 +1,11 @@
 export type ConsentPreferences = {
-  analytics: boolean;
-  advertising: boolean;
+  ad_storage: boolean;
+  ad_user_data: boolean;
+  ad_personalization: boolean;
+  analytics_storage: boolean;
+  functionality_storage: boolean;
+  personalization_storage: boolean;
+  security_storage: boolean;
 };
 
 export const CONSENT_COOKIE = "cp_cookie_consent";
@@ -100,15 +105,65 @@ function parsePreferences(raw: string): ConsentPreferences | null {
   if (!trimmed) return null;
 
   const legacy = toLegacyConsentState(trimmed);
-  if (legacy === "granted") return { analytics: true, advertising: true };
-  if (legacy === "denied") return { analytics: false, advertising: false };
+  if (legacy === "granted") {
+    return {
+      ad_storage: true,
+      ad_user_data: true,
+      ad_personalization: true,
+      analytics_storage: true,
+      functionality_storage: true,
+      personalization_storage: true,
+      security_storage: true,
+    };
+  }
+  if (legacy === "denied") {
+    return {
+      ad_storage: false,
+      ad_user_data: false,
+      ad_personalization: false,
+      analytics_storage: false,
+      functionality_storage: true,
+      personalization_storage: false,
+      security_storage: true,
+    };
+  }
 
   try {
-    const parsed = JSON.parse(trimmed) as Partial<ConsentPreferences> | null;
+    const parsed = JSON.parse(trimmed) as Record<string, unknown> | null;
     if (!parsed || typeof parsed !== "object") return null;
-    if (typeof parsed.analytics !== "boolean") return null;
-    if (typeof parsed.advertising !== "boolean") return null;
-    return { analytics: parsed.analytics, advertising: parsed.advertising };
+
+    // Back-compat with the earlier { analytics, advertising } shape.
+    if ("analytics" in parsed || "advertising" in parsed) {
+      const analytics = Boolean(parsed.analytics);
+      const advertising = Boolean(parsed.advertising);
+      return {
+        ad_storage: advertising,
+        ad_user_data: advertising,
+        ad_personalization: advertising,
+        analytics_storage: analytics,
+        functionality_storage: true,
+        personalization_storage: advertising,
+        security_storage: true,
+      };
+    }
+
+    const full = parsed as Partial<ConsentPreferences>;
+    if (typeof full.ad_storage !== "boolean") return null;
+    if (typeof full.ad_user_data !== "boolean") return null;
+    if (typeof full.ad_personalization !== "boolean") return null;
+    if (typeof full.analytics_storage !== "boolean") return null;
+    if (typeof full.functionality_storage !== "boolean") return null;
+    if (typeof full.personalization_storage !== "boolean") return null;
+    if (typeof full.security_storage !== "boolean") return null;
+    return {
+      ad_storage: full.ad_storage,
+      ad_user_data: full.ad_user_data,
+      ad_personalization: full.ad_personalization,
+      analytics_storage: full.analytics_storage,
+      functionality_storage: full.functionality_storage,
+      personalization_storage: full.personalization_storage,
+      security_storage: full.security_storage,
+    };
   } catch {
     return null;
   }
@@ -126,4 +181,16 @@ export function setConsentPreferences(prefs: ConsentPreferences) {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(CONSENT_CHANGED_EVENT));
   }
+}
+
+export function defaultConsentPreferences(): ConsentPreferences {
+  return {
+    ad_storage: false,
+    ad_user_data: false,
+    ad_personalization: false,
+    analytics_storage: false,
+    functionality_storage: true,
+    personalization_storage: false,
+    security_storage: true,
+  };
 }

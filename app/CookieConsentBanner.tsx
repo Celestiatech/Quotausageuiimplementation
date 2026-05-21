@@ -10,6 +10,7 @@ import {
   clearSession,
   clearStorage,
   EDIT_CONSENT_EVENT,
+  defaultConsentPreferences,
   readConsentPreferences,
   readSession,
   setConsentPreferences,
@@ -22,7 +23,7 @@ function applyClarityConsent(projectId: string, prefs: ConsentPreferences | null
   if (!id) return;
   if (typeof window === "undefined") return;
 
-  if (!prefs?.analytics) return;
+  if (!prefs?.analytics_storage) return;
 
   try {
     Clarity.init(id);
@@ -43,8 +44,11 @@ export default function CookieConsentBanner({
 }) {
   const [prefs, setPrefs] = useState<ConsentPreferences | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [draftAnalytics, setDraftAnalytics] = useState(false);
-  const [draftAdvertising, setDraftAdvertising] = useState(false);
+  const [draftAnalyticsStorage, setDraftAnalyticsStorage] = useState(false);
+  const [draftAdStorage, setDraftAdStorage] = useState(false);
+  const [draftAdUserData, setDraftAdUserData] = useState(false);
+  const [draftAdPersonalization, setDraftAdPersonalization] = useState(false);
+  const [draftPersonalizationStorage, setDraftPersonalizationStorage] = useState(false);
 
   const enabled = useMemo(() => {
     return Boolean(
@@ -67,8 +71,11 @@ export default function CookieConsentBanner({
     try {
       const parsed = JSON.parse(raw) as Partial<ConsentPreferences> | null;
       if (parsed && typeof parsed === "object") {
-        if (typeof parsed.analytics === "boolean") setDraftAnalytics(parsed.analytics);
-        if (typeof parsed.advertising === "boolean") setDraftAdvertising(parsed.advertising);
+        if (typeof parsed.analytics_storage === "boolean") setDraftAnalyticsStorage(parsed.analytics_storage);
+        if (typeof parsed.ad_storage === "boolean") setDraftAdStorage(parsed.ad_storage);
+        if (typeof parsed.ad_user_data === "boolean") setDraftAdUserData(parsed.ad_user_data);
+        if (typeof parsed.ad_personalization === "boolean") setDraftAdPersonalization(parsed.ad_personalization);
+        if (typeof parsed.personalization_storage === "boolean") setDraftPersonalizationStorage(parsed.personalization_storage);
       }
     } catch {
       // Ignore invalid draft.
@@ -94,22 +101,46 @@ export default function CookieConsentBanner({
     // Otherwise, default to off until they opt-in.
     const raw = readSession(CONSENT_DRAFT_SESSION_KEY);
     if (!raw) {
-      setDraftAnalytics(false);
-      setDraftAdvertising(false);
+      setDraftAnalyticsStorage(false);
+      setDraftAdStorage(false);
+      setDraftAdUserData(false);
+      setDraftAdPersonalization(false);
+      setDraftPersonalizationStorage(false);
     }
   }, [showSettings]);
 
   useEffect(() => {
     if (prefs) return;
-    const value = JSON.stringify({ analytics: draftAnalytics, advertising: draftAdvertising });
+    const value = JSON.stringify({
+      analytics_storage: draftAnalyticsStorage,
+      ad_storage: draftAdStorage,
+      ad_user_data: draftAdUserData,
+      ad_personalization: draftAdPersonalization,
+      personalization_storage: draftPersonalizationStorage,
+    });
     writeSession(CONSENT_DRAFT_SESSION_KEY, value);
-  }, [draftAdvertising, draftAnalytics, prefs]);
+  }, [
+    draftAdPersonalization,
+    draftAdStorage,
+    draftAdUserData,
+    draftAnalyticsStorage,
+    draftPersonalizationStorage,
+    prefs,
+  ]);
 
   if (!enabled) return null;
   if (prefs) return null;
 
   const acceptAll = () => {
-    const next: ConsentPreferences = { analytics: true, advertising: true };
+    const next: ConsentPreferences = {
+      ad_storage: true,
+      ad_user_data: true,
+      ad_personalization: true,
+      analytics_storage: true,
+      functionality_storage: true,
+      personalization_storage: true,
+      security_storage: true,
+    };
     setConsentPreferences(next);
     clearSession(CONSENT_DRAFT_SESSION_KEY);
     setPrefs(next);
@@ -117,7 +148,7 @@ export default function CookieConsentBanner({
   };
 
   const rejectAll = () => {
-    const next: ConsentPreferences = { analytics: false, advertising: false };
+    const next = defaultConsentPreferences();
     setConsentPreferences(next);
     clearSession(CONSENT_DRAFT_SESSION_KEY);
     setPrefs(next);
@@ -133,15 +164,21 @@ export default function CookieConsentBanner({
   const supportsAdvertising = true;
 
   const confirmSelected = () => {
+    const effectiveAdStorage = Boolean(draftAdStorage) && supportsAdvertising;
     const next: ConsentPreferences = {
-      analytics: Boolean(draftAnalytics),
-      advertising: Boolean(draftAdvertising) && supportsAdvertising,
+      ad_storage: effectiveAdStorage,
+      ad_user_data: effectiveAdStorage ? Boolean(draftAdUserData) : false,
+      ad_personalization: effectiveAdStorage ? Boolean(draftAdPersonalization) : false,
+      analytics_storage: Boolean(draftAnalyticsStorage),
+      functionality_storage: true,
+      personalization_storage: Boolean(draftPersonalizationStorage),
+      security_storage: true,
     };
     setConsentPreferences(next);
     clearSession(CONSENT_DRAFT_SESSION_KEY);
     setPrefs(next);
     applyClarityConsent(clarityProjectId, next);
-    if (!next.analytics) {
+    if (!next.analytics_storage) {
       try {
         Clarity.consentV2({ ad_Storage: "denied", analytics_Storage: "denied" });
       } catch {
@@ -231,8 +268,8 @@ export default function CookieConsentBanner({
                     <input
                       type="checkbox"
                       className="h-4 w-4"
-                      checked={draftAnalytics}
-                      onChange={(e) => setDraftAnalytics(e.target.checked)}
+                      checked={draftAnalyticsStorage}
+                      onChange={(e) => setDraftAnalyticsStorage(e.target.checked)}
                     />
                     On
                   </label>
@@ -251,13 +288,70 @@ export default function CookieConsentBanner({
                     <input
                       type="checkbox"
                       className="h-4 w-4"
-                      checked={draftAdvertising}
-                      onChange={(e) => setDraftAdvertising(e.target.checked)}
+                      checked={draftAdStorage}
+                      onChange={(e) => setDraftAdStorage(e.target.checked)}
                     />
                     On
                   </label>
                 </div>
               </div>
+
+              {supportsAdvertising ? (
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="font-semibold text-gray-900">Google Consent Mode</div>
+                  <div className="mt-3 space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">ad_user_data</div>
+                        <div className="mt-1 text-sm text-gray-700">Allow data for ads features (signals).</div>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-900">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={draftAdUserData}
+                          disabled={!draftAdStorage}
+                          onChange={(e) => setDraftAdUserData(e.target.checked)}
+                        />
+                        On
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">ad_personalization</div>
+                        <div className="mt-1 text-sm text-gray-700">Allow personalized ads.</div>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-900">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={draftAdPersonalization}
+                          disabled={!draftAdStorage}
+                          onChange={(e) => setDraftAdPersonalization(e.target.checked)}
+                        />
+                        On
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">personalization_storage</div>
+                        <div className="mt-1 text-sm text-gray-700">Allow personalization storage.</div>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-900">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={draftPersonalizationStorage}
+                          onChange={(e) => setDraftPersonalizationStorage(e.target.checked)}
+                        />
+                        On
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">

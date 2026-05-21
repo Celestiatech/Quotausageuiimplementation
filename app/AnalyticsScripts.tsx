@@ -15,7 +15,7 @@ function applyClarityConsent(projectId: string, prefs: ConsentPreferences | null
   if (!id) return;
   if (typeof window === "undefined") return;
 
-  if (!prefs?.analytics) return;
+  if (!prefs?.analytics_storage) return;
 
   try {
     Clarity.init(id);
@@ -60,7 +60,7 @@ export default function AnalyticsScripts({
   }, [hasAnyTracking]);
 
   if (!hasAnyTracking) return null;
-  if (!prefs?.analytics) return null;
+  if (!prefs?.analytics_storage) return null;
 
   const normalizedGoogleTagId = String(googleTagId || "").trim();
 
