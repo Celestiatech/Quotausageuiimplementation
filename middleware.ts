@@ -9,9 +9,10 @@ export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const isProd = process.env.NODE_ENV === "production";
   const hasGoogleAnalytics = Boolean(String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim());
+  const hasGoogleTagManager = Boolean(String(process.env.NEXT_PUBLIC_GTM_ID || "").trim());
   // In development, allow GTM/GA endpoints so debugging tools (e.g. Tag Assistant)
   // don't spam the console when GA isn't configured.
-  const allowGoogleAnalyticsEndpoints = hasGoogleAnalytics || !isProd;
+  const allowGoogleAnalyticsEndpoints = hasGoogleAnalytics || hasGoogleTagManager || !isProd;
 
   if (isProd && path.startsWith("/downloads/")) {
     return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });

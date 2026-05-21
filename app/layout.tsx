@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import "./globals.css";
 import CookieConsentBanner from "./CookieConsentBanner";
+import AnalyticsScripts from "./AnalyticsScripts";
 
 const GOOGLE_TAG_ID = String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim();
 const GTM_ID = String(process.env.NEXT_PUBLIC_GTM_ID || "").trim();
@@ -41,49 +41,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        {GTM_ID ? (
-          <Script id="gtm-init" strategy="beforeInteractive">
-            {`
-              (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-              new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-              j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-              'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-              })(window,document,'script','dataLayer','${GTM_ID}');
-            `}
-          </Script>
-        ) : null}
-
-        {GOOGLE_TAG_ID ? (
-          <>
-            <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_TAG_ID}`}
-              strategy="afterInteractive"
-            />
-            <Script id="google-tag-manager" strategy="afterInteractive">
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${GOOGLE_TAG_ID}');
-              `}
-            </Script>
-          </>
-        ) : null}
-
       </head>
       <body>
-        {GTM_ID ? (
-          <noscript>
-            <iframe
-              src={`https://www.googletagmanager.com/ns.html?id=${GTM_ID}`}
-              height="0"
-              width="0"
-              style={{ display: "none", visibility: "hidden" }}
-            />
-          </noscript>
-        ) : null}
+        <AnalyticsScripts googleTagId={GOOGLE_TAG_ID} gtmId={GTM_ID} clarityProjectId={CLARITY_TAG_ID} />
         {children}
-        <CookieConsentBanner clarityProjectId={CLARITY_TAG_ID} />
+        <CookieConsentBanner clarityProjectId={CLARITY_TAG_ID} googleTagId={GOOGLE_TAG_ID} gtmId={GTM_ID} />
       </body>
     </html>
   );
