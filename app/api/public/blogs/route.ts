@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { fail, handleApiError, ok, parsePagination } from "src/lib/api";
 import { prisma } from "src/lib/prisma";
+import { STATIC_BLOG_POSTS } from "src/content/blogPosts";
 
 export async function GET(req: Request) {
   const { page, limit, skip } = parsePagination(req, { defaultLimit: 12, maxLimit: 100 });
@@ -40,6 +41,30 @@ export async function GET(req: Request) {
       }),
     ]);
 
+    if (total === 0) {
+      const staticTotal = STATIC_BLOG_POSTS.length;
+      const staticPosts = STATIC_BLOG_POSTS.slice(skip, skip + limit).map((p) => ({
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        excerpt: p.excerpt,
+        coverImage: p.coverImage,
+        keywordsJson: p.keywordsJson,
+        publishedAt: p.publishedAt,
+        createdAt: p.createdAt,
+        author: p.author,
+      }));
+      return ok("Public blog posts fetched", {
+        posts: staticPosts,
+        pagination: {
+          page,
+          limit,
+          total: staticTotal,
+          totalPages: Math.ceil(staticTotal / limit),
+        },
+      });
+    }
+
     return ok("Public blog posts fetched", {
       posts,
       pagination: {
@@ -66,7 +91,27 @@ export async function GET(req: Request) {
     }
 
     if (error instanceof Prisma.PrismaClientInitializationError) {
-      return fail("Blog service temporarily unavailable", 503, "SERVICE_UNAVAILABLE");
+      const staticTotal = STATIC_BLOG_POSTS.length;
+      const staticPosts = STATIC_BLOG_POSTS.slice(skip, skip + limit).map((p) => ({
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        excerpt: p.excerpt,
+        coverImage: p.coverImage,
+        keywordsJson: p.keywordsJson,
+        publishedAt: p.publishedAt,
+        createdAt: p.createdAt,
+        author: p.author,
+      }));
+      return ok("Public blog posts fetched", {
+        posts: staticPosts,
+        pagination: {
+          page,
+          limit,
+          total: staticTotal,
+          totalPages: Math.ceil(staticTotal / limit),
+        },
+      });
     }
 
     return handleApiError(error, "Failed to fetch public blog posts");

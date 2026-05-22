@@ -298,10 +298,10 @@ export default function Home() {
 
               <div className="flex flex-col sm:flex-row gap-4">
                 <button 
-                  onClick={() => navigate('/pricing')}
+                  onClick={() => navigate('/auto-apply')}
                   className="group btn-premium px-8 py-4 gradient-primary text-white rounded-xl font-semibold text-lg shadow-premium hover:shadow-premium-lg hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
                 >
-                  Start Free (Start Free Trial)
+                  Start Free Auto Apply
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button 
@@ -516,18 +516,18 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SEO Content Hub */}
+      {/* Blog Section */}
       <section className="py-20 bg-gradient-to-br from-gray-50 to-purple-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="text-center mb-12">
             <div className="inline-block px-4 py-2 bg-purple-100 rounded-full text-purple-700 font-semibold text-sm mb-5">
-              Popular Guides
+              Blog
             </div>
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Learn what users search before choosing an auto apply tool
+              Free auto apply guides and SEO-friendly checklists
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Read practical guides on LinkedIn Easy Apply, AI job search tools, and finding a better LazyApply alternative.
+              Learn how to auto apply with quality controls, improve your resume for ATS, and track outcomes to get more interviews.
             </p>
           </div>
 
@@ -549,6 +549,16 @@ export default function Home() {
                 </p>
               </Link>
             ))}
+          </div>
+
+          <div className="mt-10 flex justify-center">
+            <Link
+              to="/blog"
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 font-bold text-purple-700 border-2 border-purple-200 hover:border-purple-300 hover:shadow-lg transition-all duration-200"
+            >
+              View all blogs
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
         </div>
       </section>
@@ -629,10 +639,10 @@ export default function Home() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button 
-              onClick={() => navigate('/pricing')}
+              onClick={() => navigate('/auto-apply')}
               className="px-10 py-5 bg-gradient-to-r from-[#6366F1] via-[#8B5CF6] to-[#A855F7] text-white rounded-xl font-bold text-lg hover:shadow-2xl hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
             >
-              Start Free (Start Free Trial)
+              Start Free Auto Apply
               <ArrowRight className="w-5 h-5" />
             </button>
             <button 

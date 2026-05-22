@@ -26,6 +26,10 @@ import Product from './pages/Product';
 import Features from './pages/Features';
 import HowItWorks from './pages/HowItWorks';
 import Pricing from './pages/Pricing';
+import AutoApply from './pages/AutoApply';
+import AutoApplyLinkedIn from './pages/AutoApplyLinkedIn';
+import AutoApplyJobs from './pages/AutoApplyJobs';
+import AutoApplyChromeExtension from './pages/AutoApplyChromeExtension';
 import About from './pages/About';
 import FAQ from './pages/FAQ';
 import Roadmap from './pages/Roadmap';
@@ -126,6 +130,10 @@ const routes = createRoutesFromElements(
       <Route path="features" element={<Features />} />
       <Route path="how-it-works" element={<HowItWorks />} />
       <Route path="pricing" element={<Pricing />} />
+      <Route path="auto-apply" element={<AutoApply />} />
+      <Route path="auto-apply-linkedin" element={<AutoApplyLinkedIn />} />
+      <Route path="auto-apply-jobs" element={<AutoApplyJobs />} />
+      <Route path="auto-apply-chrome-extension" element={<AutoApplyChromeExtension />} />
       <Route path="about" element={<About />} />
       <Route path="faq" element={<FAQ />} />
       <Route path="roadmap" element={<Roadmap />} />

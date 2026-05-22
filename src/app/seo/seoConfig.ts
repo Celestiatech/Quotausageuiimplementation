@@ -5,6 +5,8 @@ export type SeoEntry = {
   structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
 };
 
+import { STATIC_BLOG_POSTS_BY_SLUG } from "src/content/blogPosts";
+
 export const DEFAULT_SEO: SeoEntry = {
   title: "Free AutoApply CV | LinkedIn Auto Apply Bot & AI Job Search Tool",
   description:
@@ -74,6 +76,56 @@ export const SEO_BY_PATH: Record<string, SeoEntry> = {
     title: "Pricing | LinkedIn Auto Apply Bot Plans | AutoApply CV",
     description:
       "Compare transparent AutoApply CV pricing with clear charged vs skipped outcomes, LinkedIn automation limits, and AI resume optimization tools.",
+    index: true,
+  },
+  "/auto-apply": {
+    title: "Auto Apply | Free Auto Apply Tool | AutoApply CV",
+    description:
+      "Free auto apply tool to apply faster with quality controls, reusable answers, and tracking. Learn how to auto apply without wasting applications.",
+    index: true,
+    structuredData: [
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        name: "AutoApply CV",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        description: "Free auto apply tool with LinkedIn automation, resume optimization, and application tracking.",
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: [
+          {
+            "@type": "Question",
+            name: "Is AutoApply CV free?",
+            acceptedAnswer: { "@type": "Answer", text: "AutoApply CV is free to start and includes a daily cap for applications." },
+          },
+          {
+            "@type": "Question",
+            name: "What is auto apply?",
+            acceptedAnswer: { "@type": "Answer", text: "Auto apply is a workflow that uses automation to submit job applications faster while maintaining quality controls." },
+          },
+        ],
+      },
+    ],
+  },
+  "/auto-apply-linkedin": {
+    title: "Auto Apply LinkedIn | Free LinkedIn Auto Apply | AutoApply CV",
+    description:
+      "Free to start: learn how to auto apply on LinkedIn using Easy Apply targeting, reusable answers, and tracking for better callbacks.",
+    index: true,
+  },
+  "/auto-apply-jobs": {
+    title: "Auto Apply Jobs | Free Auto Apply Jobs Strategy | AutoApply CV",
+    description:
+      "Free to start: a quality-first auto apply jobs strategy with targeting rules, resume alignment, and outcome tracking.",
+    index: true,
+  },
+  "/auto-apply-chrome-extension": {
+    title: "Auto Apply Chrome Extension | Free Auto Apply Extension | AutoApply CV",
+    description:
+      "Free to start: use the AutoApply CV Chrome extension workflow to streamline auto apply with synced answers and tracking.",
     index: true,
   },
   "/about": {
@@ -232,6 +284,40 @@ export const SEO_BY_PATH: Record<string, SeoEntry> = {
 };
 
 export function resolveSeo(pathname: string): SeoEntry {
+  if (pathname === "/blog") {
+    return {
+      title: "Free Auto Apply Blog | AutoApply CV",
+      description:
+        "Free auto apply guides, LinkedIn workflows, resume optimization, and job tracking tactics to get more interviews.",
+      index: true,
+      structuredData: {
+        "@context": "https://schema.org",
+        "@type": "Blog",
+        name: "AutoApply CV Blog",
+        description: "Free auto apply guides and job search automation content.",
+      },
+    };
+  }
+
+  if (pathname.startsWith("/blog/")) {
+    const slug = pathname.replace("/blog/", "").trim().toLowerCase();
+    const post = STATIC_BLOG_POSTS_BY_SLUG[slug];
+    if (post) {
+      return {
+        title: `${post.title} | AutoApply CV`,
+        description: post.excerpt,
+        index: true,
+        structuredData: {
+          "@context": "https://schema.org",
+          "@type": "Article",
+          headline: post.title,
+          description: post.excerpt,
+          author: { "@type": "Organization", name: "AutoApply CV" },
+        },
+      };
+    }
+  }
+
   const base =
     SEO_BY_PATH[pathname] ||
     (pathname.startsWith("/dashboard") || pathname.startsWith("/admin")

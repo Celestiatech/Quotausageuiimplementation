@@ -66,6 +66,9 @@ export function Navigation() {
               <Link to="/how-it-works" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
                 How It Works
               </Link>
+              <Link to="/auto-apply" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
+                Auto Apply
+              </Link>
               <Link to="/pricing" className="text-gray-700 hover:text-[#8B5CF6] font-medium transition-colors">
                 Pricing
               </Link>

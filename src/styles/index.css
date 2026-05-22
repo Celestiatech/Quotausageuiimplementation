@@ -387,7 +387,6 @@ html {
   right: 1rem;
   z-index: 2147483647;
   transform: none !important;
-  inset: auto !important;
   isolation: isolate;
   pointer-events: auto;
   opacity: 1;
@@ -395,6 +394,70 @@ html {
 }
 
 .cp-chat-widget--left {
-  left: 1rem;
+  bottom: 1rem;
   right: auto;
+  left: 1rem;
+}
+
+/* Chat widget stacked avatars */
+.cp-chat-stack {
+  position: relative;
+}
+
+.cp-chat-staff-1 {
+  position: absolute;
+  left: -14px !important;
+  top: 1px !important;
+  opacity: 0.8;
+  z-index: 0;
+}
+
+.cp-chat-staff-2 {
+  position: absolute;
+  left: -7px !important;
+  top: 1px !important;
+  opacity: 0.8;
+  z-index: 0;
+}
+
+.cp-chat-bot-avatar {
+  position: relative;
+  z-index: 10;
+}
+
+.cp-chat-online-dot {
+  position: absolute;
+  right: 1px !important;
+  bottom: 32px !important;
+  width: 16px;
+  height: 16px;
+  z-index: 30;
+}
+
+/* Chat widget: visible scrollbar for message history */
+.cp-chat-scroll {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 114, 128, 0.55) transparent;
+}
+
+.cp-chat-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.cp-chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cp-chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(107, 114, 128, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.cp-chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 114, 128, 0.5);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
