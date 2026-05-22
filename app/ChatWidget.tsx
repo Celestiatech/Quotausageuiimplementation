@@ -7,6 +7,7 @@ type ChatMessage = {
   id?: string;
   role: "user" | "assistant";
   content: string;
+  status?: "sending" | "sent" | "seen";
 };
 
 type ChatAction = { label: string; href: string };
@@ -127,7 +128,12 @@ export default function ChatWidget() {
       role: m.sender === "admin" ? "assistant" : "user",
       content: String(m.content || ""),
     }));
-    setMessages((prev) => [...prev, ...mapped]);
+    setMessages((prev) => {
+      const next = [...prev, ...mapped];
+      const hasAdminReply = unseen.some((m) => m.sender === "admin");
+      if (!hasAdminReply) return next;
+      return next.map((msg) => (msg.role === "user" ? { ...msg, status: "seen" } : msg));
+    });
     const last = unseen[unseen.length - 1];
     if (last?.createdAt) setPollAfter(String(last.createdAt));
   };
@@ -161,7 +167,14 @@ export default function ChatWidget() {
     setInput("");
     setActions([]);
 
-    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: clampText(text, 4000) }];
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const userMessage: ChatMessage = {
+      id: localId,
+      role: "user",
+      content: clampText(text, 4000),
+      status: "sending",
+    };
+    const nextMessages: ChatMessage[] = [...messages, userMessage];
     setMessages(nextMessages);
     setBusy(true);
 
@@ -183,13 +196,14 @@ export default function ChatWidget() {
         const createdId = String(data?.data?.message?.id || "").trim();
         if (createdId) seenSupportMessageIdsRef.current.add(createdId);
         if (createdAt) setPollAfter(createdAt);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: `Sent to ${humanAgent}. Reply will appear here.`,
-          },
-        ]);
+        setMessages((prev) =>
+          prev
+            .map((m) => (m.id === localId ? { ...m, status: "sent" as const } : m))
+            .concat({
+              role: "assistant",
+              content: `Thanks! Your message has been sent to ${humanAgent}. Our support team usually replies within a few minutes—please wait.`,
+            })
+        );
       } else {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -200,13 +214,18 @@ export default function ChatWidget() {
         if (!res.ok || !data?.reply) {
           throw new Error(data?.message || "Chat failed");
         }
-        setMessages((prev) => [...prev, { role: "assistant", content: String(data.reply) }]);
+            setMessages((prev) =>
+              prev
+            .map((m) => (m.id === localId ? { ...m, status: "seen" as const } : m))
+            .concat({ role: "assistant", content: String(data.reply) })
+            );
         setActions(Array.isArray(data.actions) ? data.actions.slice(0, 4) : []);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chat failed");
       setMessages((prev) => [
         ...prev,
+        ...(prev.some((m) => m.id === localId) ? [] : [userMessage]),
         {
           role: "assistant",
           content:
@@ -235,7 +254,7 @@ export default function ChatWidget() {
       }
     >
       {open ? (
-        <div className="w-[340px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+        <div className="flex h-[520px] max-h-[70vh] w-[340px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
           <div
             className="flex items-center justify-between border-b border-gray-100 px-4 py-3 text-white"
             style={{
@@ -284,7 +303,7 @@ export default function ChatWidget() {
 
           <div
             ref={listRef}
-            className="cp-chat-scroll max-h-[360px] space-y-3 overflow-auto px-4 py-3"
+            className="cp-chat-scroll min-h-0 flex-1 space-y-3 overflow-auto px-4 py-3"
             aria-label="Chat messages"
           >
             {messages.map((m, idx) => (
@@ -295,15 +314,28 @@ export default function ChatWidget() {
                       {mode === "human" ? "Support" : title}
                     </div>
                   ) : null}
-                  <div
-                    className={
-                      m.role === "user"
-                        ? "inline-block rounded-2xl bg-black px-3 py-2 text-sm text-white shadow-sm"
-                        : "inline-block rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 shadow-sm"
-                    }
-                    style={m.role === "user" ? { background: "linear-gradient(135deg, #111827, #000)" } : undefined}
-                  >
-                    <div className="whitespace-pre-wrap">{m.content}</div>
+                  <div className="inline-block">
+                    <div
+                      className={
+                        m.role === "user"
+                          ? "rounded-2xl bg-black px-3 py-2 text-sm text-white shadow-sm"
+                          : "rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 shadow-sm"
+                      }
+                      style={m.role === "user" ? { background: "linear-gradient(135deg, #111827, #000)" } : undefined}
+                    >
+                      <div className="whitespace-pre-wrap">{m.content}</div>
+                    </div>
+                    {m.role === "user" ? (
+                      <div className="mt-1 text-[10px] leading-none text-gray-400">
+                        {m.status === "sending" ? (
+                          <span>Sending…</span>
+                        ) : m.status === "seen" ? (
+                          <span className="font-semibold text-blue-500">✓✓</span>
+                        ) : m.status === "sent" ? (
+                          <span className="font-semibold">✓</span>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
