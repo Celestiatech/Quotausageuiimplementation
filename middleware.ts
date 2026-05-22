@@ -34,6 +34,7 @@ export function middleware(req: NextRequest) {
       }
       const allowNoOrigin =
         path === "/api/billing/webhook/razorpay" ||
+        path === "/api/integrations/telegram/webhook" ||
         path === "/api/internal/worker/run";
       if (!sameOrigin && !(allowNoOrigin && !origin)) {
         return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });

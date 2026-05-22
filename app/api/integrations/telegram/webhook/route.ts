@@ -8,6 +8,12 @@ type TelegramUpdate = {
   message?: {
     text?: string;
   };
+  edited_message?: {
+    text?: string;
+  };
+  channel_post?: {
+    text?: string;
+  };
 };
 
 export async function POST(req: NextRequest) {
@@ -16,14 +22,15 @@ export async function POST(req: NextRequest) {
     if (!verified.ok) return verified.error;
 
     const body = (await req.json()) as TelegramUpdate;
-    const text = String(body?.message?.text || "").trim();
+    const text = String(body?.message?.text || body?.edited_message?.text || body?.channel_post?.text || "").trim();
     if (!text) return ok("Ignored", {});
 
     // Admin reply format: /reply <conversationId> <message>
-    if (!text.toLowerCase().startsWith("/reply ")) {
+    const normalized = text.replace(/^\/reply@\S+\s+/i, "/reply ");
+    if (!normalized.toLowerCase().startsWith("/reply ")) {
       return ok("Ignored", {});
     }
-    const rest = text.slice(7).trim();
+    const rest = normalized.slice(7).trim();
     const firstSpace = rest.indexOf(" ");
     if (firstSpace === -1) return ok("Ignored", {});
     const conversationId = rest.slice(0, firstSpace).trim();
@@ -57,4 +64,3 @@ export async function POST(req: NextRequest) {
     return handleApiError(error, "Failed to process Telegram webhook");
   }
 }
-
