@@ -149,7 +149,7 @@ export default function Features() {
           </h1>
           
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Everything you need to apply to jobs automatically, optimize resumes for ATS, and track applications in one workflow
+            Free to start. Everything you need to apply to jobs automatically, optimize resumes for ATS, and track applications in one workflow
           </p>
         </div>
       </section>

@@ -34,6 +34,7 @@ export default function Pricing() {
       description: 'Starter access with daily apply limit',
       features: [
         '3 Auto-Apply actions per day (0/3 cap)',
+        '300 Hires coins signup bonus',
         'Basic job matching',
         'Application tracker',
         'Resume builder',

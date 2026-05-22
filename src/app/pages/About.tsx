@@ -73,7 +73,7 @@ export default function About() {
               </h1>
               
               <p className="text-xl text-gray-600 leading-relaxed mb-8">
-                AutoApply CV was born from frustration with the traditional job search process. After helping thousands of engineers land roles at top tech companies, we built the platform we wish we had.
+                AutoApply CV was born from frustration with the traditional job search process. Free to start, built to help engineers land better roles faster with automation and clear guardrails.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">

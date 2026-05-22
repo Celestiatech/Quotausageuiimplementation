@@ -100,7 +100,7 @@ export default function HowItWorks() {
           </h1>
           
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
-            Get started in minutes with job search automation, ATS resume optimization, and application tracking. No technical knowledge required.
+            Free to start. Get started in minutes with job search automation, ATS resume optimization, and application tracking. No technical knowledge required.
           </p>
 
           <button className="px-8 py-4 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 rounded-xl font-semibold hover:shadow-lg transition-all duration-200 inline-flex items-center gap-2">

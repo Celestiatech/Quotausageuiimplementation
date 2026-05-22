@@ -6,9 +6,9 @@ export type SeoEntry = {
 };
 
 export const DEFAULT_SEO: SeoEntry = {
-  title: "AutoApply CV | LinkedIn Auto Apply Bot & AI Job Search Tool",
+  title: "Free AutoApply CV | LinkedIn Auto Apply Bot & AI Job Search Tool",
   description:
-    "AutoApply CV is an AI job search automation platform with a LinkedIn auto apply bot, AI resume builder, and job application tracker.",
+    "AutoApply CV is a free AI job search automation platform with a LinkedIn auto apply bot, AI resume builder, and job application tracker.",
   index: true,
 };
 
@@ -30,7 +30,7 @@ export function normalizeCanonicalBaseUrl(value?: string) {
 
 export const SEO_BY_PATH: Record<string, SeoEntry> = {
   "/": {
-    title: "AutoApply CV | LinkedIn Auto Apply Bot for Software Engineers",
+    title: "Free AutoApply CV | LinkedIn Auto Apply Bot for Software Engineers",
     description:
       "Apply to LinkedIn jobs automatically with AutoApply CV. Includes page-ready waits, duplicate prevention, AI resume optimization, and full job tracking.",
     index: true,
@@ -232,15 +232,31 @@ export const SEO_BY_PATH: Record<string, SeoEntry> = {
 };
 
 export function resolveSeo(pathname: string): SeoEntry {
-  if (SEO_BY_PATH[pathname]) return SEO_BY_PATH[pathname];
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/admin")) {
-    return {
-      title: "AutoApply CV Dashboard",
-      description: "Private dashboard area.",
-      index: true,
-    };
-  }
-  return DEFAULT_SEO;
+  const base =
+    SEO_BY_PATH[pathname] ||
+    (pathname.startsWith("/dashboard") || pathname.startsWith("/admin")
+      ? {
+          title: "AutoApply CV Dashboard",
+          description: "Private dashboard area.",
+          index: true,
+        }
+      : DEFAULT_SEO);
+
+  const shouldAddFree =
+    !pathname.startsWith("/dashboard") &&
+    !pathname.startsWith("/admin") &&
+    !pathname.startsWith("/api");
+
+  if (!shouldAddFree) return base;
+
+  const hasFreeTitle = /\bfree\b/i.test(base.title);
+  const hasFreeDesc = /\bfree\b/i.test(base.description);
+
+  return {
+    ...base,
+    title: hasFreeTitle ? base.title : `Free ${base.title}`,
+    description: hasFreeDesc ? base.description : `Free to start. ${base.description}`,
+  };
 }
 
 export function canonicalForPath(pathname: string, baseUrl = "https://www.autoapplycv.in") {
@@ -248,4 +264,3 @@ export function canonicalForPath(pathname: string, baseUrl = "https://www.autoap
   const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
   return `${normalizedBase}${path === "/" ? "" : path}`;
 }
-

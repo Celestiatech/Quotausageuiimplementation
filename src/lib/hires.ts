@@ -156,6 +156,44 @@ export async function creditHires(input: {
   });
 }
 
+export async function creditBonusHires(input: {
+  userId: string;
+  hires: number;
+  referenceType: string;
+  referenceId: string;
+  idempotencyKey?: string;
+  metadataJson?: Prisma.InputJsonValue;
+}) {
+  if (input.hires <= 0) throw new Error("Hires must be positive");
+  const user = await ensureHireWindow(input.userId);
+  return prisma.$transaction(async (tx) => {
+    if (input.idempotencyKey) {
+      const existing = await tx.hireTransaction.findUnique({
+        where: { idempotencyKey: input.idempotencyKey },
+      });
+      if (existing) return existing;
+    }
+
+    const updated = await tx.user.update({
+      where: { id: user.id },
+      data: {
+        hireBalance: { increment: input.hires },
+      },
+    });
+
+    return createTxnInTx(tx, {
+      userId: updated.id,
+      type: "credit_bonus",
+      amount: input.hires,
+      balanceAfter: updated.hireBalance,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      metadataJson: input.metadataJson,
+      idempotencyKey: input.idempotencyKey,
+    });
+  });
+}
+
 export async function adjustHiresByAdmin(input: {
   userId: string;
   delta: number;

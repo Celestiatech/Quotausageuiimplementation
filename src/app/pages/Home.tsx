@@ -283,7 +283,7 @@ export default function Home() {
               </div>
               
               <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 leading-tight">
-                LinkedIn Auto Apply Bot
+                Free LinkedIn Auto Apply Bot
                 <br />
                 for Your{' '}
                 <span className="text-gradient-animated">
@@ -293,7 +293,7 @@ export default function Home() {
               </h1>
               
               <p className="text-xl text-gray-600 leading-relaxed">
-                Use AI-powered job search automation to apply to LinkedIn jobs automatically, optimize your ATS resume, and manage everything in one job application tracker.
+                Free AI-powered job search automation to apply to LinkedIn jobs automatically, optimize your ATS resume, and manage everything in one job application tracker.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">

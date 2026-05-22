@@ -4,8 +4,8 @@ export default function Product() {
   return (
     <MarketingInfoPage
       eyebrow="Product"
-      title="One platform for high-quality job search execution"
-      description="AutoApply CV combines controlled LinkedIn automation, AI resume optimization, and pipeline visibility so you can move faster without lowering application quality."
+      title="Free platform for high-quality job search execution"
+      description="Free to start. AutoApply CV combines controlled LinkedIn automation, AI resume optimization, and pipeline visibility so you can move faster without lowering application quality."
       metrics={[
         { label: "Workflow", value: "Discovery -> Apply -> Track" },
         { label: "Control", value: "Human-in-the-loop", note: "Pause, review, resume anytime" },

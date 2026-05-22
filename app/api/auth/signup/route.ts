@@ -5,7 +5,7 @@ import { consumeVerifiedOtp } from "src/lib/otp";
 import { signupSchema } from "src/lib/schemas";
 import { createSessionAndTokens, setAuthCookies, toClientUser } from "src/lib/auth";
 import { getPlanQuota } from "src/lib/quota";
-import { getDailyHireCap } from "src/lib/hires";
+import { creditBonusHires, getDailyHireCap } from "src/lib/hires";
 import { writeAuditLog } from "src/lib/audit";
 import { fail, handleApiError } from "src/lib/api";
 
@@ -47,6 +47,18 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    const signupBonus = Math.max(0, Math.floor(Number(process.env.SIGNUP_BONUS_HIRES || 300)));
+    if (signupBonus > 0) {
+      await creditBonusHires({
+        userId: user.id,
+        hires: signupBonus,
+        referenceType: "signup",
+        referenceId: user.id,
+        idempotencyKey: `signup_bonus:${user.id}`,
+        metadataJson: { email },
+      });
+    }
+
     const { accessToken, refreshToken } = await createSessionAndTokens({
       id: user.id,
       email: user.email,
@@ -61,7 +73,8 @@ export async function POST(req: NextRequest) {
       targetId: user.id,
     });
 
-    const clientUser = toClientUser(user);
+    const refreshedUser = await prisma.user.findUnique({ where: { id: user.id } });
+    const clientUser = toClientUser(refreshedUser || user);
     return NextResponse.json(
       {
         success: true,

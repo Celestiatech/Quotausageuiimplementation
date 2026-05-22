@@ -379,3 +379,22 @@ html {
   background-clip: text;
   animation: gradient 3s linear infinite;
 }
+
+/* Chat widget: render above all page chrome and avoid clipping. */
+.cp-chat-widget {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 2147483647;
+  transform: none !important;
+  inset: auto !important;
+  isolation: isolate;
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+}
+
+.cp-chat-widget--left {
+  left: 1rem;
+  right: auto;
+}

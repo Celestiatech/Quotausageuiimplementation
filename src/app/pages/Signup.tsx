@@ -139,6 +139,7 @@ export default function Signup() {
             <div className="space-y-4">
               {[
                 'Free forever - No credit card required',
+                '300 Hires coins signup bonus',
                 '3 Auto-Apply actions per day',
                 'AI-powered resume optimization',
                 'Smart job matching algorithm',

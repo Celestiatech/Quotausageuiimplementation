@@ -5,6 +5,7 @@ import "./globals.css";
 import CookieConsentBanner from "./CookieConsentBanner";
 import AnalyticsScripts from "./AnalyticsScripts";
 import GoogleConsentMode from "./GoogleConsentMode";
+import ChatWidget from "./ChatWidget";
 
 const GOOGLE_TAG_ID = String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim();
 const GTM_ID = String(process.env.NEXT_PUBLIC_GTM_ID || "").trim();
@@ -125,7 +126,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const consentDefaults = consentModeDefaultsFromCookie(consentCookie);
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <Script id="gtag-consent-default" strategy="beforeInteractive">
           {`
@@ -161,6 +162,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AnalyticsScripts googleTagId={GOOGLE_TAG_ID} clarityProjectId={CLARITY_TAG_ID} />
         {children}
         <CookieConsentBanner clarityProjectId={CLARITY_TAG_ID} googleTagId={GOOGLE_TAG_ID} gtmId={GTM_ID} />
+        <ChatWidget />
       </body>
     </html>
   );
