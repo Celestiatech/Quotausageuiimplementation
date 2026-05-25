@@ -7,6 +7,7 @@ export const signupSchema = z.object({
   name: z.string().trim().min(2).max(80),
   email: emailSchema,
   password: passwordSchema,
+  phone: z.string().trim().min(6).max(30),
 });
 
 export const loginSchema = z.object({
@@ -64,8 +65,24 @@ export const checkoutSchema = z.object({
 export const onboardingSchema = z.object({
   name: z.string().trim().min(2).max(80),
   phone: z.string().trim().min(6).max(30),
-  currentCity: z.string().trim().min(2).max(120),
-  addressLine: z.string().trim().min(5).max(300),
-  linkedinUrl: z.string().trim().url(),
-  portfolioUrl: z.string().trim().url(),
+  currentCity: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((value) => String(value ?? "").trim()),
+  addressLine: z
+    .string()
+    .trim()
+    .max(300)
+    .optional()
+    .transform((value) => String(value ?? "").trim()),
+  linkedinUrl: z
+    .union([z.string().trim().url(), z.literal("")])
+    .optional()
+    .transform((value) => String(value ?? "").trim()),
+  portfolioUrl: z
+    .union([z.string().trim().url(), z.literal("")])
+    .optional()
+    .transform((value) => String(value ?? "").trim()),
 });

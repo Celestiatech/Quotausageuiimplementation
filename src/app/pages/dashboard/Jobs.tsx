@@ -17,6 +17,7 @@ import {
   Link2,
   Copy,
 } from "lucide-react";
+import { useParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
 import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
@@ -595,6 +596,10 @@ function lookupCatalogField(...values: Array<string | undefined>) {
 
 export default function Jobs() {
   const { user } = useAuth();
+  const params = useParams();
+  const selectedProvider = params.provider === "indeed" ? "indeed" : "linkedin";
+  const showLinkedIn = selectedProvider === "linkedin";
+  const showIndeed = selectedProvider === "indeed";
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
   const linkedInExtensionZipUrl = `${extensionZipUrl}?provider=linkedin`;
   const indeedExtensionZipUrl = `${extensionZipUrl}?provider=indeed`;
@@ -1710,21 +1715,30 @@ export default function Jobs() {
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Auto-Apply Jobs</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            {showLinkedIn ? "LinkedIn Jobs Extension" : "Indeed Jobs Extension Beta"}
+          </h1>
           <p className="text-gray-600">Showing {jobs.length} real jobs from your backend queue</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <span ref={versionBadgeRef} className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">
-              LinkedIn ZIP: {currentPackageFileName || "loading..."}
-            </span>
-            <span className="rounded-full bg-orange-50 px-2.5 py-1 font-semibold text-orange-700">
-              Indeed ZIP: {indeedExtensionRelease.downloadFileName || "loading..."}
-            </span>
-            <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
-              LinkedIn installed: {linkedInInstalled ? formatExtensionPackageName(linkedInInstalledVersion || "") : "not detected"}
-            </span>
-            <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
-              Indeed installed: {indeedInstalled ? indeedInstalledVersion || "detected" : "not detected"}
-            </span>
+            {showLinkedIn ? (
+              <>
+                <span ref={versionBadgeRef} className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">
+                  LinkedIn ZIP: {currentPackageFileName || "loading..."}
+                </span>
+                <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
+                  LinkedIn installed: {linkedInInstalled ? formatExtensionPackageName(linkedInInstalledVersion || "") : "not detected"}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="rounded-full bg-orange-50 px-2.5 py-1 font-semibold text-orange-700">
+                  Indeed ZIP: {indeedExtensionRelease.downloadFileName || "loading..."}
+                </span>
+                <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
+                  Indeed installed: {indeedInstalled ? indeedInstalledVersion || "detected" : "not detected"}
+                </span>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -1761,18 +1775,22 @@ export default function Jobs() {
           <div>
             <h2 className="text-xl font-bold text-gray-900">Extension Workspace</h2>
             <p className="text-sm text-gray-600">
-              LinkedIn and Indeed now run as separate Chrome extensions, both syncing back to the same AutoApply CV account.
+              {showLinkedIn
+                ? "Install and verify the LinkedIn extension package, then sync onboarding answers into the extension."
+                : "Install and verify the Indeed beta extension package, then sync onboarding answers into the extension."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={openInstallGuide}
-              className="px-4 py-2 rounded-xl bg-sky-600 text-white font-semibold shadow-sm transition-colors hover:bg-sky-700 inline-flex items-center gap-2"
-            >
-              <Play className="w-4 h-4" />
-              LinkedIn Install Guide
-            </button>
+            {showLinkedIn ? (
+              <button
+                type="button"
+                onClick={openInstallGuide}
+                className="px-4 py-2 rounded-xl bg-sky-600 text-white font-semibold shadow-sm transition-colors hover:bg-sky-700 inline-flex items-center gap-2"
+              >
+                <Play className="w-4 h-4" />
+                LinkedIn Install Guide
+              </button>
+            ) : null}
             <button
               ref={checkExtensionButtonRef}
               onClick={() => void checkExtensionStatus()}
@@ -1784,7 +1802,8 @@ export default function Jobs() {
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-1">
+          {showLinkedIn ? (
           <section className="rounded-2xl border border-sky-200 bg-sky-50/70 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1908,7 +1927,9 @@ export default function Jobs() {
               </div>
             </div>
           </section>
+          ) : null}
 
+          {showIndeed ? (
           <section className="rounded-2xl border border-orange-200 bg-orange-50/80 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -2002,6 +2023,7 @@ export default function Jobs() {
               </div>
             </div>
           </section>
+          ) : null}
         </div>
 
         {installMessage ? (
@@ -2010,33 +2032,37 @@ export default function Jobs() {
           </div>
         ) : null}
 
-        <ol className="mt-4 text-sm text-gray-700 list-decimal pl-5 space-y-1">
-          <li>Download <code>{currentPackageFileName}</code>.</li>
-          <li>Extract it. The folder should look like <code>{currentPackageBaseName}</code> and contain <code>manifest.json</code>.</li>
-          <li>In Chrome click three dots, then <code>Extensions</code>, then <code>Manage Extensions</code>. Turn on Developer mode on the top-right and click <code>Load unpacked</code>.</li>
-          <li>Select the extracted folder. When the extension appears, click the extension icon, make sure LinkedIn is signed in, then return here and click Check Extension.</li>
-        </ol>
+        {showLinkedIn ? (
+          <>
+            <ol className="mt-4 text-sm text-gray-700 list-decimal pl-5 space-y-1">
+              <li>Download <code>{currentPackageFileName}</code>.</li>
+              <li>Extract it. The folder should look like <code>{currentPackageBaseName}</code> and contain <code>manifest.json</code>.</li>
+              <li>In Chrome click three dots, then <code>Extensions</code>, then <code>Manage Extensions</code>. Turn on Developer mode on the top-right and click <code>Load unpacked</code>.</li>
+              <li>Select the extracted folder. When the extension appears, click the extension icon, make sure LinkedIn is signed in, then return here and click Check Extension.</li>
+            </ol>
 
-        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-          <div className="text-sm font-semibold text-blue-900">Resume Requirement Handling</div>
-          <div className="text-sm text-blue-800 mt-1">
-            If a job says resume is required, upload your resume in LinkedIn Easy Apply profile first.
-            The copilot automatically picks the latest attached resume option in the modal.
-          </div>
-        </div>
+            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <div className="text-sm font-semibold text-blue-900">Resume Requirement Handling</div>
+              <div className="text-sm text-blue-800 mt-1">
+                If a job says resume is required, upload your resume in LinkedIn Easy Apply profile first.
+                The copilot automatically picks the latest attached resume option in the modal.
+              </div>
+            </div>
 
-        <ExtensionInstallGuide
-          open={installGuideOpen}
-          steps={installGuideSteps}
-          currentStepIndex={installGuideStepIndex}
-          completedStepIds={installGuideCompletedIds}
-        onClose={closeInstallGuide}
-        onNext={nextInstallGuideStep}
-        onPrevious={previousInstallGuideStep}
-        onStepDone={markInstallGuideStepDone}
-        onJumpToStep={jumpToInstallGuideStep}
-        onStepAction={runInstallGuideStepAction}
-      />
+            <ExtensionInstallGuide
+              open={installGuideOpen}
+              steps={installGuideSteps}
+              currentStepIndex={installGuideStepIndex}
+              completedStepIds={installGuideCompletedIds}
+              onClose={closeInstallGuide}
+              onNext={nextInstallGuideStep}
+              onPrevious={previousInstallGuideStep}
+              onStepDone={markInstallGuideStepDone}
+              onJumpToStep={jumpToInstallGuideStep}
+              onStepAction={runInstallGuideStepAction}
+            />
+          </>
+        ) : null}
 
         {(extensionStatus.pendingQuestions || []).length > 0 ? (
           <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">

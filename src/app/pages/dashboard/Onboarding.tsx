@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import {
   AlertCircle,
+  Check,
   CheckCircle2,
   ChevronRight,
   Download,
@@ -598,11 +599,14 @@ export default function Onboarding() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
   const [wizardStep, setWizardStep] = useState(0);
+  const [profileQuestionIndex, setProfileQuestionIndex] = useState(0);
+  const [guidedPopupOpen, setGuidedPopupOpen] = useState(false);
   const [profile, setProfile] = useState<MasterProfile>(DEFAULT_PROFILE);
   const [preferences, setPreferences] = useState<JobPreferences>(DEFAULT_PREFERENCES);
   const [screeningRows, setScreeningRows] = useState<ScreeningRow[]>([]);
   const [pendingQuestions, setPendingQuestions] = useState<PendingQuestion[]>([]);
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -635,6 +639,103 @@ export default function Onboarding() {
 
   const loadedRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
+  const fieldRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({});
+
+  const focusField = (key: string) => {
+    const el = fieldRefs.current[key];
+    if (!el) return;
+    try {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch {
+      // ignore
+    }
+    el.focus();
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      // best-effort haptic feedback on supported devices
+      (navigator as any).vibrate?.(60);
+    }
+  };
+
+  const gotoWizardStep = (nextStep: number) => {
+    const bounded = Math.max(0, Math.min(WIZARD_STEPS.length - 1, Math.floor(nextStep)));
+    setWizardStep(bounded);
+    setActiveTab(WIZARD_STEPS[bounded].tab);
+    setProfileQuestionIndex(0);
+  };
+
+  const saveAnswer = async (
+    questionKey: string,
+    questionLabel: string,
+    answer: string,
+    answerType: ScreeningAnswerType = inferAnswerType(answer),
+    source: ScreeningSource = "manual",
+  ) => {
+    const normalizedKey = toPayloadQuestionKey(questionKey || questionLabel);
+    const cleanAnswer = compactAnswer(answer);
+    const cleanLabel = String(questionLabel || "").trim() || friendlyLabel(normalizedKey, "");
+    if (!normalizedKey || !cleanAnswer || !cleanLabel) return;
+
+    setSavingAnswerKey(normalizedKey);
+    setError("");
+
+    try {
+      const payload: ScreeningPayload = {
+        questionKey: normalizedKey,
+        questionLabel: cleanLabel,
+        answer: cleanAnswer,
+        answerType,
+        source,
+        lastUsed: new Date().toISOString(),
+      };
+
+      const res = await fetch("/api/user/screening/answers", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || "Failed to save answer");
+      }
+
+      setScreeningRows((prev) => {
+        const existingIdx = prev.findIndex((item) => toPayloadQuestionKey(item.normalizedKey) === normalizedKey);
+        if (existingIdx === -1) {
+          return [
+            ...prev,
+            {
+              id: makeId(),
+              questionLabel: cleanLabel,
+              normalizedKey,
+              answer: cleanAnswer,
+              answerType,
+              source,
+              lastUsed: new Date().toISOString(),
+            },
+          ].sort((a, b) => a.questionLabel.localeCompare(b.questionLabel));
+        }
+
+        const next = [...prev];
+        next[existingIdx] = {
+          ...next[existingIdx],
+          questionLabel: cleanLabel,
+          normalizedKey,
+          answer: cleanAnswer,
+          answerType,
+          source,
+          lastUsed: new Date().toISOString(),
+        };
+        return next.sort((a, b) => a.questionLabel.localeCompare(b.questionLabel));
+      });
+
+      setPendingQuestions((prev) => prev.filter((item) => item.questionKey !== normalizedKey));
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save answer");
+    } finally {
+      setSavingAnswerKey("");
+    }
+  };
 
   const canDownloadExtensionZip = Boolean(
     String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim(),
@@ -1028,6 +1129,7 @@ export default function Onboarding() {
           ? Math.max(0, Math.min(WIZARD_STEPS.length - 1, Math.floor(savedProgress.currentStep)))
           : 0,
       );
+      setProfileQuestionIndex(typeof savedProgress?.profileQuestionIndex === "number" ? Math.max(0, Math.floor(savedProgress.profileQuestionIndex)) : 0);
       setDraftSavedAt(String(savedProgress?.savedAt || ""));
       setLastSyncAt(timestamps[timestamps.length - 1] || "");
     } catch (loadError) {
@@ -1092,7 +1194,7 @@ export default function Onboarding() {
       linkedinUrl: profile.linkedinUrl,
       portfolioUrl: profile.portfolioUrl,
       currentStep: wizardStep,
-      profileQuestionIndex: 0,
+      profileQuestionIndex,
       preferences: {
         searchTerms: stringifyTags(preferences.searchTerms),
         searchLocation: stringifyTags(preferences.searchLocations),
@@ -1146,7 +1248,7 @@ export default function Onboarding() {
         autosaveTimerRef.current = null;
       }
     };
-  }, [profile, preferences, screeningRows, wizardStep, loading, saving]);
+  }, [profile, preferences, screeningRows, wizardStep, profileQuestionIndex, loading, saving]);
 
   useEffect(() => {
     if (!profile.fullName.trim()) return;
@@ -1174,17 +1276,6 @@ export default function Onboarding() {
     () => [
       { label: "Full name", done: profile.fullName.trim().length >= 2 },
       { label: "Phone", done: extractPhoneNumber(profile.phone).length >= 6 },
-      { label: "City", done: profile.city.trim().length >= 2 },
-      { label: "Country", done: profile.country.trim().length >= 2 },
-      { label: "LinkedIn URL", done: isValidUrl(profile.linkedinUrl) },
-      { label: "Portfolio URL", done: isValidUrl(profile.portfolioUrl) },
-      { label: "Work authorization", done: profile.workAuthorizationUS.trim().length > 0 },
-      { label: "Visa sponsorship", done: profile.visaSponsorship.trim().length > 0 },
-      { label: "Experience", done: profile.yearsOfExperience.trim().length > 0 },
-      { label: "Education", done: profile.educationLevel.trim().length > 0 },
-      { label: "Search terms", done: preferences.searchTerms.length > 0 },
-      { label: "Search locations", done: preferences.searchLocations.length > 0 },
-      { label: "Work mode", done: preferences.workMode.trim().length > 0 },
     ],
     [profile, preferences],
   );
@@ -1202,34 +1293,394 @@ export default function Onboarding() {
   );
 
   const stepComplete = useMemo(() => {
-    const hasBasic =
-      profile.fullName.trim().length >= 2 &&
-      profile.email.trim().length > 0 &&
-      extractPhoneNumber(profile.phone).length >= 6 &&
-      profile.city.trim().length >= 2;
+    const hasBasic = profile.fullName.trim().length >= 2 && extractPhoneNumber(profile.phone).length >= 6;
 
-    const hasEligibility =
-      profile.workAuthorizationUS.trim().length > 0 &&
-      profile.visaSponsorship.trim().length > 0;
-
-    const hasExperience =
-      profile.yearsOfExperience.trim().length > 0 &&
-      profile.educationLevel.trim().length > 0 &&
-      profile.englishProficiency.trim().length > 0;
-
-    const hasPreferences =
-      preferences.searchTerms.length > 0 &&
-      preferences.searchLocations.length > 0 &&
-      preferences.workMode.trim().length > 0;
-
-    const hasSavedAnswers = screeningRows.length > 0 || pendingQuestions.length === 0;
-
-    const hasResumeLinkedin =
-      isValidUrl(profile.linkedinUrl) &&
-      (Boolean(user?.resumeFileName) || Boolean(profile.resumeUrl.trim()));
-
-    return [hasBasic, hasEligibility, hasExperience, hasPreferences, hasSavedAnswers, hasResumeLinkedin];
+    // Steps 2-6 are optional; mark them complete so the UI doesn't nag users.
+    return [hasBasic, true, true, true, true, true];
   }, [profile, preferences, screeningRows.length, pendingQuestions.length, user?.resumeFileName]);
+
+  type GuidedQuestion = {
+    id: string;
+    title: string;
+    required?: boolean;
+    isComplete: () => boolean;
+    render: () => ReactNode;
+  };
+
+  const guidedQuestions = useMemo<GuidedQuestion[]>(() => {
+    const usWorkAuthOptions = [
+      "U.S. Citizen/Permanent Resident",
+      "Authorized to work in the U.S.",
+      "Require sponsorship",
+      "Not authorized",
+    ];
+
+    if (wizardStep === 0) {
+      return [
+        {
+          id: "fullName",
+          title: "Full Name",
+          required: true,
+          isComplete: () => profile.fullName.trim().length >= 2,
+          render: () => (
+            <InputField
+              label="Full Name"
+              value={profile.fullName}
+              onChange={(value) => setProfile((prev) => ({ ...prev, fullName: value }))}
+              placeholder="e.g. Alex Johnson"
+              required
+            />
+          ),
+        },
+        {
+          id: "phone",
+          title: "Phone",
+          required: true,
+          isComplete: () => extractPhoneNumber(profile.phone).length >= 6,
+          render: () => (
+            <InputField
+              label="Phone"
+              value={profile.phone}
+              onChange={(value) => setProfile((prev) => ({ ...prev, phone: value }))}
+              placeholder="+1 5551234567"
+              required
+            />
+          ),
+        },
+        {
+          id: "addressLine",
+          title: "Address",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <InputField
+              label="Address"
+              value={profile.addressLine}
+              onChange={(value) => setProfile((prev) => ({ ...prev, addressLine: value }))}
+              placeholder="Street and area"
+            />
+          ),
+        },
+        {
+          id: "city",
+          title: "City",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <InputField
+              label="City"
+              value={profile.city}
+              onChange={(value) => setProfile((prev) => ({ ...prev, city: value }))}
+              placeholder="Austin"
+            />
+          ),
+        },
+        {
+          id: "state",
+          title: "State / Region",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <InputField
+              label="State / Region"
+              value={profile.state}
+              onChange={(value) => setProfile((prev) => ({ ...prev, state: value }))}
+              placeholder="Texas"
+            />
+          ),
+        },
+        {
+          id: "country",
+          title: "Country",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <InputField
+              label="Country"
+              value={profile.country}
+              onChange={(value) => setProfile((prev) => ({ ...prev, country: value }))}
+              placeholder="United States"
+            />
+          ),
+        },
+      ];
+    }
+
+    if (wizardStep === 1) {
+      return [
+        {
+          id: "workAuthorizationUS",
+          title: "U.S. Work Authorization",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <SelectField
+              label="U.S. Work Authorization"
+              value={profile.workAuthorizationUS}
+              onChange={(value) => setProfile((prev) => ({ ...prev, workAuthorizationUS: value }))}
+              options={usWorkAuthOptions}
+            />
+          ),
+        },
+        {
+          id: "visaSponsorship",
+          title: "Need Visa Sponsorship",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <SelectField
+              label="Need Visa Sponsorship"
+              value={profile.visaSponsorship}
+              onChange={(value) => setProfile((prev) => ({ ...prev, visaSponsorship: value }))}
+              options={["No", "Yes"]}
+            />
+          ),
+        },
+        {
+          id: "workModePreference",
+          title: "Remote / Onsite / Hybrid",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <SelectField
+              label="Remote / Onsite / Hybrid"
+              value={profile.workModePreference}
+              onChange={(value) => {
+                setProfile((prev) => ({ ...prev, workModePreference: value }));
+                setPreferences((prev) => ({ ...prev, workMode: value }));
+              }}
+              options={WORK_MODE_OPTIONS}
+            />
+          ),
+        },
+      ];
+    }
+
+    if (wizardStep === 2) {
+      return [
+        {
+          id: "yearsOfExperience",
+          title: "Years of Experience",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <InputField
+              label="Years of Experience"
+              value={profile.yearsOfExperience}
+              onChange={(value) => {
+                setProfile((prev) => ({ ...prev, yearsOfExperience: value }));
+                setPreferences((prev) => ({ ...prev, yearsOfExperience: value }));
+              }}
+              placeholder="e.g. 5"
+            />
+          ),
+        },
+        {
+          id: "educationLevel",
+          title: "Education Level",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <SelectField
+              label="Education Level"
+              value={profile.educationLevel}
+              onChange={(value) => setProfile((prev) => ({ ...prev, educationLevel: value }))}
+              options={EDUCATION_LEVEL_OPTIONS}
+            />
+          ),
+        },
+        {
+          id: "englishProficiency",
+          title: "English Proficiency",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <SelectField
+              label="English Proficiency"
+              value={profile.englishProficiency}
+              onChange={(value) => setProfile((prev) => ({ ...prev, englishProficiency: value }))}
+              options={ENGLISH_PROFICIENCY_OPTIONS}
+            />
+          ),
+        },
+      ];
+    }
+
+    if (wizardStep === 3) {
+      return [
+        {
+          id: "searchTerms",
+          title: "Preferred Job Titles",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <TagInput
+              label="Preferred Job Titles"
+              values={preferences.searchTerms}
+              onChange={(values) => setPreferences((prev) => ({ ...prev, searchTerms: values }))}
+              placeholder="Add role and press Enter"
+            />
+          ),
+        },
+        {
+          id: "searchLocations",
+          title: "Preferred Locations",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <TagInput
+              label="Preferred Locations"
+              values={preferences.searchLocations}
+              onChange={(values) => setPreferences((prev) => ({ ...prev, searchLocations: values }))}
+              placeholder="Add location and press Enter"
+            />
+          ),
+        },
+        {
+          id: "workMode",
+          title: "Remote / Onsite / Hybrid",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <SelectField
+              label="Remote / Onsite / Hybrid"
+              value={preferences.workMode}
+              onChange={(value) => setPreferences((prev) => ({ ...prev, workMode: value }))}
+              options={WORK_MODE_OPTIONS}
+            />
+          ),
+        },
+      ];
+    }
+
+    if (wizardStep === 4) {
+      if (!pendingQuestions.length) {
+        return [
+          {
+            id: "no_pending",
+            title: "Saved Answers",
+            required: false,
+            isComplete: () => true,
+            render: () => (
+              <div className="text-sm text-gray-700">
+                No pending screening questions right now. You can always add answers in the Screening Answers tab later.
+              </div>
+            ),
+          },
+        ];
+      }
+
+      return pendingQuestions.slice(0, 25).map((item) => {
+        const normalizedKey = toPayloadQuestionKey(item.questionKey || item.questionLabel);
+        const draftValue = answerDrafts[normalizedKey] ?? "";
+        const hasValidationMessage = Boolean(item.validationMessage);
+        const canSave = String(draftValue || "").trim().length > 0;
+
+        return {
+          id: normalizedKey || item.questionKey || item.questionLabel,
+          title: item.questionLabel,
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <div className="space-y-2">
+              {hasValidationMessage ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                  {item.validationMessage}
+                </div>
+              ) : null}
+              <input
+                value={draftValue}
+                onChange={(e) =>
+                  setAnswerDrafts((prev) => ({
+                    ...prev,
+                    [normalizedKey]: e.target.value,
+                  }))
+                }
+                placeholder="Answer once and save"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              />
+              <button
+                type="button"
+                onClick={() => void saveAnswer(normalizedKey, item.questionLabel, answerDrafts[normalizedKey] || "", inferAnswerType(answerDrafts[normalizedKey] || ""), "manual")}
+                disabled={savingAnswerKey === normalizedKey || !canSave}
+                className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
+              >
+                {savingAnswerKey === normalizedKey ? "Saving..." : "Save"}
+              </button>
+            </div>
+          ),
+        } satisfies GuidedQuestion;
+      });
+    }
+
+    if (wizardStep === 5) {
+      return [
+        {
+          id: "linkedinUrl",
+          title: "LinkedIn URL",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <InputField
+              label="LinkedIn URL"
+              value={profile.linkedinUrl}
+              onChange={(value) => setProfile((prev) => ({ ...prev, linkedinUrl: value }))}
+              placeholder="https://www.linkedin.com/in/your-profile"
+            />
+          ),
+        },
+        {
+          id: "portfolioUrl",
+          title: "Portfolio URL",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <InputField
+              label="Portfolio URL"
+              value={profile.portfolioUrl}
+              onChange={(value) => setProfile((prev) => ({ ...prev, portfolioUrl: value }))}
+              placeholder="https://github.com/yourname"
+            />
+          ),
+        },
+        {
+          id: "resumeUrlOrUpload",
+          title: "Resume",
+          required: false,
+          isComplete: () => true,
+          render: () => (
+            <div className="space-y-3">
+              <InputField
+                label="Resume URL (optional)"
+                value={profile.resumeUrl}
+                onChange={(value) => setProfile((prev) => ({ ...prev, resumeUrl: value }))}
+                placeholder="https://..."
+              />
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                <div className="font-semibold text-gray-900">Resume Upload Status</div>
+                <div className="mt-1">{user?.resumeFileName ? `Uploaded: ${user.resumeFileName}` : "No uploaded resume yet"}</div>
+                <a href="/dashboard/resume" className="mt-2 inline-flex text-indigo-600 hover:text-indigo-700 font-medium">
+                  Open Resume Section
+                </a>
+              </div>
+            </div>
+          ),
+        },
+      ];
+    }
+
+    return [];
+  }, [wizardStep, profile, preferences, pendingQuestions, answerDrafts, savingAnswerKey, saveAnswer, setProfile, setPreferences, user?.resumeFileName]);
+
+  const guidedQuestion = guidedQuestions[profileQuestionIndex];
+  const guidedTotal = guidedQuestions.length;
+  const isStepFocused = activeTab === WIZARD_STEPS[wizardStep].tab;
+  const showAllSections = !isStepFocused;
+  const showPersonalInfoSection = showAllSections || wizardStep === 0;
+  const showProfessionalLinksSection = showAllSections || wizardStep === 5;
+  const showWorkEligibilitySection = showAllSections || wizardStep === 1;
+  const showExperienceEducationSection = showAllSections || wizardStep === 2;
+  const showPreferredRolesSection = showAllSections;
 
   const summaryStatus = useMemo(() => {
     return {
@@ -1241,16 +1692,21 @@ export default function Onboarding() {
   }, [user?.resumeFileName, profile.resumeUrl, profile.linkedinUrl, extensionStatus.installed, pendingQuestions.length]);
 
   const validateBeforeSave = () => {
-    if (profile.fullName.trim().length < 2) return "Full name is required.";
-    if (extractPhoneNumber(profile.phone).length < 6) return "Enter a valid phone number.";
-    if (profile.city.trim().length < 2) return "City is required.";
-    if (profile.addressLine.trim().length < 5) return "Address is required.";
-    if (!isValidUrl(profile.linkedinUrl)) return "Enter a valid LinkedIn URL.";
-    if (!isValidUrl(profile.portfolioUrl)) return "Enter a valid Portfolio URL.";
-    if (!preferences.searchTerms.length) return "Add at least one search term.";
-    if (!preferences.searchLocations.length) return "Add at least one search location.";
-    if (!profile.workAuthorizationUS.trim()) return "U.S. work authorization is required.";
-    if (!profile.visaSponsorship.trim()) return "Visa sponsorship preference is required.";
+    const nextErrors: Record<string, string> = {};
+    if (profile.fullName.trim().length < 2) nextErrors.fullName = "Full name is required.";
+    if (extractPhoneNumber(profile.phone).length < 6) nextErrors.phone = "Enter a valid phone number.";
+    if (profile.linkedinUrl.trim() && !isValidUrl(profile.linkedinUrl)) nextErrors.linkedinUrl = "Enter a valid URL.";
+    if (profile.portfolioUrl.trim() && !isValidUrl(profile.portfolioUrl)) nextErrors.portfolioUrl = "Enter a valid URL.";
+
+    setFieldErrors(nextErrors);
+    const orderedKeys = ["fullName", "phone", "linkedinUrl", "portfolioUrl"];
+    const firstInvalid = orderedKeys.find((key) => Boolean(nextErrors[key]));
+    if (firstInvalid) {
+      setActiveTab("profile");
+      setGuidedPopupOpen(false);
+      focusField(firstInvalid);
+      return "Please fix the highlighted fields.";
+    }
     return "";
   };
 
@@ -1439,12 +1895,13 @@ export default function Onboarding() {
     });
   };
 
-  const persistAll = async () => {
+  const persistAll = async (opts?: { redirectToDashboard?: boolean }) => {
     setSaving(true);
     setError("");
     setMessage("");
 
     try {
+      const redirectToDashboard = opts?.redirectToDashboard !== false;
       const validationError = validateBeforeSave();
       if (validationError) throw new Error(validationError);
 
@@ -1502,87 +1959,24 @@ export default function Onboarding() {
           : "Profile, preferences, and screening answer library saved.",
       );
       setLastSyncAt(new Date().toISOString());
-      navigate("/dashboard");
+      if (redirectToDashboard) {
+        navigate("/dashboard");
+      }
+      return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to save onboarding");
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const saveAnswer = async (
-    questionKey: string,
-    questionLabel: string,
-    answer: string,
-    answerType: ScreeningAnswerType = inferAnswerType(answer),
-    source: ScreeningSource = "manual",
-  ) => {
-    const normalizedKey = toPayloadQuestionKey(questionKey || questionLabel);
-    const cleanAnswer = compactAnswer(answer);
-    const cleanLabel = String(questionLabel || "").trim() || friendlyLabel(normalizedKey, "");
-    if (!normalizedKey || !cleanAnswer || !cleanLabel) return;
-
-    setSavingAnswerKey(normalizedKey);
-    setError("");
-
-    try {
-      const payload: ScreeningPayload = {
-        questionKey: normalizedKey,
-        questionLabel: cleanLabel,
-        answer: cleanAnswer,
-        answerType,
-        source,
-        lastUsed: new Date().toISOString(),
-      };
-
-      const res = await fetch("/api/user/screening/answers", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.message || "Failed to save answer");
-      }
-
-      setScreeningRows((prev) => {
-        const existingIdx = prev.findIndex((item) => toPayloadQuestionKey(item.normalizedKey) === normalizedKey);
-        if (existingIdx === -1) {
-          return [
-            ...prev,
-            {
-              id: makeId(),
-              questionLabel: cleanLabel,
-              normalizedKey,
-              answer: cleanAnswer,
-              answerType,
-              source,
-              lastUsed: new Date().toISOString(),
-            },
-          ].sort((a, b) => a.questionLabel.localeCompare(b.questionLabel));
-        }
-
-        const next = [...prev];
-        next[existingIdx] = {
-          ...next[existingIdx],
-          questionLabel: cleanLabel,
-          normalizedKey,
-          answer: cleanAnswer,
-          answerType,
-          source,
-          lastUsed: new Date().toISOString(),
-        };
-        return next;
-      });
-
-      setPendingQuestions((prev) => prev.filter((item) => item.questionKey !== normalizedKey));
-      setAnswerDrafts((prev) => ({ ...prev, [normalizedKey]: cleanAnswer }));
-      setMessage(`Saved answer for: ${cleanLabel}`);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to save answer");
-    } finally {
-      setSavingAnswerKey("");
+  const persistAndNextStep = async () => {
+    const ok = await persistAll({ redirectToDashboard: false });
+    if (!ok) return;
+    const next = Math.min(WIZARD_STEPS.length - 1, wizardStep + 1);
+    if (next !== wizardStep) {
+      gotoWizardStep(next);
     }
   };
 
@@ -1600,18 +1994,19 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Onboarding Setup</h1>
-          <p className="text-gray-600 mt-1">{onboardingHeaderDescription}</p>
-        </div>
+    <div className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Onboarding Setup</h1>
+            <p className="text-gray-600 mt-1">{onboardingHeaderDescription}</p>
+          </div>
 
-        <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={openInstallGuide}
-            className="px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 inline-flex items-center gap-2"
+            className="px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 inline-flex items-center gap-2 shadow-sm"
           >
             <Play className="h-4 w-4" />
             Start Install Guide
@@ -1620,7 +2015,7 @@ export default function Onboarding() {
             ref={checkExtensionButtonRef}
             type="button"
             onClick={() => void checkExtensionStatus()}
-            className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             {checkingExtension ? "Checking Extension..." : "Check Extension"}
           </button>
@@ -1629,14 +2024,14 @@ export default function Onboarding() {
             href="https://www.linkedin.com/jobs/"
             target="_blank"
             rel="noreferrer"
-            className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+            className="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
           >
             <ExternalLink className="h-4 w-4" />
             LinkedIn Jobs
           </a>
           <a
             href="/dashboard/resume"
-            className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+            className="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
           >
             <UploadCloud className="h-4 w-4" />
             Resume
@@ -1646,11 +2041,12 @@ export default function Onboarding() {
             type="button"
             onClick={() => void persistAll()}
             disabled={saving}
-            className="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2"
+            className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2 shadow-sm"
           >
             <Save className="h-4 w-4" />
             {saving ? "Saving..." : "Save & Finish"}
           </button>
+        </div>
         </div>
       </div>
 
@@ -1681,8 +2077,8 @@ export default function Onboarding() {
         onStepAction={runInstallGuideStepAction}
       />
 
-      <div className="grid lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-3 rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Profile Completion</p>
@@ -1698,20 +2094,26 @@ export default function Onboarding() {
           </div>
 
           {missingItems.length ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-              <p className="text-sm font-semibold text-amber-900">Missing items</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {missingItems.map((item) => (
-                  <span key={item} className="px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-amber-200 text-amber-800">
-                    {item}
-                  </span>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">What to fill next</p>
+              <ul className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-amber-900">
+                {missingItems.slice(0, 10).map((item) => (
+                  <li key={item} className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    <span>{item}</span>
+                  </li>
                 ))}
-              </div>
+              </ul>
+              {missingItems.length > 10 ? (
+                <div className="mt-2 text-xs text-amber-700 font-medium">
+                  +{missingItems.length - 10} more
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
 
-        <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-5">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
           <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Summary</p>
           <div className="mt-3 space-y-2 text-sm">
             <SummaryLine label="Profile" value={`${completionPercent}% complete`} ok={completionPercent >= 80} />
@@ -1744,7 +2146,7 @@ export default function Onboarding() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Complete My Profile</p>
@@ -1755,31 +2157,45 @@ export default function Onboarding() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-6 gap-2">
+        <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500 transition-all"
+            style={{ width: `${Math.round(((wizardStep + 1) / WIZARD_STEPS.length) * 100)}%` }}
+          />
+        </div>
+
+        <div className="flex gap-3 overflow-x-auto pb-1">
           {WIZARD_STEPS.map((step, index) => (
             <button
               key={step.title}
               type="button"
               onClick={() => {
-                setWizardStep(index);
-                setActiveTab(step.tab);
+                setGuidedPopupOpen(false);
+                gotoWizardStep(index);
               }}
-              className={`text-left rounded-xl border px-3 py-2 transition-colors ${
+              className={`min-w-[220px] text-left rounded-2xl border px-4 py-3 transition-colors ${
                 index === wizardStep
-                  ? "border-indigo-300 bg-indigo-50"
+                  ? "border-indigo-300 bg-indigo-50 shadow-sm"
                   : stepComplete[index]
                   ? "border-emerald-200 bg-emerald-50"
                   : "border-gray-200 bg-gray-50 hover:bg-gray-100"
               }`}
             >
-              <div className="text-xs font-semibold text-gray-600">{index + 1}</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-gray-600">{index + 1}</div>
+                {stepComplete[index] ? (
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-emerald-600 text-white">
+                    <Check className="h-3 w-3" />
+                  </span>
+                ) : null}
+              </div>
               <div className="text-sm font-semibold text-gray-900 mt-1">{step.title}</div>
               <div className="text-xs text-gray-600 mt-1 line-clamp-2">{step.description}</div>
             </button>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
           <div>
             <p className="text-sm font-semibold text-gray-900">{WIZARD_STEPS[wizardStep].title}</p>
             <p className="text-xs text-gray-600 mt-0.5">{WIZARD_STEPS[wizardStep].description}</p>
@@ -1787,7 +2203,10 @@ export default function Onboarding() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setWizardStep((prev) => Math.max(0, prev - 1))}
+              onClick={() => {
+                setGuidedPopupOpen(false);
+                gotoWizardStep(Math.max(0, wizardStep - 1));
+              }}
               className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-white"
               disabled={wizardStep === 0}
             >
@@ -1796,9 +2215,20 @@ export default function Onboarding() {
             <button
               type="button"
               onClick={() => {
+                setActiveTab(WIZARD_STEPS[wizardStep].tab);
+                setGuidedPopupOpen(true);
+                setProfileQuestionIndex(0);
+              }}
+              className="px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
+            >
+              Guided popup
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setGuidedPopupOpen(false);
                 const next = Math.min(WIZARD_STEPS.length - 1, wizardStep + 1);
-                setWizardStep(next);
-                setActiveTab(WIZARD_STEPS[next].tab);
+                gotoWizardStep(next);
               }}
               className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 inline-flex items-center gap-1"
               disabled={wizardStep === WIZARD_STEPS.length - 1}
@@ -1887,165 +2317,277 @@ export default function Onboarding() {
         </div>
       </div>
 
+      {guidedPopupOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4 py-6">
+          <div className="w-full max-w-xl rounded-2xl bg-white border border-gray-200 shadow-xl overflow-hidden">
+            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Guided Setup</div>
+                <div className="text-lg font-semibold text-gray-900 mt-1">{WIZARD_STEPS[wizardStep].title}</div>
+                <div className="text-sm text-gray-600 mt-1">
+                  {guidedTotal ? `Question ${Math.min(guidedTotal, profileQuestionIndex + 1)} of ${guidedTotal}` : "No guided questions for this step"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGuidedPopupOpen(false)}
+                className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-5">
+              {guidedQuestion ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold text-gray-900">{guidedQuestion.title}</div>
+                  {guidedQuestion.render()}
+                  {guidedQuestion.required && !guidedQuestion.isComplete() ? (
+                    <div className="text-xs text-amber-700 font-medium">This field is required to continue.</div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-700">
+                  This step is best completed from the full page (e.g. Screening Answers). Use the tabs below, then click Save &amp; Finish.
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => {
+                  if (profileQuestionIndex > 0) {
+                    setProfileQuestionIndex((prev) => Math.max(0, prev - 1));
+                    return;
+                  }
+                  setGuidedPopupOpen(false);
+                }}
+                className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(guidedQuestion?.required && guidedQuestion && !guidedQuestion.isComplete())}
+                onClick={() => {
+                  if (!guidedQuestion) {
+                    setGuidedPopupOpen(false);
+                    return;
+                  }
+                  if (guidedQuestion.required && !guidedQuestion.isComplete()) return;
+                  const nextIndex = profileQuestionIndex + 1;
+                  if (nextIndex < guidedTotal) {
+                    setProfileQuestionIndex(nextIndex);
+                    return;
+                  }
+                  setGuidedPopupOpen(false);
+                  const nextStep = Math.min(WIZARD_STEPS.length - 1, wizardStep + 1);
+                  if (nextStep !== wizardStep) {
+                    gotoWizardStep(nextStep);
+                  }
+                }}
+                className="px-4 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-1"
+              >
+                {guidedQuestion && profileQuestionIndex + 1 >= guidedTotal ? "Done" : "Next"}
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {activeTab === "profile" ? (
         <div className="space-y-4">
-          <SectionCard title="Personal Info" subtitle="Name, email, phone, city/state/country">
-            <div className="grid md:grid-cols-2 gap-3">
-              <InputField
-                label="Full Name"
-                value={profile.fullName}
-                onChange={(value) => setProfile((prev) => ({ ...prev, fullName: value }))}
-                placeholder="e.g. Alex Johnson"
-              />
-              <InputField
-                label="Email"
-                value={profile.email}
-                onChange={() => {}}
-                placeholder="you@example.com"
-                disabled
-              />
-              <InputField
-                label="Phone"
-                value={profile.phone}
-                onChange={(value) => setProfile((prev) => ({ ...prev, phone: value }))}
-                placeholder="+1 5551234567"
-              />
-              <InputField
-                label="Address"
-                value={profile.addressLine}
-                onChange={(value) => setProfile((prev) => ({ ...prev, addressLine: value }))}
-                placeholder="Street and area"
-              />
-              <InputField
-                label="City"
-                value={profile.city}
-                onChange={(value) => setProfile((prev) => ({ ...prev, city: value }))}
-                placeholder="Austin"
-              />
-              <InputField
-                label="State / Region"
-                value={profile.state}
-                onChange={(value) => setProfile((prev) => ({ ...prev, state: value }))}
-                placeholder="Texas"
-              />
-              <InputField
-                label="Country"
-                value={profile.country}
-                onChange={(value) => setProfile((prev) => ({ ...prev, country: value }))}
-                placeholder="United States"
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Professional Links" subtitle="LinkedIn, portfolio, and resume URL">
-            <div className="grid md:grid-cols-2 gap-3">
-              <InputField
-                label="LinkedIn URL"
-                value={profile.linkedinUrl}
-                onChange={(value) => setProfile((prev) => ({ ...prev, linkedinUrl: value }))}
-                placeholder="https://www.linkedin.com/in/your-profile"
-              />
-              <InputField
-                label="Portfolio URL"
-                value={profile.portfolioUrl}
-                onChange={(value) => setProfile((prev) => ({ ...prev, portfolioUrl: value }))}
-                placeholder="https://github.com/yourname"
-              />
-              <InputField
-                label="Resume URL (optional)"
-                value={profile.resumeUrl}
-                onChange={(value) => setProfile((prev) => ({ ...prev, resumeUrl: value }))}
-                placeholder="https://..."
-              />
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                <div className="font-semibold text-gray-900">Resume Upload Status</div>
-                <div className="mt-1">{user?.resumeFileName ? `Uploaded: ${user.resumeFileName}` : "No uploaded resume yet"}</div>
-                <a href="/dashboard/resume" className="mt-2 inline-flex text-indigo-600 hover:text-indigo-700 font-medium">
-                  Open Resume Section
-                </a>
+          {showPersonalInfoSection ? (
+            <SectionCard title="Personal Info" subtitle="Name, email, phone, city/state/country">
+              <div className="grid md:grid-cols-2 gap-3">
+                <InputField
+                  label="Full Name"
+                  value={profile.fullName}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, fullName: value }))}
+                  placeholder="e.g. Alex Johnson"
+                  required
+                  fieldKey="fullName"
+                  error={fieldErrors.fullName}
+                  inputRef={(el) => {
+                    fieldRefs.current.fullName = el;
+                  }}
+                />
+                <InputField
+                  label="Email"
+                  value={profile.email}
+                  onChange={() => {}}
+                  placeholder="you@example.com"
+                  disabled
+                />
+                <InputField
+                  label="Phone"
+                  value={profile.phone}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, phone: value }))}
+                  placeholder="+1 5551234567"
+                  required
+                  fieldKey="phone"
+                  error={fieldErrors.phone}
+                  inputRef={(el) => {
+                    fieldRefs.current.phone = el;
+                  }}
+                />
+                <InputField
+                  label="Address"
+                  value={profile.addressLine}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, addressLine: value }))}
+                  placeholder="Street and area"
+                />
+                <InputField
+                  label="City"
+                  value={profile.city}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, city: value }))}
+                  placeholder="Austin"
+                />
+                <InputField
+                  label="State / Region"
+                  value={profile.state}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, state: value }))}
+                  placeholder="Texas"
+                />
+                <InputField
+                  label="Country"
+                  value={profile.country}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, country: value }))}
+                  placeholder="United States"
+                />
               </div>
-            </div>
-          </SectionCard>
+            </SectionCard>
+          ) : null}
 
-          <SectionCard title="Work Eligibility" subtitle="Visa sponsorship and work authorization">
-            <div className="grid md:grid-cols-2 gap-3">
-              <SelectField
-                label="U.S. Work Authorization"
-                value={profile.workAuthorizationUS}
-                onChange={(value) => setProfile((prev) => ({ ...prev, workAuthorizationUS: value }))}
-                options={[
-                  "U.S. Citizen/Permanent Resident",
-                  "Authorized to work in the U.S.",
-                  "Require sponsorship",
-                  "Not authorized",
-                ]}
-              />
-              <SelectField
-                label="Need Visa Sponsorship"
-                value={profile.visaSponsorship}
-                onChange={(value) => setProfile((prev) => ({ ...prev, visaSponsorship: value }))}
-                options={["No", "Yes"]}
-              />
-              <SelectField
-                label="Remote / Onsite / Hybrid"
-                value={profile.workModePreference}
-                onChange={(value) => {
-                  setProfile((prev) => ({ ...prev, workModePreference: value }));
-                  setPreferences((prev) => ({ ...prev, workMode: value }));
-                }}
-                options={WORK_MODE_OPTIONS}
-              />
-            </div>
-          </SectionCard>
+          {showProfessionalLinksSection ? (
+            <SectionCard title="Professional Links" subtitle="LinkedIn, portfolio, and resume URL">
+              <div className="grid md:grid-cols-2 gap-3">
+                <InputField
+                  label="LinkedIn URL"
+                  value={profile.linkedinUrl}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, linkedinUrl: value }))}
+                  placeholder="https://www.linkedin.com/in/your-profile"
+                  fieldKey="linkedinUrl"
+                  error={fieldErrors.linkedinUrl}
+                  inputRef={(el) => {
+                    fieldRefs.current.linkedinUrl = el;
+                  }}
+                />
+                <InputField
+                  label="Portfolio URL"
+                  value={profile.portfolioUrl}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, portfolioUrl: value }))}
+                  placeholder="https://github.com/yourname"
+                  fieldKey="portfolioUrl"
+                  error={fieldErrors.portfolioUrl}
+                  inputRef={(el) => {
+                    fieldRefs.current.portfolioUrl = el;
+                  }}
+                />
+                <InputField
+                  label="Resume URL (optional)"
+                  value={profile.resumeUrl}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, resumeUrl: value }))}
+                  placeholder="https://..."
+                />
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                  <div className="font-semibold text-gray-900">Resume Upload Status</div>
+                  <div className="mt-1">{user?.resumeFileName ? `Uploaded: ${user.resumeFileName}` : "No uploaded resume yet"}</div>
+                  <a href="/dashboard/resume" className="mt-2 inline-flex text-indigo-600 hover:text-indigo-700 font-medium">
+                    Open Resume Section
+                  </a>
+                </div>
+              </div>
+            </SectionCard>
+          ) : null}
 
-          <SectionCard title="Experience & Education" subtitle="Years, degree, and communication level">
-            <div className="grid md:grid-cols-2 gap-3">
-              <InputField
-                label="Years of Experience"
-                value={profile.yearsOfExperience}
-                onChange={(value) => {
-                  setProfile((prev) => ({ ...prev, yearsOfExperience: value }));
-                  setPreferences((prev) => ({ ...prev, yearsOfExperience: value }));
-                }}
-                placeholder="e.g. 5"
-              />
-              <SelectField
-                label="Education Level"
-                value={profile.educationLevel}
-                onChange={(value) => setProfile((prev) => ({ ...prev, educationLevel: value }))}
-                options={EDUCATION_LEVEL_OPTIONS}
-              />
-              <SelectField
-                label="English Proficiency"
-                value={profile.englishProficiency}
-                onChange={(value) => setProfile((prev) => ({ ...prev, englishProficiency: value }))}
-                options={ENGLISH_PROFICIENCY_OPTIONS}
-              />
-            </div>
-          </SectionCard>
+          {showWorkEligibilitySection ? (
+            <SectionCard title="Work Eligibility" subtitle="Visa sponsorship and work authorization">
+              <div className="grid md:grid-cols-2 gap-3">
+                <SelectField
+                  label="U.S. Work Authorization"
+                  value={profile.workAuthorizationUS}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, workAuthorizationUS: value }))}
+                  options={[
+                    "U.S. Citizen/Permanent Resident",
+                    "Authorized to work in the U.S.",
+                    "Require sponsorship",
+                    "Not authorized",
+                  ]}
+                />
+                <SelectField
+                  label="Need Visa Sponsorship"
+                  value={profile.visaSponsorship}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, visaSponsorship: value }))}
+                  options={["No", "Yes"]}
+                />
+                <SelectField
+                  label="Remote / Onsite / Hybrid"
+                  value={profile.workModePreference}
+                  onChange={(value) => {
+                    setProfile((prev) => ({ ...prev, workModePreference: value }));
+                    setPreferences((prev) => ({ ...prev, workMode: value }));
+                  }}
+                  options={WORK_MODE_OPTIONS}
+                />
+              </div>
+            </SectionCard>
+          ) : null}
 
-          <SectionCard title="Preferred Roles & Locations" subtitle="Used to prefill job preferences and screening answers">
-            <div className="grid md:grid-cols-2 gap-4">
-              <TagInput
-                label="Preferred Job Titles"
-                values={profile.preferredJobTitles}
-                onChange={(values) => {
-                  setProfile((prev) => ({ ...prev, preferredJobTitles: values }));
-                  setPreferences((prev) => ({ ...prev, searchTerms: values }));
-                }}
-                placeholder="Add role and press Enter"
-              />
-              <TagInput
-                label="Preferred Locations"
-                values={profile.preferredLocations}
-                onChange={(values) => {
-                  setProfile((prev) => ({ ...prev, preferredLocations: values }));
-                  setPreferences((prev) => ({ ...prev, searchLocations: values }));
-                }}
-                placeholder="Add location and press Enter"
-              />
-            </div>
-          </SectionCard>
+          {showExperienceEducationSection ? (
+            <SectionCard title="Experience & Education" subtitle="Years, degree, and communication level">
+              <div className="grid md:grid-cols-2 gap-3">
+                <InputField
+                  label="Years of Experience"
+                  value={profile.yearsOfExperience}
+                  onChange={(value) => {
+                    setProfile((prev) => ({ ...prev, yearsOfExperience: value }));
+                    setPreferences((prev) => ({ ...prev, yearsOfExperience: value }));
+                  }}
+                  placeholder="e.g. 5"
+                />
+                <SelectField
+                  label="Education Level"
+                  value={profile.educationLevel}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, educationLevel: value }))}
+                  options={EDUCATION_LEVEL_OPTIONS}
+                />
+                <SelectField
+                  label="English Proficiency"
+                  value={profile.englishProficiency}
+                  onChange={(value) => setProfile((prev) => ({ ...prev, englishProficiency: value }))}
+                  options={ENGLISH_PROFICIENCY_OPTIONS}
+                />
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {showPreferredRolesSection ? (
+            <SectionCard title="Preferred Roles & Locations" subtitle="Used to prefill job preferences and screening answers">
+              <div className="grid md:grid-cols-2 gap-4">
+                <TagInput
+                  label="Preferred Job Titles"
+                  values={profile.preferredJobTitles}
+                  onChange={(values) => {
+                    setProfile((prev) => ({ ...prev, preferredJobTitles: values }));
+                    setPreferences((prev) => ({ ...prev, searchTerms: values }));
+                  }}
+                  placeholder="Add role and press Enter"
+                />
+                <TagInput
+                  label="Preferred Locations"
+                  values={profile.preferredLocations}
+                  onChange={(values) => {
+                    setProfile((prev) => ({ ...prev, preferredLocations: values }));
+                    setPreferences((prev) => ({ ...prev, searchLocations: values }));
+                  }}
+                  placeholder="Add location and press Enter"
+                />
+              </div>
+            </SectionCard>
+          ) : null}
         </div>
       ) : null}
 
@@ -2411,12 +2953,12 @@ export default function Onboarding() {
           </button>
           <button
             type="button"
-            onClick={() => void persistAll()}
+            onClick={() => void persistAndNextStep()}
             disabled={saving}
             className="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2"
           >
             <Save className="h-4 w-4" />
-            {saving ? "Saving..." : "Save & Finish Onboarding"}
+            {saving ? "Saving..." : wizardStep === WIZARD_STEPS.length - 1 ? "Save & Finish Onboarding" : "Save & Next Step"}
           </button>
         </div>
       </div>
@@ -2489,23 +3031,45 @@ function InputField({
   onChange,
   placeholder,
   disabled = false,
+  required = false,
+  error,
+  fieldKey,
+  inputRef,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   disabled?: boolean;
+  required?: boolean;
+  error?: string;
+  fieldKey?: string;
+  inputRef?: (el: HTMLInputElement | null) => void;
 }) {
+  const describedBy = fieldKey ? `${fieldKey}-error` : undefined;
   return (
     <label className="block">
-      <span className="text-xs font-semibold text-gray-700">{label}</span>
+      <span className="text-xs font-semibold text-gray-700">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : null}
+      </span>
       <input
+        ref={inputRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 disabled:bg-gray-100 disabled:text-gray-500"
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? describedBy : undefined}
+        className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none disabled:bg-gray-100 disabled:text-gray-500 ${
+          error ? "border-red-300 focus:border-red-400 focus:ring-4 focus:ring-red-100" : "border-gray-300 focus:border-indigo-400"
+        }`}
       />
+      {error ? (
+        <div id={describedBy} className="mt-1 text-xs font-medium text-red-600">
+          {error}
+        </div>
+      ) : null}
     </label>
   );
 }
@@ -2515,19 +3079,36 @@ function SelectField({
   value,
   onChange,
   options,
+  required = false,
+  error,
+  fieldKey,
+  selectRef,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: string[];
+  required?: boolean;
+  error?: string;
+  fieldKey?: string;
+  selectRef?: (el: HTMLSelectElement | null) => void;
 }) {
+  const describedBy = fieldKey ? `${fieldKey}-error` : undefined;
   return (
     <label className="block">
-      <span className="text-xs font-semibold text-gray-700">{label}</span>
+      <span className="text-xs font-semibold text-gray-700">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : null}
+      </span>
       <select
+        ref={selectRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? describedBy : undefined}
+        className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ${
+          error ? "border-red-300 focus:border-red-400 focus:ring-4 focus:ring-red-100" : "border-gray-300 focus:border-indigo-400"
+        }`}
       >
         <option value="">Select</option>
         {options.map((option) => (
@@ -2536,6 +3117,11 @@ function SelectField({
           </option>
         ))}
       </select>
+      {error ? (
+        <div id={describedBy} className="mt-1 text-xs font-medium text-red-600">
+          {error}
+        </div>
+      ) : null}
     </label>
   );
 }
@@ -2546,12 +3132,14 @@ function TagInput({
   onChange,
   placeholder,
   presets = [],
+  required = false,
 }: {
   label: string;
   values: string[];
   onChange: (values: string[]) => void;
   placeholder: string;
   presets?: string[];
+  required?: boolean;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -2569,7 +3157,10 @@ function TagInput({
 
   return (
     <div>
-      <span className="text-xs font-semibold text-gray-700">{label}</span>
+      <span className="text-xs font-semibold text-gray-700">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : null}
+      </span>
 
       <div className="mt-1 rounded-lg border border-gray-300 bg-white p-2">
         <div className="flex flex-wrap gap-1.5">

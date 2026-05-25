@@ -42,6 +42,7 @@ export default function Login() {
           name: 'Demo User',
           email: demoEmail,
           password: demoPassword,
+          phone: '+1 555 010 9999',
         }),
       });
 

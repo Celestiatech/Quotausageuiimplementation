@@ -167,7 +167,8 @@ const routes = createRoutesFromElements(
       }
     >
       <Route index element={<DashboardOverview />} />
-      <Route path="jobs" element={<Jobs />} />
+      <Route path="jobs" element={<Navigate to="jobs/linkedin" replace />} />
+      <Route path="jobs/:provider" element={<Jobs />} />
       <Route path="applications" element={<Applications />} />
       <Route path="resume" element={<Resume />} />
       <Route path="interview" element={<Interview />} />

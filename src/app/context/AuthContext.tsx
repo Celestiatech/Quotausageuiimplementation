@@ -36,7 +36,7 @@ type AuthStore = {
   bootstrap: () => Promise<void>;
   login: (email: string, password: string, role?: Role) => Promise<void>;
   logout: () => void;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, phone: string) => Promise<void>;
   incrementQuota: () => void;
   refreshUser: () => Promise<void>;
 };
@@ -48,7 +48,7 @@ type AuthContextType = {
   isBootstrapping: boolean;
   login: (email: string, password: string, role?: Role) => Promise<void>;
   logout: () => void;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, phone: string) => Promise<void>;
   incrementQuota: () => void;
   refreshUser: () => Promise<void>;
 };
@@ -162,12 +162,12 @@ const useAuthStore = create<AuthStore>((set, get) => ({
     writeStoredUser(sessionUser);
   },
 
-  signup: async (name: string, email: string, password: string) => {
+  signup: async (name: string, email: string, password: string, phone: string) => {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, phone }),
     });
     const data = await res.json();
     if (!res.ok || !data?.success) {

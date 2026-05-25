@@ -61,7 +61,15 @@ export default function DashboardLayout() {
 
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Job Matches', href: '/dashboard/jobs', icon: Target },
+    {
+      name: 'Job Applier',
+      href: '/dashboard/jobs/linkedin',
+      icon: Target,
+      children: [
+        { name: 'LinkedIn', href: '/dashboard/jobs/linkedin' },
+        { name: 'Indeed Beta', href: '/dashboard/jobs/indeed' },
+      ],
+    },
     { name: 'Applications', href: '/dashboard/applications', icon: Briefcase },
     { name: 'Resume Builder', href: '/dashboard/resume', icon: FileText },
     { name: 'Interview Prep', href: '/dashboard/interview', icon: MessageSquare },
@@ -136,20 +144,63 @@ export default function DashboardLayout() {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
+              const hasChildren = Array.isArray((item as any).children) && (item as any).children.length > 0;
+              const groupActive = location.pathname === item.href || location.pathname.startsWith('/dashboard/jobs');
               const isActive = location.pathname === item.href;
+
+              if (!hasChildren) {
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'gradient-primary text-white shadow-md'
+                        : 'text-gray-700 hover:bg-purple-50'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    {item.name}
+                  </Link>
+                );
+              }
+
+              const children = (item as any).children as Array<{ name: string; href: string }>;
               return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    isActive
-                      ? 'gradient-primary text-white shadow-md'
-                      : 'text-gray-700 hover:bg-purple-50'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  {item.name}
-                </Link>
+                <div key={item.name} className="space-y-1">
+                  <Link
+                    to={item.href}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                      groupActive
+                        ? 'bg-purple-50 text-gray-900'
+                        : 'text-gray-700 hover:bg-purple-50'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span className="flex-1">{item.name}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 ${groupActive ? 'rotate-180' : ''}`} />
+                  </Link>
+                  {groupActive ? (
+                    <div className="pl-4 space-y-1">
+                      {children.map((child) => {
+                        const childActive = location.pathname === child.href;
+                        return (
+                          <Link
+                            key={child.name}
+                            to={child.href}
+                            className={`flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                              childActive
+                                ? 'bg-white text-purple-700 border border-purple-100'
+                                : 'text-gray-600 hover:bg-purple-50'
+                            }`}
+                          >
+                            {child.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               );
             })}
           </nav>

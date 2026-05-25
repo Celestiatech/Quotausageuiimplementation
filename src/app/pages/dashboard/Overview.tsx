@@ -59,8 +59,8 @@ export default function Overview() {
   ];
 
   const quickActions = [
-    { icon: Target, label: "Find Jobs", color: "from-blue-500 to-cyan-500", href: "/dashboard/jobs" },
-    { icon: Briefcase, label: "Apply Now", color: "from-purple-500 to-pink-500", href: "/dashboard/jobs" },
+    { icon: Target, label: "Find Jobs", color: "from-blue-500 to-cyan-500", href: "/dashboard/jobs/linkedin" },
+    { icon: Briefcase, label: "Apply Now", color: "from-purple-500 to-pink-500", href: "/dashboard/jobs/linkedin" },
     { icon: Zap, label: "Resume Check", color: "from-green-500 to-emerald-500", href: "/dashboard/resume" },
     { icon: Users, label: "Interview Prep", color: "from-orange-500 to-red-500", href: "/dashboard/interview" },
   ];

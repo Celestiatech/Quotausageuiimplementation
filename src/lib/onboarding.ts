@@ -13,12 +13,5 @@ function hasValue(value: string | null | undefined) {
 
 export function hasCompletedRequiredOnboarding(user: OnboardingUser | null | undefined) {
   if (!user) return false;
-  return (
-    hasValue(user.name) &&
-    hasValue(user.phone) &&
-    hasValue(user.currentCity) &&
-    hasValue(user.addressLine) &&
-    hasValue(user.linkedinUrl) &&
-    hasValue(user.portfolioUrl)
-  );
+  return hasValue(user.name) && hasValue(user.phone);
 }

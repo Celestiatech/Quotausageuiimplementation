@@ -295,7 +295,7 @@ export default function ChatWidget() {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-lg bg-white/10 px-2 py-1 text-sm font-semibold text-white hover:bg-white/20"
+              className="rounded-lg bg-white/10 px-2 py-1 text-sm font-semibold text-black hover:bg-white/20"
             >
               Close
             </button>
@@ -426,7 +426,7 @@ export default function ChatWidget() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="rounded-full px-4 py-1 text-sm font-semibold text-white shadow-xl ring-1 ring-white/20 hover:shadow-2xl hover:ring-white/30 transition-all duration-200"
+          className="rounded-full px-4 py-1 text-sm font-semibold text- shadow-xl ring-1 ring-white/20 hover:shadow-2xl hover:ring-white/30 transition-all duration-200"
           style={{ background: "linear-gradient(90deg, var(--cp-chat-primary), var(--cp-chat-accent))" }}
         >
           <span className="flex items-center gap-3">

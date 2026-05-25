@@ -91,7 +91,7 @@ const EMPTY_SUMMARY: DashboardSummary = {
     title: "No interviews tracked yet",
     body: "Start your first run to build interview-ready data.",
     ctaLabel: "Find jobs",
-    ctaHref: "/dashboard/jobs",
+    ctaHref: "/dashboard/jobs/linkedin",
   },
 };
 

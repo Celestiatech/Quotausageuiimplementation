@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { motion } from 'motion/react';
-import { Mail, Lock, User, Eye, EyeOff, Check } from 'lucide-react';
+import { Mail, Lock, User, Phone, Eye, EyeOff, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Signup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -94,7 +95,7 @@ export default function Signup() {
     setErrorMessage('');
     
     try {
-      await signup(name, email, password);
+      await signup(name, email, password, phone);
       navigate('/dashboard');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Signup failed');
@@ -182,7 +183,7 @@ export default function Signup() {
                 {/* Name */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Full Name
+                    Full Name <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -200,7 +201,7 @@ export default function Signup() {
                 {/* Email */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Email Address
+                    Email Address <span className="text-red-500">*</span>
                   </label>
                   <div className="flex gap-3">
                     <div className="relative flex-1">
@@ -225,6 +226,28 @@ export default function Signup() {
                     >
                       {isSendingOtp ? 'Sending...' : 'Send OTP'}
                     </button>
+                  </div>
+                </div>
+
+                {/* Mobile Number */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Mobile Number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                      placeholder="+1 555 123 4567"
+                      required
+                      minLength={6}
+                      maxLength={30}
+                      autoComplete="tel"
+                    />
                   </div>
                 </div>
 
@@ -265,7 +288,7 @@ export default function Signup() {
                 {/* Password */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Password
+                    Password <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -293,7 +316,7 @@ export default function Signup() {
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" required className="w-5 h-5 mt-0.5 rounded border-gray-300" />
                   <span className="text-sm text-gray-600">
-                    I agree to the{' '}
+                    <span className="text-red-500">*</span> I agree to the{' '}
                     <a href="#" className="text-purple-600 hover:text-purple-700 font-semibold">
                       Terms of Service
                     </a>{' '}

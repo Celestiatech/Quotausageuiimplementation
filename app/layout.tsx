@@ -10,6 +10,7 @@ import ChatWidget from "./ChatWidget";
 const GOOGLE_TAG_ID = String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim();
 const GTM_ID = String(process.env.NEXT_PUBLIC_GTM_ID || "").trim();
 const CLARITY_TAG_ID = String(process.env.NEXT_PUBLIC_CLARITY_TAG_ID || "").trim();
+const ADSENSE_CLIENT = String(process.env.NEXT_PUBLIC_ADSENSE_CLIENT || "ca-pub-5625706421007973").trim();
 
 function consentModeDefaultsFromCookie(raw: string | undefined) {
   const base = {
@@ -135,6 +136,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             gtag('consent', 'default', ${JSON.stringify(consentDefaults)}, { wait_for_update: 500 });
           `}
         </Script>
+        {ADSENSE_CLIENT ? (
+          <Script
+            id="adsense"
+            async
+            strategy="afterInteractive"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(ADSENSE_CLIENT)}`}
+            crossOrigin="anonymous"
+          />
+        ) : null}
         {GTM_ID ? (
           <Script id="gtm-init" strategy="beforeInteractive">
             {`

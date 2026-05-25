@@ -12,7 +12,7 @@ import { fail, handleApiError } from "src/lib/api";
 export async function POST(req: NextRequest) {
   try {
     const body = signupSchema.parse(await req.json());
-    const { name, email, password } = body;
+    const { name, email, password, phone } = body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       data: {
         name,
         email,
+        phone,
         passwordHash,
         role: "user",
         plan: "free",
