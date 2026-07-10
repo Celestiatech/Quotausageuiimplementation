@@ -32,6 +32,11 @@ export const otpVerifySchema = z.object({
   purpose: z.enum(["signup", "login", "password_reset"]).default("signup"),
 });
 
+export const otpLoginSchema = z.object({
+  email: emailSchema,
+  otp: z.string().regex(/^\d{6}$/),
+});
+
 export const resetPasswordSchema = z.object({
   email: emailSchema,
   otp: z.string().regex(/^\d{6}$/),

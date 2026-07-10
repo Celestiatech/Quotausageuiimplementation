@@ -13,70 +13,85 @@ import {
 } from 'react-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
-import { SeoManager } from './components/SeoManager';
 
-// Layouts
+// Layouts (lightweight - keep eager)
 import Root from './Root';
 import DashboardLayout from './layouts/DashboardLayout';
 import AdminLayout from './layouts/AdminLayout';
 
-// Marketing Pages
-import Home from './pages/Home';
-import Product from './pages/Product';
-import Features from './pages/Features';
-import HowItWorks from './pages/HowItWorks';
-import Pricing from './pages/Pricing';
-import AutoApply from './pages/AutoApply';
-import AutoApplyLinkedIn from './pages/AutoApplyLinkedIn';
-import AutoApplyJobs from './pages/AutoApplyJobs';
-import AutoApplyChromeExtension from './pages/AutoApplyChromeExtension';
-import About from './pages/About';
-import FAQ from './pages/FAQ';
-import Roadmap from './pages/Roadmap';
-import Careers from './pages/Careers';
-import Contact from './pages/Contact';
-import PressKit from './pages/PressKit';
-import HelpCenter from './pages/HelpCenter';
-import Community from './pages/Community';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import TermsOfService from './pages/TermsOfService';
-import CookiePolicy from './pages/CookiePolicy';
-import Blog from './pages/Blog';
-import BlogPost from './pages/BlogPost';
-import ExtensionDesign from './pages/ExtensionDesign';
-import ThankYou from './pages/ThankYou';
+// Auth Pages (critical path - keep eager for fast load)
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
 import AdminLogin from './pages/AdminLogin';
 
-// Dashboard Pages
-import DashboardOverview from './pages/dashboard/Overview';
-import Jobs from './pages/dashboard/Jobs';
-import Applications from './pages/dashboard/Applications';
-import Resume from './pages/dashboard/Resume';
-import Interview from './pages/dashboard/Interview';
-import DashboardAnalytics from './pages/dashboard/Analytics';
-import Settings from './pages/dashboard/Settings';
-import Profile from './pages/dashboard/Profile';
-import Billing from './pages/dashboard/Billing';
-import Onboarding from './pages/dashboard/Onboarding';
-import Marketing from './pages/dashboard/Marketing';
-import HROutreach from './pages/dashboard/HROutreach';
-import ColdEmails from './pages/dashboard/ColdEmails';
+// Marketing Pages (lazy load)
+const Home = lazy(() => import('./pages/Home'));
+const Product = lazy(() => import('./pages/Product'));
+const Features = lazy(() => import('./pages/Features'));
+const HowItWorks = lazy(() => import('./pages/HowItWorks'));
+const Pricing = lazy(() => import('./pages/Pricing'));
+const AutoApply = lazy(() => import('./pages/AutoApply'));
+const AutoApplyLinkedIn = lazy(() => import('./pages/AutoApplyLinkedIn'));
+const AutoApplyJobs = lazy(() => import('./pages/AutoApplyJobs'));
+const AutoApplyChromeExtension = lazy(() => import('./pages/AutoApplyChromeExtension'));
+const About = lazy(() => import('./pages/About'));
+const FAQ = lazy(() => import('./pages/FAQ'));
+const Roadmap = lazy(() => import('./pages/Roadmap'));
+const Careers = lazy(() => import('./pages/Careers'));
+const Contact = lazy(() => import('./pages/Contact'));
+const PressKit = lazy(() => import('./pages/PressKit'));
+const HelpCenter = lazy(() => import('./pages/HelpCenter'));
+const Community = lazy(() => import('./pages/Community'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('./pages/TermsOfService'));
+const CookiePolicy = lazy(() => import('./pages/CookiePolicy'));
+const Blog = lazy(() => import('./pages/Blog'));
+const BlogPost = lazy(() => import('./pages/BlogPost'));
+const ExtensionDesign = lazy(() => import('./pages/ExtensionDesign'));
+const ThankYou = lazy(() => import('./pages/ThankYou'));
 
-// Admin Pages
-import AdminOverview from './pages/admin/Overview';
-import Users from './pages/admin/Users';
-import AdminAnalytics from './pages/admin/Analytics';
-import AdminJobs from './pages/admin/Jobs';
-import AdminApplications from './pages/admin/AdminApplications';
-import Revenue from './pages/admin/Revenue';
-import Support from './pages/admin/Support';
-import Health from './pages/admin/Health';
-import AdminSettings from './pages/admin/AdminSettings';
-import AdminBlogs from './pages/admin/Blogs';
+// Dashboard Pages (lazy load)
+const DashboardOverview = lazy(() => import('./pages/dashboard/Overview'));
+const Jobs = lazy(() => import('./pages/dashboard/Jobs'));
+const Applications = lazy(() => import('./pages/dashboard/Applications'));
+const Resume = lazy(() => import('./pages/dashboard/Resume'));
+const Interview = lazy(() => import('./pages/dashboard/Interview'));
+const DashboardAnalytics = lazy(() => import('./pages/dashboard/Analytics'));
+const Settings = lazy(() => import('./pages/dashboard/Settings'));
+const Profile = lazy(() => import('./pages/dashboard/Profile'));
+const Billing = lazy(() => import('./pages/dashboard/Billing'));
+const Onboarding = lazy(() => import('./pages/dashboard/Onboarding'));
+const Marketing = lazy(() => import('./pages/dashboard/Marketing'));
+const HROutreach = lazy(() => import('./pages/dashboard/HROutreach'));
+const ColdEmails = lazy(() => import('./pages/dashboard/ColdEmails'));
+
+// Admin Pages (lazy load)
+const AdminOverview = lazy(() => import('./pages/admin/Overview'));
+const Users = lazy(() => import('./pages/admin/Users'));
+const AdminAnalytics = lazy(() => import('./pages/admin/Analytics'));
+const AdminJobs = lazy(() => import('./pages/admin/Jobs'));
+const AdminApplications = lazy(() => import('./pages/admin/AdminApplications'));
+const Revenue = lazy(() => import('./pages/admin/Revenue'));
+const Support = lazy(() => import('./pages/admin/Support'));
+const Health = lazy(() => import('./pages/admin/Health'));
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
+const AdminBlogs = lazy(() => import('./pages/admin/Blogs'));
 const AdminBlogEditor = lazy(() => import('./pages/admin/BlogEditor'));
+
+// SEO (lightweight - keep eager)
+const SeoManager = lazy(() => import('./components/SeoManager').then(m => ({ default: m.SeoManager })));
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-blue-50">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-3 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
+        <p className="text-sm text-gray-500">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 // Protected Route Components
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -99,22 +114,17 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isAdmin, isBootstrapping } = useAuth();
   if (isBootstrapping) return null;
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/admin/login" replace />;
-  }
-  
-  if (!isAdmin) {
-    return <Navigate to="/admin/login" replace />;
-  }
-  
+  if (!isAuthenticated) return <Navigate to="/admin/login" replace />;
+  if (!isAdmin) return <Navigate to="/admin/login" replace />;
   return <>{children}</>;
 }
 
 function AppChrome() {
   return (
     <>
-      <SeoManager />
+      <Suspense fallback={null}>
+        <SeoManager />
+      </Suspense>
       <Outlet />
     </>
   );
@@ -125,30 +135,30 @@ const routes = createRoutesFromElements(
     <Route element={<AppChrome />}>
     {/* Marketing Pages */}
     <Route path="/" element={<Root />}>
-      <Route index element={<Home />} />
-      <Route path="product" element={<Product />} />
-      <Route path="features" element={<Features />} />
-      <Route path="how-it-works" element={<HowItWorks />} />
-      <Route path="pricing" element={<Pricing />} />
-      <Route path="auto-apply" element={<AutoApply />} />
-      <Route path="auto-apply-linkedin" element={<AutoApplyLinkedIn />} />
-      <Route path="auto-apply-jobs" element={<AutoApplyJobs />} />
-      <Route path="auto-apply-chrome-extension" element={<AutoApplyChromeExtension />} />
-      <Route path="about" element={<About />} />
-      <Route path="faq" element={<FAQ />} />
-      <Route path="roadmap" element={<Roadmap />} />
-      <Route path="careers" element={<Careers />} />
-      <Route path="contact" element={<Contact />} />
-      <Route path="press-kit" element={<PressKit />} />
-      <Route path="help-center" element={<HelpCenter />} />
-      <Route path="community" element={<Community />} />
-      <Route path="privacy-policy" element={<PrivacyPolicy />} />
-      <Route path="terms-of-service" element={<TermsOfService />} />
-      <Route path="cookie-policy" element={<CookiePolicy />} />
-      <Route path="extension-design" element={<ExtensionDesign />} />
-      <Route path="blog" element={<Blog />} />
-      <Route path="blog/:slug" element={<BlogPost />} />
-      <Route path="thank-you" element={<ThankYou />} />
+      <Route index element={<Suspense fallback={<PageLoader />}><Home /></Suspense>} />
+      <Route path="product" element={<Suspense fallback={<PageLoader />}><Product /></Suspense>} />
+      <Route path="features" element={<Suspense fallback={<PageLoader />}><Features /></Suspense>} />
+      <Route path="how-it-works" element={<Suspense fallback={<PageLoader />}><HowItWorks /></Suspense>} />
+      <Route path="pricing" element={<Suspense fallback={<PageLoader />}><Pricing /></Suspense>} />
+      <Route path="auto-apply" element={<Suspense fallback={<PageLoader />}><AutoApply /></Suspense>} />
+      <Route path="auto-apply-linkedin" element={<Suspense fallback={<PageLoader />}><AutoApplyLinkedIn /></Suspense>} />
+      <Route path="auto-apply-jobs" element={<Suspense fallback={<PageLoader />}><AutoApplyJobs /></Suspense>} />
+      <Route path="auto-apply-chrome-extension" element={<Suspense fallback={<PageLoader />}><AutoApplyChromeExtension /></Suspense>} />
+      <Route path="about" element={<Suspense fallback={<PageLoader />}><About /></Suspense>} />
+      <Route path="faq" element={<Suspense fallback={<PageLoader />}><FAQ /></Suspense>} />
+      <Route path="roadmap" element={<Suspense fallback={<PageLoader />}><Roadmap /></Suspense>} />
+      <Route path="careers" element={<Suspense fallback={<PageLoader />}><Careers /></Suspense>} />
+      <Route path="contact" element={<Suspense fallback={<PageLoader />}><Contact /></Suspense>} />
+      <Route path="press-kit" element={<Suspense fallback={<PageLoader />}><PressKit /></Suspense>} />
+      <Route path="help-center" element={<Suspense fallback={<PageLoader />}><HelpCenter /></Suspense>} />
+      <Route path="community" element={<Suspense fallback={<PageLoader />}><Community /></Suspense>} />
+      <Route path="privacy-policy" element={<Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>} />
+      <Route path="terms-of-service" element={<Suspense fallback={<PageLoader />}><TermsOfService /></Suspense>} />
+      <Route path="cookie-policy" element={<Suspense fallback={<PageLoader />}><CookiePolicy /></Suspense>} />
+      <Route path="extension-design" element={<Suspense fallback={<PageLoader />}><ExtensionDesign /></Suspense>} />
+      <Route path="blog" element={<Suspense fallback={<PageLoader />}><Blog /></Suspense>} />
+      <Route path="blog/:slug" element={<Suspense fallback={<PageLoader />}><BlogPost /></Suspense>} />
+      <Route path="thank-you" element={<Suspense fallback={<PageLoader />}><ThankYou /></Suspense>} />
     </Route>
 
     {/* Auth Pages */}
@@ -166,20 +176,20 @@ const routes = createRoutesFromElements(
         </ProtectedRoute>
       }
     >
-      <Route index element={<DashboardOverview />} />
-      <Route path="jobs" element={<Navigate to="jobs/linkedin" replace />} />
-      <Route path="jobs/:provider" element={<Jobs />} />
-      <Route path="applications" element={<Applications />} />
-      <Route path="resume" element={<Resume />} />
-      <Route path="interview" element={<Interview />} />
-      <Route path="analytics" element={<DashboardAnalytics />} />
-      <Route path="settings" element={<Settings />} />
-      <Route path="profile" element={<Profile />} />
-      <Route path="billing" element={<Billing />} />
-      <Route path="marketing" element={<Marketing />} />
-      <Route path="hr-outreach" element={<HROutreach />} />
-      <Route path="cold-emails" element={<ColdEmails />} />
-      <Route path="onboarding" element={<Onboarding />} />
+      <Route index element={<Suspense fallback={<PageLoader />}><DashboardOverview /></Suspense>} />
+      <Route path="jobs" element={<Navigate to="linkedin" replace />} />
+      <Route path="jobs/:provider" element={<Suspense fallback={<PageLoader />}><Jobs /></Suspense>} />
+      <Route path="applications" element={<Suspense fallback={<PageLoader />}><Applications /></Suspense>} />
+      <Route path="resume" element={<Suspense fallback={<PageLoader />}><Resume /></Suspense>} />
+      <Route path="interview" element={<Suspense fallback={<PageLoader />}><Interview /></Suspense>} />
+      <Route path="analytics" element={<Suspense fallback={<PageLoader />}><DashboardAnalytics /></Suspense>} />
+      <Route path="settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
+      <Route path="profile" element={<Suspense fallback={<PageLoader />}><Profile /></Suspense>} />
+      <Route path="billing" element={<Suspense fallback={<PageLoader />}><Billing /></Suspense>} />
+      <Route path="marketing" element={<Suspense fallback={<PageLoader />}><Marketing /></Suspense>} />
+      <Route path="hr-outreach" element={<Suspense fallback={<PageLoader />}><HROutreach /></Suspense>} />
+      <Route path="cold-emails" element={<Suspense fallback={<PageLoader />}><ColdEmails /></Suspense>} />
+      <Route path="onboarding" element={<Suspense fallback={<PageLoader />}><Onboarding /></Suspense>} />
     </Route>
 
     {/* Admin */}
@@ -191,19 +201,22 @@ const routes = createRoutesFromElements(
         </AdminRoute>
       }
     >
-      <Route index element={<AdminOverview />} />
-      <Route path="users" element={<Users />} />
-      <Route path="analytics" element={<AdminAnalytics />} />
-      <Route path="jobs" element={<AdminJobs />} />
-      <Route path="applications" element={<AdminApplications />} />
-      <Route path="revenue" element={<Revenue />} />
-      <Route path="support" element={<Support />} />
-      <Route path="health" element={<Health />} />
-      <Route path="blogs" element={<AdminBlogs />} />
-      <Route path="blogs/new" element={<Suspense fallback={null}><AdminBlogEditor /></Suspense>} />
-      <Route path="blogs/:id/edit" element={<Suspense fallback={null}><AdminBlogEditor /></Suspense>} />
-      <Route path="settings" element={<AdminSettings />} />
+      <Route index element={<Suspense fallback={<PageLoader />}><AdminOverview /></Suspense>} />
+      <Route path="users" element={<Suspense fallback={<PageLoader />}><Users /></Suspense>} />
+      <Route path="analytics" element={<Suspense fallback={<PageLoader />}><AdminAnalytics /></Suspense>} />
+      <Route path="jobs" element={<Suspense fallback={<PageLoader />}><AdminJobs /></Suspense>} />
+      <Route path="applications" element={<Suspense fallback={<PageLoader />}><AdminApplications /></Suspense>} />
+      <Route path="revenue" element={<Suspense fallback={<PageLoader />}><Revenue /></Suspense>} />
+      <Route path="support" element={<Suspense fallback={<PageLoader />}><Support /></Suspense>} />
+      <Route path="health" element={<Suspense fallback={<PageLoader />}><Health /></Suspense>} />
+      <Route path="blogs" element={<Suspense fallback={<PageLoader />}><AdminBlogs /></Suspense>} />
+      <Route path="blogs/new" element={<Suspense fallback={<PageLoader />}><AdminBlogEditor /></Suspense>} />
+      <Route path="blogs/:id/edit" element={<Suspense fallback={<PageLoader />}><AdminBlogEditor /></Suspense>} />
+      <Route path="settings" element={<Suspense fallback={<PageLoader />}><AdminSettings /></Suspense>} />
     </Route>
+
+    {/* Catch-all */}
+    <Route path="*" element={<Navigate to="/" replace />} />
     </Route>
   </>,
 );

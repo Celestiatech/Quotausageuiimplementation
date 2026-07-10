@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "src/lib/prisma";
-import { consumeVerifiedOtp } from "src/lib/otp";
 import { signupSchema } from "src/lib/schemas";
 import { createSessionAndTokens, setAuthCookies, toClientUser } from "src/lib/auth";
 import { getPlanQuota } from "src/lib/quota";
@@ -17,11 +16,6 @@ export async function POST(req: NextRequest) {
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return fail("An account with this email already exists", 409, "EMAIL_TAKEN");
-    }
-
-    const otpVerified = await consumeVerifiedOtp(email, "signup");
-    if (!otpVerified) {
-      return fail("Email verification is required before signup", 400, "OTP_REQUIRED");
     }
 
     const passwordHash = await bcrypt.hash(password, 10);

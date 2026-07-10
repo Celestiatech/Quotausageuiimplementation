@@ -6,9 +6,21 @@ export async function GET(req: Request) {
   const authResult = await requireAdmin();
   if ("error" in authResult) return authResult.error;
   const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
+  const url = new URL(req.url);
+  const search = (url.searchParams.get("search") || "").trim();
+
+  const where = search
+    ? {
+        OR: [
+          { name: { contains: search, mode: "insensitive" as const } },
+          { email: { contains: search, mode: "insensitive" as const } },
+        ],
+      }
+    : {};
 
   const [users, total] = await Promise.all([
     prisma.user.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       skip,
       take: limit,
@@ -31,7 +43,7 @@ export async function GET(req: Request) {
         updatedAt: true,
       },
     }),
-    prisma.user.count(),
+    prisma.user.count({ where }),
   ]);
 
   return ok("Users fetched", {

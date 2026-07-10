@@ -26,6 +26,8 @@ export type ExtensionInstallGuideStep = {
   title: string;
   body: string;
   note?: string;
+  image?: string;
+  imageAlt?: string;
   actionLabel?: string;
   actionDisabled?: boolean;
   targetRef: GuideTargetRef;
@@ -336,6 +338,17 @@ export function ExtensionInstallGuide({
           </div>
 
           <p className="mt-3 text-sm leading-5 text-slate-700">{activeStep.body}</p>
+
+          {activeStep.image ? (
+            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+              <img
+                src={activeStep.image}
+                alt={activeStep.imageAlt || activeStep.title}
+                className="w-full h-auto"
+                loading="lazy"
+              />
+            </div>
+          ) : null}
 
           {activeStep.note ? (
             <div className="mt-3 rounded-xl border border-sky-100 bg-sky-50 px-2.5 py-2.5 text-xs leading-5 text-sky-900">

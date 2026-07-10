@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pencil, RefreshCw, Search, Trash2, Users as UsersIcon, X } from "lucide-react";
 
 type AdminUser = {
@@ -45,6 +45,7 @@ export default function Users() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState("");
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
@@ -61,11 +62,13 @@ export default function Users() {
     dailyHireUsed: "0",
   });
 
-  const loadUsers = async () => {
+  const loadUsers = async (searchQuery?: string) => {
     try {
       setLoading(true);
       setError("");
-      const res = await fetch("/api/admin/users", { credentials: "include" });
+      const params = new URLSearchParams();
+      if (searchQuery) params.set("search", searchQuery);
+      const res = await fetch(`/api/admin/users?${params.toString()}`, { credentials: "include" });
       const data = await res.json();
       if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to fetch users");
       setUsers(data?.data?.users || []);
@@ -79,6 +82,16 @@ export default function Users() {
   useEffect(() => {
     void loadUsers();
   }, []);
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      void loadUsers(search || undefined);
+    }, 400);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [search]);
 
   const deleteUser = async (user: AdminUser) => {
     const confirmed = window.confirm(`Delete user ${user.email}? This cannot be undone.`);
@@ -195,17 +208,7 @@ export default function Users() {
     }
   };
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(
-      (u) =>
-        u.name.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        u.plan.toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q),
-    );
-  }, [users, search]);
+  const filtered = users;
 
   const adminCount = useMemo(() => users.filter((u) => u.role === "admin").length, [users]);
   const proOrCoachCount = useMemo(

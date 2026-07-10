@@ -14,6 +14,7 @@ import {
   Sparkles,
   Trash2,
   UploadCloud,
+  X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
@@ -577,6 +578,47 @@ const DEFAULT_PROFILE: MasterProfile = {
   workModePreference: "Remote",
 };
 
+const JOB_TITLE_SUGGESTIONS = [
+  "Software Engineer",
+  "Full Stack Developer",
+  "Frontend Developer",
+  "Backend Developer",
+  "React Developer",
+  "Node.js Developer",
+  "Python Developer",
+  "Java Developer",
+  "DevOps Engineer",
+  "Cloud Engineer",
+  "Data Scientist",
+  "Data Analyst",
+  "Machine Learning Engineer",
+  "AI Engineer",
+  "Product Manager",
+  "Project Manager",
+  "UI/UX Designer",
+  "Graphic Designer",
+  "QA Engineer",
+  "Test Engineer",
+  "Business Analyst",
+  "Technical Writer",
+  "Solutions Architect",
+  "Systems Administrator",
+  "Database Administrator",
+  "Mobile Developer",
+  "iOS Developer",
+  "Android Developer",
+  "Cybersecurity Analyst",
+  "Network Engineer",
+  "Scrum Master",
+  "Marketing Manager",
+  "Content Writer",
+  "HR Manager",
+  "Finance Analyst",
+  "Operations Manager",
+  "Sales Executive",
+  "Customer Success Manager",
+];
+
 const DEFAULT_PREFERENCES: JobPreferences = {
   searchTerms: [],
   searchLocations: [],
@@ -590,6 +632,161 @@ const DEFAULT_PREFERENCES: JobPreferences = {
   excludedCompanies: [],
   excludedKeywords: [],
 };
+
+function generateResumeHTML(data: Record<string, any>): string {
+  const name = data.name || "";
+  const titles = Array.isArray(data.jobTitles) ? data.jobTitles.join(", ") : (data.jobTitles || "");
+  const headline = titles ? `${name ? `${name} — ` : ""}${titles}` : name;
+  const location = [data.city, data.state, data.country].filter(Boolean).join(", ");
+  const contactParts: string[] = [];
+  if (location) contactParts.push(location);
+  if (data.phone) contactParts.push(data.phone);
+  if (data.email) contactParts.push(data.email);
+  const contactLine = contactParts.join(" | ");
+  const links: string[] = [];
+  if (data.linkedinUrl) links.push(`<a href="${escapeHtml(data.linkedinUrl)}">${escapeHtml(cleanUrl(data.linkedinUrl))}</a>`);
+  if (data.portfolioUrl) links.push(`<a href="${escapeHtml(data.portfolioUrl)}">${escapeHtml(cleanUrl(data.portfolioUrl))}</a>`);
+
+  const skills = Array.isArray(data.skills) ? data.skills : [];
+  const experience = Array.isArray(data.experience) ? data.experience : [];
+  const projects = Array.isArray(data.projects) ? data.projects : [];
+  const education = Array.isArray(data.education) ? data.education : [];
+  const certifications = Array.isArray(data.certifications) ? data.certifications : [];
+
+  let html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resume — ${escapeHtml(name)}</title>
+    <style>
+      :root { --text: #111; --muted: #444; --rule: #ddd; }
+      html, body { color: var(--text); font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; }
+      body { margin: 24px; }
+      h1 { font-size: 18pt; margin: 0 0 2px 0; letter-spacing: 0.2px; }
+      .headline { font-size: 12pt; margin: 0 0 10px 0; }
+      .contact { margin: 0 0 16px 0; color: var(--muted); }
+      .links { margin: 0 0 16px 0; color: var(--muted); }
+      .links a { color: var(--muted); }
+      h2 { font-size: 12pt; margin: 16px 0 6px 0; padding-bottom: 4px; border-bottom: 1px solid var(--rule); text-transform: uppercase; letter-spacing: 0.6px; }
+      h3 { font-size: 11pt; margin: 10px 0 2px 0; }
+      .meta { color: var(--muted); margin: 0 0 6px 0; }
+      ul { margin: 6px 0 0 18px; padding: 0; }
+      li { margin: 0 0 4px 0; }
+      .two-col { columns: 2; column-gap: 22px; }
+      .two-col ul { margin-left: 16px; }
+      a { color: inherit; text-decoration: none; }
+    </style>
+  </head>
+  <body>`;
+
+  if (name) {
+    html += `\n    <h1>${escapeHtml(name.toUpperCase())}</h1>`;
+  }
+  if (headline) {
+    html += `\n    <div class="headline">${escapeHtml(headline)}</div>`;
+  }
+  if (contactLine) {
+    html += `\n    <div class="contact">${escapeHtml(contactLine)}</div>`;
+  }
+  if (links.length > 0) {
+    html += `\n    <div class="links">${links.join(" | ")}</div>`;
+  }
+
+  if (data.summary) {
+    html += `\n    <h2>Summary</h2>`;
+    html += `\n    <div>${escapeHtml(data.summary)}</div>`;
+  }
+
+  if (skills.length > 0) {
+    html += `\n    <h2>Core Skills</h2>`;
+    html += `\n    <div class="two-col"><ul>`;
+    for (const s of skills) {
+      html += `\n      <li>${escapeHtml(s)}</li>`;
+    }
+    html += `\n    </ul></div>`;
+  }
+
+  if (experience.length > 0) {
+    html += `\n    <h2>Experience</h2>`;
+    for (const exp of experience) {
+      const title = exp.title || "";
+      const company = exp.company || "";
+      const label = title && company ? `${title} — ${company}` : (title || company);
+      if (label) html += `\n    <h3>${escapeHtml(label)}</h3>`;
+      const dates = [exp.startDate, exp.endDate].filter(Boolean).join(" – ");
+      if (dates) html += `\n    <div class="meta">${escapeHtml(dates)}</div>`;
+      const desc = Array.isArray(exp.description) ? exp.description : [];
+      if (desc.length > 0) {
+        html += `\n    <ul>`;
+        for (const d of desc) {
+          html += `\n      <li>${escapeHtml(d)}</li>`;
+        }
+        html += `\n    </ul>`;
+      }
+    }
+  }
+
+  if (projects.length > 0) {
+    html += `\n    <h2>Projects</h2>`;
+    for (const proj of projects) {
+      const projName = proj.name || "";
+      const projLink = proj.link || "";
+      if (projName) {
+        html += `\n    <h3>${escapeHtml(projName)}${projLink ? ` — <a href="${escapeHtml(projLink)}">${escapeHtml(cleanUrl(projLink))}</a>` : ""}</h3>`;
+      }
+      if (proj.description) {
+        html += `\n    <div>${escapeHtml(proj.description)}</div>`;
+      }
+      const techs = Array.isArray(proj.technologies) ? proj.technologies : [];
+      if (techs.length > 0) {
+        html += `\n    <div class="meta">${escapeHtml(techs.join(", "))}</div>`;
+      }
+    }
+  }
+
+  if (education.length > 0) {
+    html += `\n    <h2>Education</h2>`;
+    for (const edu of education) {
+      const degree = edu.degree || "";
+      const field = edu.field || "";
+      const institution = edu.institution || "";
+      const parts: string[] = [];
+      if (degree && field) parts.push(`${degree}, ${field}`);
+      else if (degree) parts.push(degree);
+      else if (field) parts.push(field);
+      if (institution) parts.push(institution);
+      const dates = [edu.startDate, edu.endDate].filter(Boolean).join(" – ");
+      if (parts.length > 0) {
+        html += `\n    <div><strong>${escapeHtml(parts.join(" — "))}</strong>${dates ? ` <span class="meta">| ${escapeHtml(dates)}</span>` : ""}</div>`;
+      }
+    }
+  }
+
+  if (certifications.length > 0) {
+    html += `\n    <h2>Certifications</h2>`;
+    html += `\n    <ul>`;
+    for (const cert of certifications) {
+      const certName = cert.name || "";
+      const issuer = cert.issuer || "";
+      const certDate = cert.date || "";
+      const certLabel = certName + (issuer ? ` — ${issuer}` : "") + (certDate ? ` (${certDate})` : "");
+      html += `\n      <li>${escapeHtml(certLabel)}</li>`;
+    }
+    html += `\n    </ul>`;
+  }
+
+  html += `\n  </body>\n</html>`;
+  return html;
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+function cleanUrl(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -636,6 +833,22 @@ export default function Onboarding() {
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const [installGuideStepIndex, setInstallGuideStepIndex] = useState(0);
   const [installGuideCompletedIds, setInstallGuideCompletedIds] = useState<string[]>([]);
+
+  const [generatingAts, setGeneratingAts] = useState(false);
+  const [atsHtml, setAtsHtml] = useState("");
+  const [atsGenerated, setAtsGenerated] = useState(false);
+
+  const [revealedFields, setRevealedFields] = useState<string[]>([]);
+  const [parsingStatus, setParsingStatus] = useState<"idle" | "scanning" | "parsing" | "done">("idle");
+  const parsedDataRef = useRef<Record<string, any>>({});
+  const [resumeViewerData, setResumeViewerData] = useState<Record<string, any> | null>(null);
+  const [showResumeViewer, setShowResumeViewer] = useState(false);
+  const [showingExtensionPrefs, setShowingExtensionPrefs] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [extLocationsRaw, setExtLocationsRaw] = useState("");
+  const [extSearchTermsRaw, setExtSearchTermsRaw] = useState("");
+  const [tagInput, setTagInput] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const loadedRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
@@ -756,17 +969,27 @@ export default function Onboarding() {
       {
         id: "extract-folder",
         title: "Extract folder",
-        body: "Extract the ZIP after downloading it.",
+        body: "Right-click the downloaded ZIP and select Extract All. Open the extracted folder.",
         note: `The extracted folder should look like ${currentPackageBaseName} and contain manifest.json.`,
         targetRef: currentPackageLabelRef,
       },
       {
         id: "open-chrome-extensions",
         title: "Load unpacked",
-        body: "Open Chrome menu (three dots) > Extensions > Manage Extensions. Turn on Developer mode on the top-right, then click Load unpacked on the top-left.",
+        body: "Open Chrome menu (three dots) > Extensions > Manage Extensions. Turn on Developer mode on the top-right, then click Load unpacked on the top-left. Select the extracted folder.",
         note: `Select the extracted folder ${currentPackageBaseName}. This matches the screenshot: Developer mode on the right, Load unpacked on the left.`,
+        image: "/Install guide/Load unpacked.png",
+        imageAlt: "Chrome Extensions page showing Developer mode enabled and Load unpacked button",
         actionLabel: "Download + Open Extensions",
         targetRef: downloadOpenButtonRef,
+      },
+      {
+        id: "pin-extension",
+        title: "Pin extension",
+        body: "Click the puzzle piece icon in Chrome's toolbar, find AutoApply CV LinkedIn Extension, and pin it for easy access.",
+        image: "/Install guide/Pin extension.png",
+        imageAlt: "Chrome toolbar showing the extensions menu with pin option",
+        targetRef: checkExtensionButtonRef,
       },
       {
         id: "verify-install",
@@ -807,6 +1030,45 @@ export default function Onboarding() {
       }
     } finally {
       setCheckingExtension(false);
+    }
+  };
+
+  const generateAtsResume = async () => {
+    if (typeof window === "undefined") return;
+    setError("");
+    setMessage("");
+    setGeneratingAts(true);
+    try {
+      const extracted: Record<string, string | string[]> = {};
+      if (profile.fullName) extracted.name = profile.fullName;
+      if (profile.email) extracted.email = profile.email;
+      if (profile.phone) extracted.phone = profile.phone;
+      if (profile.city) extracted.city = profile.city;
+      if (profile.state) extracted.state = profile.state;
+      if (profile.country) extracted.country = profile.country;
+      if (profile.linkedinUrl) extracted.linkedinUrl = profile.linkedinUrl;
+      if (profile.portfolioUrl) extracted.portfolioUrl = profile.portfolioUrl;
+      if (profile.yearsOfExperience) extracted.yearsOfExperience = profile.yearsOfExperience;
+      if (profile.educationLevel) extracted.educationLevel = profile.educationLevel;
+      if (preferences.searchTerms.length) extracted.jobTitles = preferences.searchTerms;
+
+      const res = await fetch("/api/user/resume/generate", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extracted }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || "Failed to generate resume");
+      }
+      setAtsHtml(data?.data?.html || "");
+      setAtsGenerated(true);
+      setMessage("ATS resume generated! You can preview and download below.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate ATS resume");
+    } finally {
+      setGeneratingAts(false);
     }
   };
 
@@ -1271,6 +1533,17 @@ export default function Onboarding() {
       setPreferences((prev) => ({ ...prev, searchLocations: [...profile.preferredLocations] }));
     }
   }, [profile.preferredJobTitles, profile.preferredLocations, preferences.searchTerms.length, preferences.searchLocations.length]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-tag-input]")) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const completionChecks = useMemo(
     () => [
@@ -1981,990 +2254,625 @@ export default function Onboarding() {
   };
 
   const onboardingHeaderDescription = "Ask once, save forever, auto-fill everywhere.";
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (loading) {
     return (
-      <div className="min-h-[420px] flex items-center justify-center">
-        <div className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading onboarding profile...
+      <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 via-white to-indigo-50/40 flex items-center justify-center">
+        <div className="inline-flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
+          <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
+          <span className="text-sm font-medium text-slate-600">Loading your profile...</span>
         </div>
       </div>
     );
   }
 
+  const handleResumeUpload = async (file: File) => {
+    setError("");
+    setMessage("");
+    setRevealedFields([]);
+    setParsingStatus("scanning");
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("resume", file);
+      const res = await fetch("/api/user/resume/upload", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || "Upload failed");
+      }
+
+      const extracted = data?.data?.extracted || {};
+      parsedDataRef.current = extracted;
+      setMessage("Resume parsed successfully!");
+      setUploading(false);
+      setParsingStatus("parsing");
+
+      const revealSequence: Array<{ key: string; apply: () => void }> = [];
+
+      if (extracted.name) {
+        revealSequence.push({
+          key: "name",
+          apply: () => setProfile((p) => ({ ...p, fullName: extracted.name, firstName: splitName(extracted.name).firstName, lastName: splitName(extracted.name).lastName })),
+        });
+      }
+      if (extracted.email) {
+        revealSequence.push({
+          key: "email",
+          apply: () => setProfile((p) => ({ ...p, email: extracted.email })),
+        });
+      }
+      if (extracted.phone) {
+        revealSequence.push({
+          key: "phone",
+          apply: () => setProfile((p) => ({ ...p, phone: extracted.phone })),
+        });
+      }
+      if (extracted.city || extracted.state || extracted.country) {
+        revealSequence.push({
+          key: "location",
+          apply: () => {
+            if (extracted.city) setProfile((p) => ({ ...p, city: extracted.city }));
+            if (extracted.state) setProfile((p) => ({ ...p, state: extracted.state }));
+            if (extracted.country) setProfile((p) => ({ ...p, country: extracted.country }));
+          },
+        });
+      }
+      if (extracted.yearsOfExperience) {
+        revealSequence.push({
+          key: "experience",
+          apply: () => setProfile((p) => ({ ...p, yearsOfExperience: extracted.yearsOfExperience })),
+        });
+      }
+      if (extracted.jobTitles) {
+        revealSequence.push({
+          key: "titles",
+          apply: () => setPreferences((p) => ({ ...p, searchTerms: extracted.jobTitles })),
+        });
+      }
+
+      for (let i = 0; i < revealSequence.length; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        revealSequence[i].apply();
+        setRevealedFields((prev) => [...prev, revealSequence[i].key]);
+      }
+
+      setResumeViewerData(extracted);
+      setShowResumeViewer(true);
+      setParsingStatus("done");
+      await refreshUser();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+      setParsingStatus("idle");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6">
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Onboarding Setup</h1>
-            <p className="text-gray-600 mt-1">{onboardingHeaderDescription}</p>
+    <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 via-white to-indigo-50/40 flex flex-col">
+      <div className="w-full flex-1 flex flex-col max-w-5xl mx-auto px-4 py-6">
+
+        {error ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2.5 shadow-sm">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{error}</span>
           </div>
+        ) : null}
 
-          <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={openInstallGuide}
-            className="px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 inline-flex items-center gap-2 shadow-sm"
-          >
-            <Play className="h-4 w-4" />
-            Start Install Guide
-          </button>
-          <button
-            ref={checkExtensionButtonRef}
-            type="button"
-            onClick={() => void checkExtensionStatus()}
-            className="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-          >
-            {checkingExtension ? "Checking Extension..." : "Check Extension"}
-          </button>
-          <a
-            ref={openLinkedInJobsButtonRef}
-            href="https://www.linkedin.com/jobs/"
-            target="_blank"
-            rel="noreferrer"
-            className="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
-          >
-            <ExternalLink className="h-4 w-4" />
-            LinkedIn Jobs
-          </a>
-          <a
-            href="/dashboard/resume"
-            className="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
-          >
-            <UploadCloud className="h-4 w-4" />
-            Resume
-          </a>
-          <button
-            ref={saveAndFinishButtonRef}
-            type="button"
-            onClick={() => void persistAll()}
-            disabled={saving}
-            className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2 shadow-sm"
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "Saving..." : "Save & Finish"}
-          </button>
-        </div>
-        </div>
-      </div>
-
-      {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 mt-0.5" />
-          <span>{error}</span>
-        </div>
-      ) : null}
-
-      {message ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 flex items-start gap-2">
-          <CheckCircle2 className="h-4 w-4 mt-0.5" />
-          <span>{message}</span>
-        </div>
-      ) : null}
-
-      <ExtensionInstallGuide
-        open={installGuideOpen}
-        steps={installGuideSteps}
-        currentStepIndex={installGuideStepIndex}
-        completedStepIds={installGuideCompletedIds}
-        onClose={closeInstallGuide}
-        onNext={nextInstallGuideStep}
-        onPrevious={previousInstallGuideStep}
-        onStepDone={markInstallGuideStepDone}
-        onJumpToStep={jumpToInstallGuideStep}
-        onStepAction={runInstallGuideStepAction}
-      />
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Profile Completion</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">{completionPercent}%</p>
-            </div>
-            <div className="rounded-xl bg-indigo-50 border border-indigo-200 px-3 py-2 text-sm text-indigo-700 font-semibold">
-              {missingItems.length ? `${missingItems.length} missing` : "All key fields filled"}
-            </div>
+        {message ? (
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 flex items-start gap-2.5 shadow-sm">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{message}</span>
           </div>
+        ) : null}
 
-          <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500" style={{ width: `${completionPercent}%` }} />
-          </div>
-
-          {missingItems.length ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-semibold text-amber-900">What to fill next</p>
-              <ul className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-amber-900">
-                {missingItems.slice(0, 10).map((item) => (
-                  <li key={item} className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-              {missingItems.length > 10 ? (
-                <div className="mt-2 text-xs text-amber-700 font-medium">
-                  +{missingItems.length - 10} more
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
-          <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Summary</p>
-          <div className="mt-3 space-y-2 text-sm">
-            <SummaryLine label="Profile" value={`${completionPercent}% complete`} ok={completionPercent >= 80} />
-            <SummaryLine
-              label="Resume"
-              value={summaryStatus.resumeUploaded ? "Uploaded" : "Not uploaded"}
-              ok={summaryStatus.resumeUploaded}
-            />
-            <SummaryLine
-              label="LinkedIn"
-              value={summaryStatus.linkedinConnected ? "Connected" : "Missing profile URL"}
-              ok={summaryStatus.linkedinConnected}
-            />
-            <SummaryLine
-              label="Extension"
-              value={summaryStatus.extensionConnected ? "Connected" : "Not detected"}
-              ok={summaryStatus.extensionConnected}
-            />
-            <SummaryLine
-              label="Pending Questions"
-              value={`${summaryStatus.pendingCount}`}
-              ok={summaryStatus.pendingCount === 0}
-            />
-            <SummaryLine
-              label="Last Sync"
-              value={lastSyncAt ? new Date(lastSyncAt).toLocaleString() : "Not synced yet"}
-              ok={Boolean(lastSyncAt)}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Complete My Profile</p>
-            <h2 className="text-lg font-semibold text-gray-900">6-step setup wizard</h2>
-          </div>
-          <div className="text-sm text-gray-600">
-            Step {wizardStep + 1} of {WIZARD_STEPS.length}
-          </div>
-        </div>
-
-        <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500 transition-all"
-            style={{ width: `${Math.round(((wizardStep + 1) / WIZARD_STEPS.length) * 100)}%` }}
-          />
-        </div>
-
-        <div className="flex gap-3 overflow-x-auto pb-1">
-          {WIZARD_STEPS.map((step, index) => (
-            <button
-              key={step.title}
-              type="button"
-              onClick={() => {
-                setGuidedPopupOpen(false);
-                gotoWizardStep(index);
-              }}
-              className={`min-w-[220px] text-left rounded-2xl border px-4 py-3 transition-colors ${
-                index === wizardStep
-                  ? "border-indigo-300 bg-indigo-50 shadow-sm"
-                  : stepComplete[index]
-                  ? "border-emerald-200 bg-emerald-50"
-                  : "border-gray-200 bg-gray-50 hover:bg-gray-100"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-semibold text-gray-600">{index + 1}</div>
-                {stepComplete[index] ? (
-                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-emerald-600 text-white">
-                    <Check className="h-3 w-3" />
-                  </span>
-                ) : null}
-              </div>
-              <div className="text-sm font-semibold text-gray-900 mt-1">{step.title}</div>
-              <div className="text-xs text-gray-600 mt-1 line-clamp-2">{step.description}</div>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
-          <div>
-            <p className="text-sm font-semibold text-gray-900">{WIZARD_STEPS[wizardStep].title}</p>
-            <p className="text-xs text-gray-600 mt-0.5">{WIZARD_STEPS[wizardStep].description}</p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setGuidedPopupOpen(false);
-                gotoWizardStep(Math.max(0, wizardStep - 1));
-              }}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-white"
-              disabled={wizardStep === 0}
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab(WIZARD_STEPS[wizardStep].tab);
-                setGuidedPopupOpen(true);
-                setProfileQuestionIndex(0);
-              }}
-              className="px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
-            >
-              Guided popup
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setGuidedPopupOpen(false);
-                const next = Math.min(WIZARD_STEPS.length - 1, wizardStep + 1);
-                gotoWizardStep(next);
-              }}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 inline-flex items-center gap-1"
-              disabled={wizardStep === WIZARD_STEPS.length - 1}
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {pendingQuestions.length ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
-          <div className="flex items-center gap-2 text-amber-900 font-semibold">
-            <Sparkles className="h-4 w-4" />
-            Action Needed
-          </div>
-          <p className="text-sm text-amber-800">
-            These questions were detected on LinkedIn and still need answers. Answer once and the system will reuse them everywhere.
-          </p>
-
-          <div className="space-y-3">
-            {pendingQuestions.slice(0, 6).map((item) => {
-              const draftKey = item.questionKey;
-              const draftValue = answerDrafts[draftKey] ?? "";
-              const hasValidationMessage = Boolean(item.validationMessage);
-              return (
-                <div
-                  key={`${item.questionKey}-${item.questionLabel}`}
-                  className={`rounded-xl border p-3 ${hasValidationMessage ? "border-red-200 bg-red-50" : "border-amber-200 bg-white"}`}
-                >
-                  <div className="text-sm font-semibold text-gray-900">{item.questionLabel}</div>
-                  {item.validationMessage ? (
-                    <div className="mt-1 text-xs font-medium text-red-700">{item.validationMessage}</div>
-                  ) : null}
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <input
-                      value={draftValue}
-                      onChange={(e) =>
-                        setAnswerDrafts((prev) => ({
-                          ...prev,
-                          [draftKey]: e.target.value,
-                        }))
-                      }
-                      placeholder="Answer once and save"
-                      className="min-w-[260px] flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void saveAnswer(item.questionKey, item.questionLabel, answerDrafts[draftKey] || "", inferAnswerType(answerDrafts[draftKey] || ""), "manual")
-                      }
-                      disabled={savingAnswerKey === item.questionKey || !String(answerDrafts[draftKey] || "").trim()}
-                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
-                    >
-                      {savingAnswerKey === item.questionKey ? "Saving..." : "Save"}
-                    </button>
+        {/* Hero Upload Section */}
+        {!atsGenerated && !showingExtensionPrefs ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-200/50 p-8">
+              <div className="flex flex-col lg:flex-row items-start gap-8">
+                {/* Left: Upload Area */}
+                <div className="flex-1 min-w-0 space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-lg shadow-purple-200/60">
+                      <Sparkles className="w-7 h-7 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold text-slate-900">
+                        Hi there! 👋
+                      </h1>
+                      <p className="text-sm text-slate-500">
+                        Let&apos;s set up your profile
+                      </p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-2">
-        <div className="grid md:grid-cols-3 gap-2">
-          <TabButton
-            label="Profile"
-            description="Personal + professional details"
-            active={activeTab === "profile"}
-            onClick={() => setActiveTab("profile")}
-          />
-          <TabButton
-            label="Preferences"
-            description="Auto Apply / CareerPilot / LinkedIn"
-            active={activeTab === "preferences"}
-            onClick={() => setActiveTab("preferences")}
-          />
-          <TabButton
-            label="Screening Answers"
-            description="Question bank + reusable answers"
-            active={activeTab === "screening"}
-            onClick={() => setActiveTab("screening")}
-          />
-        </div>
-      </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.doc,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleResumeUpload(file);
+                    }}
+                  />
 
-      {guidedPopupOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4 py-6">
-          <div className="w-full max-w-xl rounded-2xl bg-white border border-gray-200 shadow-xl overflow-hidden">
-            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Guided Setup</div>
-                <div className="text-lg font-semibold text-gray-900 mt-1">{WIZARD_STEPS[wizardStep].title}</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  {guidedTotal ? `Question ${Math.min(guidedTotal, profileQuestionIndex + 1)} of ${guidedTotal}` : "No guided questions for this step"}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGuidedPopupOpen(false)}
-                className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="p-5">
-              {guidedQuestion ? (
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold text-gray-900">{guidedQuestion.title}</div>
-                  {guidedQuestion.render()}
-                  {guidedQuestion.required && !guidedQuestion.isComplete() ? (
-                    <div className="text-xs text-amber-700 font-medium">This field is required to continue.</div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="text-sm text-gray-700">
-                  This step is best completed from the full page (e.g. Screening Answers). Use the tabs below, then click Save &amp; Finish.
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50">
-              <button
-                type="button"
-                onClick={() => {
-                  if (profileQuestionIndex > 0) {
-                    setProfileQuestionIndex((prev) => Math.max(0, prev - 1));
-                    return;
-                  }
-                  setGuidedPopupOpen(false);
-                }}
-                className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-white"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={Boolean(guidedQuestion?.required && guidedQuestion && !guidedQuestion.isComplete())}
-                onClick={() => {
-                  if (!guidedQuestion) {
-                    setGuidedPopupOpen(false);
-                    return;
-                  }
-                  if (guidedQuestion.required && !guidedQuestion.isComplete()) return;
-                  const nextIndex = profileQuestionIndex + 1;
-                  if (nextIndex < guidedTotal) {
-                    setProfileQuestionIndex(nextIndex);
-                    return;
-                  }
-                  setGuidedPopupOpen(false);
-                  const nextStep = Math.min(WIZARD_STEPS.length - 1, wizardStep + 1);
-                  if (nextStep !== wizardStep) {
-                    gotoWizardStep(nextStep);
-                  }
-                }}
-                className="px-4 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-1"
-              >
-                {guidedQuestion && profileQuestionIndex + 1 >= guidedTotal ? "Done" : "Next"}
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {activeTab === "profile" ? (
-        <div className="space-y-4">
-          {showPersonalInfoSection ? (
-            <SectionCard title="Personal Info" subtitle="Name, email, phone, city/state/country">
-              <div className="grid md:grid-cols-2 gap-3">
-                <InputField
-                  label="Full Name"
-                  value={profile.fullName}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, fullName: value }))}
-                  placeholder="e.g. Alex Johnson"
-                  required
-                  fieldKey="fullName"
-                  error={fieldErrors.fullName}
-                  inputRef={(el) => {
-                    fieldRefs.current.fullName = el;
-                  }}
-                />
-                <InputField
-                  label="Email"
-                  value={profile.email}
-                  onChange={() => {}}
-                  placeholder="you@example.com"
-                  disabled
-                />
-                <InputField
-                  label="Phone"
-                  value={profile.phone}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, phone: value }))}
-                  placeholder="+1 5551234567"
-                  required
-                  fieldKey="phone"
-                  error={fieldErrors.phone}
-                  inputRef={(el) => {
-                    fieldRefs.current.phone = el;
-                  }}
-                />
-                <InputField
-                  label="Address"
-                  value={profile.addressLine}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, addressLine: value }))}
-                  placeholder="Street and area"
-                />
-                <InputField
-                  label="City"
-                  value={profile.city}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, city: value }))}
-                  placeholder="Austin"
-                />
-                <InputField
-                  label="State / Region"
-                  value={profile.state}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, state: value }))}
-                  placeholder="Texas"
-                />
-                <InputField
-                  label="Country"
-                  value={profile.country}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, country: value }))}
-                  placeholder="United States"
-                />
-              </div>
-            </SectionCard>
-          ) : null}
-
-          {showProfessionalLinksSection ? (
-            <SectionCard title="Professional Links" subtitle="LinkedIn, portfolio, and resume URL">
-              <div className="grid md:grid-cols-2 gap-3">
-                <InputField
-                  label="LinkedIn URL"
-                  value={profile.linkedinUrl}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, linkedinUrl: value }))}
-                  placeholder="https://www.linkedin.com/in/your-profile"
-                  fieldKey="linkedinUrl"
-                  error={fieldErrors.linkedinUrl}
-                  inputRef={(el) => {
-                    fieldRefs.current.linkedinUrl = el;
-                  }}
-                />
-                <InputField
-                  label="Portfolio URL"
-                  value={profile.portfolioUrl}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, portfolioUrl: value }))}
-                  placeholder="https://github.com/yourname"
-                  fieldKey="portfolioUrl"
-                  error={fieldErrors.portfolioUrl}
-                  inputRef={(el) => {
-                    fieldRefs.current.portfolioUrl = el;
-                  }}
-                />
-                <InputField
-                  label="Resume URL (optional)"
-                  value={profile.resumeUrl}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, resumeUrl: value }))}
-                  placeholder="https://..."
-                />
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                  <div className="font-semibold text-gray-900">Resume Upload Status</div>
-                  <div className="mt-1">{user?.resumeFileName ? `Uploaded: ${user.resumeFileName}` : "No uploaded resume yet"}</div>
-                  <a href="/dashboard/resume" className="mt-2 inline-flex text-indigo-600 hover:text-indigo-700 font-medium">
-                    Open Resume Section
-                  </a>
-                </div>
-              </div>
-            </SectionCard>
-          ) : null}
-
-          {showWorkEligibilitySection ? (
-            <SectionCard title="Work Eligibility" subtitle="Visa sponsorship and work authorization">
-              <div className="grid md:grid-cols-2 gap-3">
-                <SelectField
-                  label="U.S. Work Authorization"
-                  value={profile.workAuthorizationUS}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, workAuthorizationUS: value }))}
-                  options={[
-                    "U.S. Citizen/Permanent Resident",
-                    "Authorized to work in the U.S.",
-                    "Require sponsorship",
-                    "Not authorized",
-                  ]}
-                />
-                <SelectField
-                  label="Need Visa Sponsorship"
-                  value={profile.visaSponsorship}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, visaSponsorship: value }))}
-                  options={["No", "Yes"]}
-                />
-                <SelectField
-                  label="Remote / Onsite / Hybrid"
-                  value={profile.workModePreference}
-                  onChange={(value) => {
-                    setProfile((prev) => ({ ...prev, workModePreference: value }));
-                    setPreferences((prev) => ({ ...prev, workMode: value }));
-                  }}
-                  options={WORK_MODE_OPTIONS}
-                />
-              </div>
-            </SectionCard>
-          ) : null}
-
-          {showExperienceEducationSection ? (
-            <SectionCard title="Experience & Education" subtitle="Years, degree, and communication level">
-              <div className="grid md:grid-cols-2 gap-3">
-                <InputField
-                  label="Years of Experience"
-                  value={profile.yearsOfExperience}
-                  onChange={(value) => {
-                    setProfile((prev) => ({ ...prev, yearsOfExperience: value }));
-                    setPreferences((prev) => ({ ...prev, yearsOfExperience: value }));
-                  }}
-                  placeholder="e.g. 5"
-                />
-                <SelectField
-                  label="Education Level"
-                  value={profile.educationLevel}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, educationLevel: value }))}
-                  options={EDUCATION_LEVEL_OPTIONS}
-                />
-                <SelectField
-                  label="English Proficiency"
-                  value={profile.englishProficiency}
-                  onChange={(value) => setProfile((prev) => ({ ...prev, englishProficiency: value }))}
-                  options={ENGLISH_PROFICIENCY_OPTIONS}
-                />
-              </div>
-            </SectionCard>
-          ) : null}
-
-          {showPreferredRolesSection ? (
-            <SectionCard title="Preferred Roles & Locations" subtitle="Used to prefill job preferences and screening answers">
-              <div className="grid md:grid-cols-2 gap-4">
-                <TagInput
-                  label="Preferred Job Titles"
-                  values={profile.preferredJobTitles}
-                  onChange={(values) => {
-                    setProfile((prev) => ({ ...prev, preferredJobTitles: values }));
-                    setPreferences((prev) => ({ ...prev, searchTerms: values }));
-                  }}
-                  placeholder="Add role and press Enter"
-                />
-                <TagInput
-                  label="Preferred Locations"
-                  values={profile.preferredLocations}
-                  onChange={(values) => {
-                    setProfile((prev) => ({ ...prev, preferredLocations: values }));
-                    setPreferences((prev) => ({ ...prev, searchLocations: values }));
-                  }}
-                  placeholder="Add location and press Enter"
-                />
-              </div>
-            </SectionCard>
-          ) : null}
-        </div>
-      ) : null}
-
-      {activeTab === "preferences" ? (
-        <div className="space-y-4">
-          <SectionCard
-            title="Auto Apply Preferences"
-            subtitle="Search terms, locations, confidence, and fit criteria"
-          >
-            <div className="grid md:grid-cols-2 gap-4">
-              <TagInput
-                label="Search Terms"
-                values={preferences.searchTerms}
-                onChange={(values) => setPreferences((prev) => ({ ...prev, searchTerms: values }))}
-                placeholder="PHP Developer"
-              />
-              <TagInput
-                label="Search Locations"
-                values={preferences.searchLocations}
-                onChange={(values) => setPreferences((prev) => ({ ...prev, searchLocations: values }))}
-                placeholder="New York"
-              />
-              <SelectField
-                label="Remote / Onsite / Hybrid"
-                value={preferences.workMode}
-                onChange={(value) => setPreferences((prev) => ({ ...prev, workMode: value }))}
-                options={WORK_MODE_OPTIONS}
-              />
-              <InputField
-                label="Confidence Level (1-10)"
-                value={preferences.confidenceLevel}
-                onChange={(value) => setPreferences((prev) => ({ ...prev, confidenceLevel: value }))}
-                placeholder="8"
-              />
-              <InputField
-                label="Years of Experience"
-                value={preferences.yearsOfExperience}
-                onChange={(value) => setPreferences((prev) => ({ ...prev, yearsOfExperience: value }))}
-                placeholder="5"
-              />
-              <TagInput
-                label="Job Types"
-                values={preferences.jobTypes}
-                onChange={(values) => setPreferences((prev) => ({ ...prev, jobTypes: values }))}
-                placeholder="Full-time"
-                presets={JOB_TYPE_OPTIONS}
-              />
-              <InputField
-                label="Salary Min"
-                value={preferences.salaryMin}
-                onChange={(value) => setPreferences((prev) => ({ ...prev, salaryMin: value }))}
-                placeholder="80000"
-              />
-              <InputField
-                label="Salary Max"
-                value={preferences.salaryMax}
-                onChange={(value) => setPreferences((prev) => ({ ...prev, salaryMax: value }))}
-                placeholder="120000"
-              />
-              {!remoteWorkModeSelected ? (
-                <TagInput
-                  label="Preferred Countries"
-                  values={preferences.preferredCountries}
-                  onChange={(values) => setPreferences((prev) => ({ ...prev, preferredCountries: values }))}
-                  placeholder="United States"
-                />
-              ) : null}
-              <TagInput
-                label="Excluded Companies"
-                values={preferences.excludedCompanies}
-                onChange={(values) => setPreferences((prev) => ({ ...prev, excludedCompanies: values }))}
-                placeholder="Company name"
-              />
-              <TagInput
-                label="Excluded Keywords"
-                values={preferences.excludedKeywords}
-                onChange={(values) => setPreferences((prev) => ({ ...prev, excludedKeywords: values }))}
-                placeholder="Staffing"
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="CareerPilot Preferences"
-            subtitle="Uses the same structure and values as Auto Apply Preferences"
-          >
-            <PreferenceMirror preferences={preferences} />
-          </SectionCard>
-
-          <SectionCard
-            title="LinkedIn Preferences"
-            subtitle="Same preference data synced for LinkedIn extension autofill"
-          >
-            <PreferenceMirror preferences={preferences} />
-            {canDownloadExtensionZip ? (
-              <div className="mt-3">
-                <p ref={currentPackageLabelRef} className="mb-2 text-xs text-gray-500">Current package on site: {currentPackageBaseName}</p>
-                {installedPackageName ? (
-                  <p className="mb-2 text-xs font-medium text-green-700">Installed in browser: {installedPackageName}</p>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    ref={downloadOpenButtonRef}
-                    type="button"
-                    onClick={() => void onInstallOrReloadExtension()}
-                    className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 items-center gap-2"
+                  <div
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    className={`relative overflow-hidden border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-300 w-full ${
+                      uploading || parsingStatus === "parsing"
+                        ? "border-indigo-300 bg-indigo-50/40"
+                        : "border-slate-200 bg-slate-50/60 hover:border-indigo-300 hover:bg-indigo-50/30 hover:shadow-md"
+                    }`}
                   >
-                    <Download className="h-4 w-4" />
-                    Download + Open Extensions
-                  </button>
-                  <a
-                    ref={downloadZipButtonRef}
-                    href={extensionZipUrl}
-                    download={currentPackageFileName}
-                    className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 items-center gap-2"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download Current ZIP
-                  </a>
-                </div>
-              </div>
-            ) : null}
-          </SectionCard>
-        </div>
-      ) : null}
-
-      {activeTab === "screening" ? (
-        <div className="space-y-4">
-          <SectionCard
-            title="Saved Answers / Question Bank"
-            subtitle="question label, normalized key, answer, answer type, source, and last used"
-            action={
-              <button
-                type="button"
-                onClick={() =>
-                  setScreeningRows((prev) => [
-                    ...prev,
-                    {
-                      id: makeId(),
-                      questionLabel: "",
-                      normalizedKey: "",
-                      answer: "",
-                      answerType: "text",
-                      source: "manual",
-                      lastUsed: "",
-                    },
-                  ])
-                }
-                className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
-              >
-                <Plus className="h-4 w-4" />
-                Add Answer
-              </button>
-            }
-          >
-            {!screeningRows.length ? (
-              <p className="text-sm text-gray-500">No saved screening answers yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {screeningRows.map((row) => {
-                  const key = toPayloadQuestionKey(row.normalizedKey || row.questionLabel);
-                  const isSavingRow = Boolean(savingAnswerKey) && savingAnswerKey === key;
-                  return (
-                    <div key={row.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
-                      <div className="grid md:grid-cols-3 gap-2">
-                        <InputField
-                          label="Question"
-                          value={row.questionLabel}
-                          onChange={(value) =>
-                            setScreeningRows((prev) =>
-                              prev.map((item) =>
-                                item.id === row.id
-                                  ? {
-                                      ...item,
-                                      questionLabel: value,
-                                      normalizedKey: toPayloadQuestionKey(value),
-                                    }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder="Are you authorized to work in the U.S.?"
-                        />
-                        <InputField
-                          label="Answer"
-                          value={row.answer}
-                          onChange={(value) =>
-                            setScreeningRows((prev) =>
-                              prev.map((item) =>
-                                item.id === row.id
-                                  ? {
-                                      ...item,
-                                      answer: value,
-                                      answerType: inferAnswerType(value),
-                                    }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder="No"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <SelectField
-                            label="Type"
-                            value={row.answerType}
-                            onChange={(value) =>
-                              setScreeningRows((prev) =>
-                                prev.map((item) =>
-                                  item.id === row.id
-                                    ? {
-                                        ...item,
-                                        answerType: value as ScreeningAnswerType,
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            options={["text", "boolean", "number", "choice", "multiselect"]}
-                          />
-                          <SelectField
-                            label="Source"
-                            value={row.source}
-                            onChange={(value) =>
-                              setScreeningRows((prev) =>
-                                prev.map((item) =>
-                                  item.id === row.id
-                                    ? {
-                                        ...item,
-                                        source: value as ScreeningSource,
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            options={["manual", "linkedin_import", "resume_parse", "extension_capture", "system"]}
+                    {parsingStatus === "scanning" || parsingStatus === "parsing" ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="relative">
+                            <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                              <Loader2 className="h-6 w-6 text-indigo-600 animate-spin" />
+                            </div>
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-slate-800">
+                              {parsingStatus === "scanning" ? "Uploading & scanning..." : "Processing your data..."}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {parsingStatus === "scanning" ? "Reading your resume" : `Found ${revealedFields.length} fields`}
+                            </p>
+                          </div>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="w-full max-w-xs mx-auto h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500 ease-out"
+                            style={{
+                              width: parsingStatus === "scanning" ? "40%" : `${40 + (revealedFields.length / 6) * 60}%`,
+                            }}
                           />
                         </div>
                       </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 flex items-center justify-center shadow-sm">
+                          <UploadCloud className="h-7 w-7 text-indigo-500" />
+                        </div>
+                        <div>
+                          <p className="text-base font-semibold text-slate-800">
+                            Upload your resume
+                          </p>
+                          <p className="text-sm text-slate-400 mt-1">
+                            Drag & drop or click to browse · PDF, DOCX, TXT
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
-                        <span>Mapped key is generated automatically from the question text.</span>
-                        <span>
-                          Last used: {row.lastUsed ? new Date(row.lastUsed).toLocaleString() : "Not used yet"}
-                        </span>
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <div className="w-4 h-px bg-slate-200" />
+                    <span>Max 5MB · Your data is encrypted</span>
+                    <div className="flex-1 h-px bg-slate-200" />
+                  </div>
+                </div>
+
+                {/* Right: Profile Card */}
+                <div className="flex-1 min-w-0">
+                  {parsingStatus === "idle" && !profile.fullName && !profile.linkedinUrl ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/40 p-6 text-center">
+                      <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                        <CheckCircle2 className="h-5 w-5 text-slate-300" />
+                      </div>
+                      <p className="text-sm font-medium text-slate-400">
+                        Parsed data will appear here
+                      </p>
+                      <p className="text-xs text-slate-300 mt-1">
+                        Upload your resume to get started
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                      {/* Card Header */}
+                      <div className={`px-4 py-3 border-b border-slate-100 ${
+                        parsingStatus === "scanning" ? "bg-indigo-50" : "bg-emerald-50"
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          {parsingStatus === "scanning" ? (
+                            <>
+                              <div className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                              <p className="text-xs font-semibold text-indigo-700">Scanning resume...</p>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                              <p className="text-xs font-semibold text-emerald-700">Data Extracted</p>
+                            </>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void saveAnswer(
-                              row.normalizedKey || row.questionLabel,
-                              row.questionLabel,
-                              row.answer,
-                              row.answerType,
-                              row.source,
-                            )
-                          }
-                          disabled={isSavingRow || !row.questionLabel.trim() || !row.answer.trim()}
-                          className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
-                        >
-                          {isSavingRow ? "Saving..." : "Save"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setScreeningRows((prev) => prev.filter((item) => item.id !== row.id))}
-                          className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-sm font-semibold hover:bg-red-50 inline-flex items-center gap-1"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Remove
-                        </button>
+                      {/* Card Body */}
+                      <div className={parsingStatus !== "scanning" ? "p-0" : "p-4 space-y-0"}>
+                        {parsingStatus === "scanning" ? (
+                          <div className="space-y-3 py-2">
+                            {[90, 75, 60, 50, 45, 40].map((w, i) => (
+                              <div key={i} className="space-y-1">
+                                <div className="h-2.5 bg-slate-200 rounded-full animate-pulse" style={{ width: `${w * 0.5}%` }} />
+                                <div className="h-2 bg-slate-100 rounded-full animate-pulse" style={{ width: `${w}%` }} />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <>
+                            <iframe
+                              srcDoc={generateResumeHTML(resumeViewerData || parsedDataRef.current)}
+                              title="Resume Preview"
+                              className="w-full h-[500px] border-0 rounded-b-xl"
+                              sandbox="allow-same-origin"
+                            />
+                            {parsingStatus === "done" ? (
+                              <div className="p-4 border-t border-slate-100">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await saveDraft();
+                                    setExtLocationsRaw(preferences.searchLocations.join(", "));
+                                    setExtSearchTermsRaw(preferences.searchTerms.join(", "));
+                                    setShowingExtensionPrefs(true);
+                                  }}
+                                  className="w-full px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold hover:from-indigo-700 hover:to-purple-700 inline-flex items-center justify-center gap-2 shadow-sm transition-all hover:shadow-md"
+                                >
+                                  Next
+                                  <ChevronRight className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : null}
+                          </>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
-            )}
-          </SectionCard>
+            </div>
+          </div>
+        ) : null}
 
-          <SectionCard
-            title="Pending Answers"
-            subtitle="Detected by LinkedIn forms and waiting for your input"
-          >
-            {!pendingQuestions.length ? (
-              <p className="text-sm text-emerald-700">No pending screening questions right now.</p>
-            ) : (
-              <div className="space-y-3">
-                {pendingQuestions.map((item) => {
-                  const key = item.questionKey;
-                  const draft = answerDrafts[key] || "";
-                  const hasValidationMessage = Boolean(item.validationMessage);
-                  return (
+        {/* Extension Preferences */}
+        {!atsGenerated && showingExtensionPrefs ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-200/50 p-8">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-green-600 shadow-lg shadow-emerald-200/60">
+                  <Check className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Extension Preferences</h2>
+                  <p className="text-sm text-slate-500">Set up how the AutoApply extension should search and apply</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Work Mode */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Work Mode</label>
+                  <select
+                    value={preferences.workMode}
+                    onChange={(e) => setPreferences((p) => ({ ...p, workMode: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  >
+                    <option value="Remote">Remote</option>
+                    <option value="Hybrid">Hybrid</option>
+                    <option value="On-site">On-site</option>
+                    <option value="">Any</option>
+                  </select>
+                </div>
+
+                {/* Job Type */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Job Type</label>
+                  <select
+                    value={preferences.jobTypes[0] || ""}
+                    onChange={(e) => setPreferences((p) => ({ ...p, jobTypes: e.target.value ? [e.target.value] : [] }))}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  >
+                    <option value="">Any</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Internship">Internship</option>
+                  </select>
+                </div>
+
+                {/* Preferred Locations */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Preferred Locations</label>
+                  <input
+                    type="text"
+                    value={extLocationsRaw}
+                    onChange={(e) => setExtLocationsRaw(e.target.value)}
+                    onBlur={() => {
+                      const parts = extLocationsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+                      setPreferences((p) => ({ ...p, searchLocations: parts }));
+                    }}
+                    placeholder="e.g. Remote, New York, San Francisco"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <p className="text-xs text-slate-400">Comma-separated list of cities or regions</p>
+                </div>
+
+                {/* Current & Expected Salary (Monthly) */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Current Salary (Monthly)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={preferences.salaryMin}
+                      onChange={(e) => setPreferences((p) => ({ ...p, salaryMin: e.target.value }))}
+                      placeholder="e.g. 25000"
+                      className="w-full rounded-lg border border-slate-200 bg-white pl-7 pr-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                  </div>
+                  {preferences.salaryMin ? (
+                    <p className="text-xs text-slate-500">Annual: <span className="font-semibold text-slate-700">₹{(Number(preferences.salaryMin) * 12).toLocaleString("en-IN")}</span></p>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Expected Salary (Monthly)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={preferences.salaryMax}
+                      onChange={(e) => setPreferences((p) => ({ ...p, salaryMax: e.target.value }))}
+                      placeholder="e.g. 50000"
+                      className="w-full rounded-lg border border-slate-200 bg-white pl-7 pr-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                  </div>
+                  {preferences.salaryMax ? (
+                    <p className="text-xs text-slate-500">Annual: <span className="font-semibold text-slate-700">₹{(Number(preferences.salaryMax) * 12).toLocaleString("en-IN")}</span></p>
+                  ) : null}
+                  <p className="text-xs text-slate-400">Enter monthly salary — annual is auto-calculated</p>
+                </div>
+
+                {/* Confidence Level */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Match Confidence Level</label>
+                  <select
+                    value={preferences.confidenceLevel}
+                    onChange={(e) => setPreferences((p) => ({ ...p, confidenceLevel: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  >
+                    {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((n) => (
+                      <option key={n} value={String(n)}>{n}/10</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-400">Higher = only well-matched jobs, Lower = more applications</p>
+                </div>
+
+                {/* Perfect Job Match (Tags) */}
+                <div className="space-y-2 lg:col-span-2">
+                  <label className="text-sm font-semibold text-slate-700">Perfect Job Match</label>
+                  <div className="relative">
                     <div
-                      key={`${item.questionKey}-${item.questionLabel}`}
-                      className={`rounded-xl border p-3 ${
-                        hasValidationMessage ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
-                      }`}
+                      data-tag-input
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus-within:ring-2 focus-within:ring-indigo-400 cursor-text min-h-[42px] flex flex-wrap items-center gap-1.5"
+                      onClick={() => setShowSuggestions(true)}
                     >
-                      <div className="text-sm font-semibold text-gray-900">{item.questionLabel}</div>
-                      {item.validationMessage ? (
-                        <div className="mt-1 text-xs font-medium text-red-700">{item.validationMessage}</div>
-                      ) : null}
-
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <input
-                          value={draft}
-                          onChange={(e) =>
-                            setAnswerDrafts((prev) => ({
-                              ...prev,
-                              [key]: e.target.value,
-                            }))
-                          }
-                          placeholder="Type your answer"
-                          className="min-w-[260px] flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void saveAnswer(
-                              item.questionKey,
-                              item.questionLabel,
-                              answerDrafts[key] || "",
-                              inferAnswerType(answerDrafts[key] || ""),
-                              "manual",
-                            )
-                          }
-                          disabled={savingAnswerKey === key || !String(answerDrafts[key] || "").trim()}
-                          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
+                      {preferences.searchTerms.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 rounded-md px-2 py-0.5 text-xs font-medium"
                         >
-                          {savingAnswerKey === key ? "Saving..." : "Save"}
-                        </button>
-                      </div>
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreferences((p) => ({
+                                ...p,
+                                searchTerms: p.searchTerms.filter((t) => t !== tag),
+                              }));
+                            }}
+                            className="hover:text-indigo-900"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        type="text"
+                        value={tagInput}
+                        onChange={(e) => {
+                          setTagInput(e.target.value);
+                          setShowSuggestions(true);
+                        }}
+                        onFocus={() => setShowSuggestions(true)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && tagInput.trim()) {
+                            e.preventDefault();
+                            const val = tagInput.trim();
+                            if (!preferences.searchTerms.includes(val)) {
+                              setPreferences((p) => ({ ...p, searchTerms: [...p.searchTerms, val] }));
+                            }
+                            setTagInput("");
+                          }
+                          if (e.key === "Backspace" && !tagInput && preferences.searchTerms.length) {
+                            setPreferences((p) => ({
+                              ...p,
+                              searchTerms: p.searchTerms.slice(0, -1),
+                            }));
+                          }
+                        }}
+                        placeholder={preferences.searchTerms.length ? "" : "Type a job title and press Enter..."}
+                        className="flex-1 min-w-[120px] bg-transparent outline-none text-sm text-slate-800 placeholder:text-slate-400"
+                      />
                     </div>
-                  );
-                })}
+                    {showSuggestions && (
+                      <div
+                        className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+                        onMouseLeave={() => setShowSuggestions(false)}
+                      >
+                        {JOB_TITLE_SUGGESTIONS.filter(
+                          (s) =>
+                            !preferences.searchTerms.includes(s) &&
+                            s.toLowerCase().includes(tagInput.toLowerCase())
+                        ).map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            type="button"
+                            onClick={() => {
+                              if (!preferences.searchTerms.includes(suggestion)) {
+                                setPreferences((p) => ({ ...p, searchTerms: [...p.searchTerms, suggestion] }));
+                              }
+                              setTagInput("");
+                              setShowSuggestions(false);
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                        {tagInput.trim() && !preferences.searchTerms.includes(tagInput.trim()) && !JOB_TITLE_SUGGESTIONS.some((s) => s.toLowerCase() === tagInput.trim().toLowerCase()) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreferences((p) => ({ ...p, searchTerms: [...p.searchTerms, tagInput.trim()] }));
+                              setTagInput("");
+                              setShowSuggestions(false);
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors border-t border-slate-100"
+                          >
+                            <Plus className="w-3 h-3 inline mr-1" />
+                            Add "{tagInput.trim()}"
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400">Select or type job titles — we'll find perfect matches</p>
+                </div>
               </div>
-            )}
-          </SectionCard>
-        </div>
-      ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">
-        <div className="text-xs text-gray-500">
-          {draftStatus === "saving" ? "Saving draft..." : null}
-          {draftStatus === "saved"
-            ? `Draft saved${draftSavedAt ? ` at ${new Date(draftSavedAt).toLocaleTimeString()}` : ""}`
-            : null}
-          {draftStatus === "error" ? "Draft autosave failed. Keep tab open and retry." : null}
-        </div>
+              <div className="flex items-center justify-end gap-3 mt-8 pt-6 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowingExtensionPrefs(false)}
+                  className="px-5 py-2.5 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  disabled={isFinishing}
+                  onClick={async () => {
+                    setIsFinishing(true);
+                    try {
+                      const locParts = extLocationsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+                      setPreferences((p) => ({ ...p, searchLocations: locParts }));
+                      await saveDraft();
+                      const ok = await persistAll({ redirectToDashboard: false });
+                      if (ok) {
+                        navigate("/dashboard/jobs");
+                      }
+                    } finally {
+                      setIsFinishing(false);
+                    }
+                  }}
+                  className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold hover:from-indigo-700 hover:to-purple-700 inline-flex items-center gap-2 shadow-sm transition-all hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isFinishing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      Finish Onboarding
+                      <Sparkles className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setError("");
-              setMessage("");
-              void loadData();
-            }}
-            className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-            disabled={saving}
-          >
-            Reload
-          </button>
-          <button
-            type="button"
-            onClick={() => void persistAndNextStep()}
-            disabled={saving}
-            className="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "Saving..." : wizardStep === WIZARD_STEPS.length - 1 ? "Save & Finish Onboarding" : "Save & Next Step"}
-          </button>
-        </div>
+        {/* ATS Resume Display */}
+        {atsGenerated && atsHtml ? (
+          <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-200/50 p-6 space-y-4">
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-emerald-400 to-green-600 shadow-md shadow-emerald-200/60">
+                <Check className="w-7 h-7 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900">Your ATS Resume is Ready!</h2>
+              <p className="text-sm text-slate-500">Download, upload another, or regenerate</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shadow-sm">
+              <iframe
+                srcDoc={atsHtml}
+                title="ATS Resume Preview"
+                className="w-full h-[400px] border-0"
+                sandbox="allow-same-origin"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const blob = new Blob([atsHtml], { type: "text/html" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "ATS_Resume.html";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold hover:from-indigo-700 hover:to-purple-700 inline-flex items-center gap-2 shadow-sm transition-all hover:shadow-md"
+              >
+                <Download className="h-4 w-4" />
+                Download HTML
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAtsGenerated(false);
+                  setAtsHtml("");
+                }}
+                className="px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 inline-flex items-center gap-2 transition-colors"
+              >
+                <UploadCloud className="h-4 w-4" />
+                Upload Another
+              </button>
+              <button
+                type="button"
+                onClick={() => void generateAtsResume()}
+                disabled={generatingAts}
+                className="px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 inline-flex items-center gap-2 transition-colors disabled:opacity-50"
+              >
+                <Sparkles className="h-4 w-4" />
+                Regenerate
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
+
 
 function SummaryLine({ label, value, ok }: { label: string; value: string; ok: boolean }) {
   return (

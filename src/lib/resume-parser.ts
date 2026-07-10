@@ -71,7 +71,7 @@ export async function parseResumeFile(fileName: string, bytes: Buffer): Promise<
   let text = "";
 
   if (lower.endsWith(".pdf")) {
-    const parsed = await pdfParse(bytes);
+    const parsed = await pdfParse(bytes, { max: 0, version: "v2.0.550" });
     text = parsed.text || "";
   } else if (lower.endsWith(".docx")) {
     const parsed = await mammoth.extractRawText({ buffer: bytes });

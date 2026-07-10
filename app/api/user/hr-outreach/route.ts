@@ -48,21 +48,31 @@ export async function POST(req: NextRequest) {
     }
 
     // Convert plain-text body to HTML (preserve newlines)
-    const htmlBody = `
-<!DOCTYPE html>
+    const htmlBody = `<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <style>
-    body { font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #222; }
-    p { margin: 0 0 12px; }
-  </style>
-</head>
-<body>
-  ${body
-    .split("\n")
-    .map((line) => `<p>${line || "&nbsp;"}</p>`)
-    .join("")}
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;background-color:#ffffff;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#1f2937;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:0 0 24px;">
+            ${body
+              .split("\n")
+              .map((line) => `<p style="margin:0 0 12px;">${line || "&nbsp;"}</p>`)
+              .join("")}
+          </td>
+        </tr>
+        <tr>
+          <td style="border-top:1px solid #e5e7eb;padding-top:20px;">
+            <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">
+              Sent via CareerPilot &mdash; AI-powered job application platform
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
 </body>
 </html>`;
 

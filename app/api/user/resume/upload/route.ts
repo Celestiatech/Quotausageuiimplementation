@@ -3,6 +3,7 @@ import { prisma } from "src/lib/prisma";
 import { requireAuth } from "src/lib/guards";
 import { fail, handleApiError, ok } from "src/lib/api";
 import { parseResumeFile } from "src/lib/resume-parser";
+import { parseResumeWithAi } from "src/lib/resume-ai-parser";
 import { writeAuditLog } from "src/lib/audit";
 
 export async function POST(req: NextRequest) {
@@ -23,12 +24,42 @@ export async function POST(req: NextRequest) {
 
     const bytes = Buffer.from(await file.arrayBuffer());
     const parsed = await parseResumeFile(file.name, bytes);
+
+    let aiParsed = null;
+    try {
+      aiParsed = await parseResumeWithAi(parsed.text);
+    } catch {
+      // AI parsing is non-critical; fall back to regex extraction
+    }
+
+    const mergedExtracted = {
+      ...parsed.extracted,
+      ...(aiParsed ? {
+        city: aiParsed.city || parsed.extracted.currentCity,
+        state: aiParsed.state,
+        country: aiParsed.country,
+        name: aiParsed.name || parsed.extracted.name,
+        email: aiParsed.email || parsed.extracted.email,
+        phone: aiParsed.phone || parsed.extracted.phone,
+        linkedinUrl: aiParsed.linkedinUrl || parsed.extracted.linkedinUrl,
+        portfolioUrl: aiParsed.portfolioUrl || parsed.extracted.portfolioUrl,
+        yearsOfExperience: aiParsed.yearsOfExperience,
+        educationLevel: aiParsed.educationLevel,
+        skills: aiParsed.skills,
+        jobTitles: aiParsed.jobTitles,
+        workAuthorization: aiParsed.workAuthorization,
+        summary: aiParsed.summary,
+        experience: aiParsed.experience,
+        projects: aiParsed.projects,
+        education: aiParsed.education,
+        certifications: aiParsed.certifications,
+      } : {}),
+    };
+
     await prisma.user.update({
       where: { id: authResult.auth.user.id },
       data: {
         resumeFileName: file.name,
-        // Resume bytes are not persisted on app servers.
-        // Users should keep the source resume in LinkedIn Easy Apply profile.
         resumeFilePath: null,
         resumeText: parsed.text.slice(0, 100000),
       },
@@ -46,7 +77,7 @@ export async function POST(req: NextRequest) {
 
     return ok("Resume parsed and profile text saved", {
       fileName: file.name,
-      extracted: parsed.extracted,
+      extracted: mergedExtracted,
     });
   } catch (error) {
     return handleApiError(error, "Failed to upload resume");
