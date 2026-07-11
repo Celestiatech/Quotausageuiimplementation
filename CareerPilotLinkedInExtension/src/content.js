@@ -59,6 +59,89 @@ let activeSubmitPaceDelayMs = 0;
 let activeSubmitPaceStartMs = 0;
 let warnedDefaultYearsFallback = false;
 
+// ── Detailed debug log buffer ──────────────────────────────────────────
+const MAX_DEBUG_LOG_ENTRIES = 2000;
+let debugLogBuffer = [];
+let debugTimers = {};
+
+function captureDebugEvent(category, event, data = {}) {
+  const entry = {
+    ts: new Date().toISOString(),
+    cat: category,
+    evt: event,
+    ...data,
+  };
+  debugLogBuffer.push(entry);
+  if (debugLogBuffer.length > MAX_DEBUG_LOG_ENTRIES) {
+    debugLogBuffer = debugLogBuffer.slice(-MAX_DEBUG_LOG_ENTRIES);
+  }
+  try {
+    console.debug(`[CP][${category}]`, event, data);
+  } catch { /* ignore */ }
+}
+
+function startTimer(label) {
+  debugTimers[label] = performance.now();
+}
+
+function endTimer(label) {
+  const start = debugTimers[label];
+  if (start == null) return 0;
+  const elapsed = Math.round(performance.now() - start);
+  delete debugTimers[label];
+  return elapsed;
+}
+
+function capturePageSnapshot(context = "") {
+  return {
+    url: window.location.href,
+    pathname: window.location.pathname,
+    title: document.title || "",
+    context,
+  };
+}
+
+function buildDebugLogExport() {
+  const settingsSnapshot = {};
+  try {
+    const raw = window.sessionStorage.getItem("cpLastSearchResultsUrl") || "";
+    settingsSnapshot.lastSearchUrl = raw;
+  } catch { /* ignore */ }
+  return {
+    exportedAt: new Date().toISOString(),
+    bufferSize: debugLogBuffer.length,
+    page: capturePageSnapshot(),
+    settingsSnapshot,
+    entries: debugLogBuffer,
+  };
+}
+
+async function downloadDebugLogFile() {
+  const payload = buildDebugLogExport();
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `cp-debug-log-${stamp}.json`;
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+    captureDebugEvent("debug-export", "download-triggered", { filename, entries: payload.bufferSize });
+    await botChat(`Debug log downloaded (${payload.bufferSize} entries).`);
+  } catch (err) {
+    captureDebugEvent("debug-export", "download-failed", { error: String(err) });
+    await botChat("Failed to download debug log.", "error");
+  }
+}
+
 function readPersistedNumber(key) {
   try {
     const raw = window.localStorage.getItem(key);
@@ -568,7 +651,7 @@ function applyPanelLayout() {
   if (typeof panelPrefs.width === "number" && panelPrefs.width >= 320) {
     panelEl.style.width = `${Math.min(window.innerWidth - 16, panelPrefs.width)}px`;
   } else {
-    panelEl.style.width = "min(420px, calc(100vw - 22px))";
+    panelEl.style.width = "min(520px, calc(100vw - 22px))";
   }
   // Give the flex column a definite height so the log can shrink and the composer stays visible.
   panelEl.style.height = "78vh";
@@ -680,6 +763,7 @@ async function reportProgress() {
   const code = String(response?.errorCode || "").toUpperCase();
   if (code === "DAILY_CAP_REACHED") {
     await logLine("Daily cap reached (3/day). Stopping run.", "warn");
+    await botChat("Daily application limit reached. AI Copilot is pausing for today.", "warn");
     await sendMessage({ type: "CP_STOP" });
     return false;
   }
@@ -2049,6 +2133,15 @@ function getEffectiveSearchLocation(settings, locationOverride = "") {
     // LinkedIn's location field causes avoidable reloads and search resets.
     return isRemoteLikeSearchValue(explicitSearchLocation) ? "" : explicitSearchLocation;
   }
+  // Fall back to first non-remote filterLocations value when searchLocation is empty,
+  // so Preferred Locations (e.g. "Mohali") are used as the LinkedIn search location.
+  // Skip this when remote mode is active — typing a city into the location field
+  // while f_WT=2 (Remote) causes LinkedIn to set a geoId that produces zero results.
+  if (!explicitSearchLocation && !isRemoteModeSelected(settings)) {
+    const filterLocations = parseListSetting(settings?.filterLocations);
+    const firstRealLocation = filterLocations.find((value) => value && !isRemoteLikeSearchValue(value));
+    if (firstRealLocation) return firstRealLocation;
+  }
   return explicitSearchLocation;
 }
 
@@ -2087,7 +2180,13 @@ function shouldClearStaleLocationQueryParams(settings, url) {
 
   if (isRemoteLikeSearchValue(searchLocation)) return true;
   if (filterLocations.length > 0 && filterLocations.every((value) => isRemoteLikeSearchValue(value))) return true;
-  if (isRemoteModeSelected(settings) && filterLocations.every((value) => !value || isRemoteLikeSearchValue(value))) {
+  if (isRemoteModeSelected(settings) && filterLocations.length > 0 && filterLocations.every((value) => !value || isRemoteLikeSearchValue(value))) {
+    return true;
+  }
+  // When remote mode is active but filterLocations has non-remote values (e.g. "Mohali"),
+  // the search location won't be typed into the input (see getEffectiveSearchLocation),
+  // so any stale geoId in the URL from a previous non-remote search should be cleared.
+  if (isRemoteModeSelected(settings) && getEffectiveSearchLocation(settings) === "") {
     return true;
   }
   return false;
@@ -2251,6 +2350,15 @@ function buildCanonicalSearchUrl(settings, options = {}) {
   const sortParam = sortByToLinkedInParam(settings?.sortBy || "");
   const workplaceParam = onSiteToLinkedInParam(settings?.onSite || "");
 
+  const terms = getConfiguredSearchTerms(settings);
+  if (terms.length > 0) {
+    const activeTerm = terms[Math.min(runSearchTermCursor, terms.length - 1)] || "";
+    if (activeTerm) {
+      url.searchParams.set("keywords", activeTerm);
+      captureDebugEvent("search", "KEYWORDS_ENFORCED", { term: activeTerm, cursor: runSearchTermCursor });
+    }
+  }
+
   if (dateParam) url.searchParams.set("f_TPR", dateParam);
   else url.searchParams.delete("f_TPR");
 
@@ -2381,10 +2489,12 @@ async function ensureSearchTermIfNeeded(settings) {
 async function rotateSearchTerm(settings) {
   const terms = getConfiguredSearchTerms(settings);
   if (terms.length <= 1) return false;
+  const prevCursor = runSearchTermCursor;
   runSearchTermCursor = (runSearchTermCursor + 1) % terms.length;
   runSearchTermSuccessCount = 0;
   resetRemoteLocationKeywordCursor();
   const nextTerm = terms[runSearchTermCursor];
+  captureDebugEvent("search", "TERM_ROTATED", { from: terms[prevCursor], to: nextTerm, cursor: runSearchTermCursor, totalTerms: terms.length });
   await logLine(`Moving to next search term: ${nextTerm}`, "info");
   window.location.href = getActiveRunSearchUrl(settings);
   return true;
@@ -2466,6 +2576,7 @@ async function gotoNextResultsPage(settings) {
   }
   await waitForJobsToRender(settings, 5000);
   await logLine("Navigated to next results page", "info");
+  await botChat("Loading more opportunities...");
   return true;
 }
 
@@ -2505,7 +2616,9 @@ async function setSearchLocationIfNeeded(settings, locationOverride = "") {
   input.dispatchEvent(new Event("input", { bubbles: true }));
   input.dispatchEvent(new Event("change", { bubbles: true }));
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  captureDebugEvent("search", "SEARCH_LOCATION_SET", { location });
   await logLine(`Search location set: ${location}`);
+  await botChat(`Location locked: ${location}. Scanning relevant jobs...`);
   await sleep(800);
 }
 
@@ -2595,6 +2708,7 @@ async function rotateRemoteLocationKeyword(settings) {
   const nextKeyword = pool[runRemoteLocationKeywordCursor] || "";
   if (!nextKeyword) return false;
   await logLine(`No jobs. Trying remote location keyword: ${nextKeyword}.`, "info");
+  await botChat("No results found. Adjusting search strategy...");
   await setSearchLocationIfNeeded(settings, nextKeyword);
   return true;
 }
@@ -2644,6 +2758,7 @@ async function applyEasyApplyFilterIfNeeded(settings) {
       if (!checked) {
         await resilientClick(switchInput, "Easy Apply switch");
         await logLine("Easy Apply filter enabled (all filters)");
+        await botChat("Easy Apply filter activated. Focusing on quick applications...");
       }
       const showResults = getBySelectorList([
         "button[aria-label*='Apply current filters']",
@@ -2925,6 +3040,8 @@ async function applyAdvancedFiltersIfNeeded(settings) {
 }
 
 async function prepareRun(settings) {
+  await botChat("Preparing search filters and preferences...");
+  await sleep(300);
   if (hasDailyEasyApplyLimitSignal()) {
     await pauseRunForDailyEasyApplyLimit(settings, "LinkedIn daily submission limit reached before run preparation");
     return false;
@@ -2939,6 +3056,7 @@ async function prepareRun(settings) {
   if (!isJobsPage()) {
     await logLine("Not on Jobs page. Redirecting to LinkedIn Jobs Search.", "warn");
     await debugLog(settings, "Redirecting to jobs search (not jobs path)", { url: window.location.href });
+    captureDebugEvent("search", "NAVIGATE_TO_SEARCH", { reason: "not-jobs-page", currentUrl: window.location.href });
     resetRemoteLocationKeywordCursor();
     window.location.href = getActiveRunSearchUrl(settings);
     return false;
@@ -2951,6 +3069,7 @@ async function prepareRun(settings) {
     }
     await logLine("Opening Jobs Search results page.", "info");
     await debugLog(settings, "Redirecting to jobs search (landing page)", { url: window.location.href });
+    captureDebugEvent("search", "NAVIGATE_TO_SEARCH", { reason: "not-search-page", currentUrl: window.location.href });
     resetRemoteLocationKeywordCursor();
     window.location.href = getActiveRunSearchUrl(settings);
     return false;
@@ -3042,7 +3161,7 @@ async function handleChatCommand(input) {
       await botChat(startRes?.error || "Run start failed. Check settings.", "error");
       return;
     }
-    await botChat("Run started.");
+    await botChat("Run started. AI Copilot is now scanning for jobs...");
     return;
   }
   if (cmd === "restart" || cmd === "/restart") {
@@ -3051,7 +3170,7 @@ async function handleChatCommand(input) {
       await botChat(startRes?.error || "Run restart failed.", "error");
       return;
     }
-    await botChat("Run restarted. Counters reset for this run.", "warn");
+    await botChat("Run restarted. AI Copilot is resuming the scan...", "warn");
     return;
   }
   if (cmd === "restart live" || cmd === "/restart-live") {
@@ -3067,17 +3186,17 @@ async function handleChatCommand(input) {
   }
   if (cmd === "pause" || cmd === "/pause") {
     await sendMessage({ type: "CP_PAUSE" });
-    await botChat("Run paused.");
+    await botChat("Run paused. AI Copilot is standing by...");
     return;
   }
   if (cmd === "resume" || cmd === "/resume") {
     await sendMessage({ type: "CP_RESUME" });
-    await botChat("Run resumed.");
+    await botChat("Run resumed. AI Copilot is back to work...");
     return;
   }
   if (cmd === "stop" || cmd === "/stop") {
     await sendMessage({ type: "CP_STOP" });
-    await botChat("Run stopped.");
+    await botChat("Run stopped. AI Copilot is offline.");
     return;
   }
   if (cmd.startsWith("set city ")) {
@@ -3197,8 +3316,12 @@ async function handleChatCommand(input) {
       return;
     }
   }
+  if (cmd === "download debug log" || cmd === "debug log" || cmd === "save debug log") {
+    downloadDebugLogFile();
+    return;
+  }
   await botChat(
-    "Unknown command. Try: start, start live, restart, restart live, pause, resume, stop, set city <name>, clear city, clear locations, set pace <minSec> <maxSec>, set years <n>, set phone <num>, set email <mail>, dry run on/off",
+    "Unknown command. Try: start, start live, restart, restart live, pause, resume, stop, set city <name>, clear city, clear locations, set pace <minSec> <maxSec>, set years <n>, set phone <num>, set email <mail>, dry run on/off, download debug log",
     "warn"
   );
 }
@@ -3254,7 +3377,7 @@ function ensurePanel() {
     <div class="cp-head">
       <div class="cp-brand">
         <div class="cp-orb"><img class="cp-orb-img" alt="" /></div>
-        <div class="cp-title-wrap">
+        <div>
           <div class="cp-title">AutoApply CV Copilot</div>
           <div class="cp-sub">LinkedIn job assistant</div>
         </div>
@@ -3267,34 +3390,32 @@ function ensurePanel() {
         </div>
       </div>
     </div>
-    <div class="cp-stats">
-      <div class="cp-stat"><span class="cp-stat-k">Applied (this run)</span><span id="cp-applied">0</span></div>
-      <div class="cp-stat"><span class="cp-stat-k">Skipped (this run)</span><span id="cp-skipped">0</span></div>
-      <div class="cp-stat"><span class="cp-stat-k">Failed (this run)</span><span id="cp-failed">0</span></div>
-    </div>
-    <div class="cp-wallet" id="cp-wallet">Plan: - | Hires: - | Free today: -/-</div>
-    <div class="cp-rate" id="cp-rate">Rate limit: -</div>
-    <div class="cp-run-mode">
-      <label class="cp-run-mode-toggle" for="cp-auto-submit-toggle">
-        <input id="cp-auto-submit-toggle" type="checkbox" />
-        <span class="cp-switch-ui" aria-hidden="true"></span>
-        <span class="cp-run-mode-label">Live Auto Submit</span>
-      </label>
-      <span class="cp-run-mode-chip" id="cp-run-mode-chip">Dry Run</span>
-    </div>
-    <div class="cp-quick">
-      <button id="cp-start">Start</button>
-      <button id="cp-pause">Pause</button>
-      <button id="cp-stop">Stop</button>
-    </div>
     <div class="cp-now" id="cp-now-card">
-      <div class="cp-now-title" id="cp-now-title">Idle. Waiting for command.</div>
-      <div class="cp-now-detail" id="cp-now-detail">Press Start or type "start" in chat.</div>
-      <div class="cp-now-meta" id="cp-now-meta">Applied: 0 | Skipped: 0 | Failed: 0</div>
+      <div class="cp-now-title" id="cp-now-title">Ready to apply</div>
+      <div class="cp-now-detail" id="cp-now-detail">Press Start or type a command below.</div>
+    </div>
+    <div class="cp-controls">
+      <div class="cp-run-mode">
+        <label class="cp-run-mode-toggle" for="cp-auto-submit-toggle">
+          <input id="cp-auto-submit-toggle" type="checkbox" />
+          <span class="cp-switch-ui" aria-hidden="true"></span>
+          <span class="cp-run-mode-label">Live Auto Submit</span>
+        </label>
+        <span class="cp-run-mode-chip" id="cp-run-mode-chip">Dry Run</span>
+      </div>
+      <div class="cp-quick">
+        <button id="cp-start">Start</button>
+        <button id="cp-pause">Pause</button>
+        <button id="cp-stop">Stop</button>
+      </div>
+      <div class="cp-info-row">
+        <span id="cp-wallet" class="cp-info-pill"></span>
+        <span id="cp-rate" class="cp-info-pill"></span>
+      </div>
     </div>
     <div class="cp-log" id="cp-log" aria-live="polite"></div>
     <div class="cp-composer">
-      <input id="cp-chat-input" type="text" placeholder="Chat command: start, pause, stop, set city Delhi" />
+      <input id="cp-chat-input" type="text" placeholder="Type a command..." />
       <button id="cp-chat-send">Send</button>
     </div>
   `;
@@ -3335,7 +3456,8 @@ function ensurePanel() {
   // Copy logs without surfacing debug UI controls in the panel.
   panel.querySelector(".cp-head-right").insertAdjacentHTML(
     "beforeend",
-    `<button id="cp-copy-logs-mini" class="cp-icon-btn" title="Copy logs">\u29c9</button>`
+    `<button id="cp-copy-logs-mini" class="cp-icon-btn" title="Copy logs">\u29c9</button>
+     <button id="cp-download-debug" class="cp-icon-btn" title="Download detailed debug log">\u2b07</button>`
   );
   panel.querySelector("#cp-copy-logs-mini").addEventListener("click", async () => {
     const res = await sendMessage({ type: "CP_GET_LOG_EXPORT" });
@@ -3349,6 +3471,9 @@ function ensurePanel() {
     } catch {
       await botChat("Clipboard write failed.", "warn");
     }
+  });
+  panel.querySelector("#cp-download-debug").addEventListener("click", () => {
+    downloadDebugLogFile();
   });
   panel.querySelector("#cp-minimize").addEventListener("click", () => {
     setPanelMinimized(!panelPrefs.minimized);
@@ -3410,22 +3535,38 @@ function summarizeMeta(meta) {
   }
 }
 
+const AI_KIND_KEYWORDS = [
+  "analyzing", "reviewing", "processing", "evaluating", "preparing",
+  "checking", "scanning", "optimizing", "verifying", "reading",
+  "thinking", "examining", "inspecting", "studying", "assessing"
+];
+
 function getLogVisual(entry) {
   const level = String(entry?.level || "info").toLowerCase();
   const raw = String(entry?.message || "");
   const isUser = level === "user" || raw.startsWith("You:");
   const isDebug = raw.startsWith("[debug]");
+  const isBotChat = raw.startsWith("Copilot:");
   const role = isUser ? "cp-user" : "cp-bot";
   const sender = isUser ? "You" : "Copilot";
-  const kind = level === "error"
-    ? "Error"
-    : level === "warn"
-      ? "Warning"
-      : isDebug
-        ? "Debug"
-        : isUser
-          ? "Command"
-          : "Update";
+
+  let kind;
+  if (level === "error") {
+    kind = "Error";
+  } else if (level === "warn") {
+    kind = "Warning";
+  } else if (isDebug) {
+    kind = "Debug";
+  } else if (isUser) {
+    kind = "Command";
+  } else if (isBotChat) {
+    const norm = normalizeLabel(trimLogPrefix(raw));
+    const matched = AI_KIND_KEYWORDS.some((kw) => norm.includes(kw));
+    kind = matched ? "Thinking" : "Update";
+  } else {
+    kind = "Update";
+  }
+
   return {
     level,
     role,
@@ -3434,6 +3575,30 @@ function getLogVisual(entry) {
     isDebug,
     message: trimLogPrefix(raw)
   };
+}
+
+const AI_THINKING_TITLES = [
+  "Analyzing job requirements...",
+  "Reviewing application form...",
+  "Processing your profile data...",
+  "Evaluating best responses...",
+  "Filling in application details...",
+  "Checking form validation...",
+  "Preparing smart answers...",
+  "Scanning for required fields...",
+  "Optimizing your application...",
+  "Verifying submission readiness...",
+];
+const AI_IDLE_TITLES = [
+  "Ready to apply. Standing by...",
+  "AI Copilot online. Awaiting your command...",
+  "Standing by for next task...",
+  "Copilot initialized. Ready when you are...",
+];
+
+function pickAiTitle(pool, fallback) {
+  if (!pool.length) return fallback;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function deriveNowCard(state, logs) {
@@ -3450,33 +3615,41 @@ function deriveNowCard(state, logs) {
     ? "Mode: Auto Submit (will click Submit)."
     : "Mode: Manual Submit (fills forms; submit manually).";
 
-  let title = "Idle. Waiting for command.";
+  let title = pickAiTitle(AI_IDLE_TITLES, "Idle. Waiting for command.");
   if (state.paused) {
-    title = "Paused. Waiting for your input.";
+    title = "Paused. Awaiting your input...";
   } else if (state.running) {
     if (norm.includes("preparing run")) {
-      title = "Preparing search and filters.";
+      title = "Setting up search filters and preferences...";
     } else if (norm.includes("found") && norm.includes("job cards")) {
-      title = "Scanning jobs on this page.";
+      title = pickAiTitle(AI_THINKING_TITLES, "Scanning jobs on this page.");
     } else if (norm.includes("opening:")) {
-      title = "Opening selected job.";
+      title = "Opening job and reading details...";
     } else if (norm.includes("modal step")) {
-      title = "Filling Easy Apply steps.";
+      title = pickAiTitle(AI_THINKING_TITLES, "Filling Easy Apply steps.");
     } else if (norm.includes("application submitted")) {
-      title = "Application submitted.";
+      title = "Application submitted successfully!";
     } else if (norm.includes("submit click did not complete")) {
-      title = "Submit blocked. Trying fallback answers.";
+      title = "Analyzing blocked submit. Trying smart fallbacks...";
     } else if (norm.includes("skipped")) {
-      title = "Skipping current job and moving ahead.";
+      title = pickAiTitle(["Skipping. Moving to next opportunity...", "Job skipped. Scanning next..."], "Skipping current job.");
     } else if (norm.includes("error")) {
-      title = "Error detected in current run.";
+      title = "Error detected. Attempting recovery...";
+    } else if (norm.includes("search location")) {
+      title = "Configuring search location...";
+    } else if (norm.includes("easy apply")) {
+      title = "Enabling Easy Apply filter...";
+    } else if (norm.includes("next page") || norm.includes("pagination")) {
+      title = "Loading next page of results...";
+    } else if (norm.includes("rate limit")) {
+      title = "Rate limit pause. Resuming shortly...";
     } else {
-      title = "Automation running.";
+      title = pickAiTitle(AI_THINKING_TITLES, "Automation running.");
     }
   }
 
-  const baseDetail = latestMessage || (state.running ? "Working on next action..." : "Press Start to begin.");
-  const detail = `${modeLine} ${baseDetail}`;
+  const baseDetail = latestMessage || (state.running ? "Analyzing next step..." : "Press Start to begin.");
+  const detail = baseDetail;
   const meta = `Applied: ${Number(state.applied || 0)} | Skipped: ${Number(state.skipped || 0)} | Failed: ${Number(state.failed || 0)}`;
   return { title, detail, meta };
 }
@@ -3526,33 +3699,23 @@ function renderState(state) {
     modeChip.textContent = liveAutoSubmitEnabled ? "Live" : s?.dryRun ? "Dry Run" : "Manual";
     modeChip.className = `cp-run-mode-chip ${liveAutoSubmitEnabled ? "cp-live" : s?.dryRun ? "cp-dry" : "cp-manual"}`;
   }
-  panelEl.querySelector("#cp-applied").textContent = String(state.applied || 0);
-  panelEl.querySelector("#cp-skipped").textContent = String(state.skipped || 0);
-  panelEl.querySelector("#cp-failed").textContent = String(state.failed || 0);
 
   const walletEl = panelEl.querySelector("#cp-wallet");
   if (walletEl) {
     const q = lastPortalQuota || {};
     const plan = String(q.plan || "").toLowerCase();
-    const hireBalance = Number(q.hireBalance ?? NaN);
-    const freeRemaining = Number(q.freeRemaining ?? NaN);
     const quotaUsed = Number(q.quotaUsed ?? NaN);
     const quotaTotal = Number(q.quotaTotal ?? NaN);
-    const inferredCustom = Number.isFinite(hireBalance) && hireBalance > 0;
-    const planLabel =
-      plan === "pro" ? "Pro ($3/mo)" : inferredCustom ? "Custom (Top-up)" : "Free";
-    const hiresLabel = plan === "pro" ? "Unlimited" : Number.isFinite(hireBalance) ? String(hireBalance) : "-";
-    const usedClamped =
-      Number.isFinite(quotaUsed) && Number.isFinite(quotaTotal) && quotaTotal > 0
-        ? Math.min(Math.max(0, quotaUsed), Math.max(0, quotaTotal))
-        : Number.isFinite(quotaUsed)
-        ? Math.max(0, quotaUsed)
-        : NaN;
-    const freeUsedLabel = Number.isFinite(usedClamped) && Number.isFinite(quotaTotal)
-      ? `${Math.max(0, usedClamped)}/${Math.max(0, quotaTotal)}`
-      : "-/-";
-    const freeLeftLabel = Number.isFinite(freeRemaining) ? String(Math.max(0, freeRemaining)) : "-";
-    walletEl.textContent = `Plan: ${planLabel} | ${plan === "pro" ? "Applies" : "Hires"}: ${hiresLabel} | Free today: ${freeUsedLabel} (left ${freeLeftLabel})`;
+    const freeRemaining = Number(q.freeRemaining ?? NaN);
+    const planLabel = plan === "pro" ? "Pro" : plan === "free" ? "Free" : plan || "";
+    const freeUsedLabel = Number.isFinite(quotaUsed) && Number.isFinite(quotaTotal)
+      ? `${Math.max(0, quotaUsed)}/${Math.max(0, quotaTotal)}`
+      : "";
+    const parts = [];
+    if (planLabel) parts.push(planLabel);
+    if (freeUsedLabel) parts.push(`${freeUsedLabel} used today`);
+    walletEl.textContent = parts.join(" \u00b7 ") || "";
+    walletEl.style.display = parts.length ? "" : "none";
   }
 
   const rateEl = panelEl.querySelector("#cp-rate");
@@ -3560,23 +3723,17 @@ function renderState(state) {
     if (s?.autoSubmit && !s?.dryRun) {
       const range = getSubmitPaceRangeMs(s);
       const paceLabel = formatPaceLabel(range);
-      const base = `Rate limit: ${paceLabel}`;
       const hasActivePace = Boolean(lastAutoSubmitAtMs && activeSubmitPaceStartMs && activeSubmitPaceDelayMs);
+      let text = paceLabel;
       if (hasActivePace) {
         const nextAllowedAt = Number(activeSubmitPaceStartMs) + Number(activeSubmitPaceDelayMs);
         const remainingMs = Math.max(0, nextAllowedAt - Date.now());
-        if (remainingMs > 0) {
-          rateEl.textContent = `${base} · next submit in ${Math.ceil(remainingMs / 1000)}s`;
-        } else {
-          const elapsedSec = Math.max(0, Math.floor((Date.now() - Number(lastAutoSubmitAtMs)) / 1000));
-          const targetSec = Math.max(0, Math.floor(Number(activeSubmitPaceDelayMs) / 1000));
-          rateEl.textContent = `${base} · ok (elapsed ${elapsedSec}s / target ${targetSec}s)`;
-        }
-      } else {
-        rateEl.textContent = `${base} between submits`;
+        if (remainingMs > 0) text += ` \u00b7 ${Math.ceil(remainingMs / 1000)}s`;
       }
+      rateEl.textContent = text;
+      rateEl.style.display = "";
     } else {
-      rateEl.textContent = "Rate limit: off (not auto-submitting)";
+      rateEl.style.display = "none";
     }
   }
 
@@ -3585,14 +3742,27 @@ function renderState(state) {
   const nowCard = deriveNowCard(state, logs);
   const nowTitle = panelEl.querySelector("#cp-now-title");
   const nowDetail = panelEl.querySelector("#cp-now-detail");
-  const nowMeta = panelEl.querySelector("#cp-now-meta");
   if (nowTitle) nowTitle.textContent = nowCard.title;
   if (nowDetail) nowDetail.textContent = nowCard.detail;
-  if (nowMeta) nowMeta.textContent = nowCard.meta;
 
   const typingKind = s?.dryRun ? "Dry Run" : s?.autoSubmit ? "Auto" : "Manual";
+  const AI_TYPING_MESSAGES = [
+    "Analyzing the next step...",
+    "Processing your application...",
+    "Reviewing job details...",
+    "Preparing smart responses...",
+    "Checking form fields...",
+    "Evaluating best answers...",
+    "Scanning required fields...",
+    "Optimizing your profile data...",
+    "Verifying application status...",
+    "Working on next action...",
+  ];
+  const typingMsg = state.running
+    ? AI_TYPING_MESSAGES[Math.floor(Date.now() / 3000) % AI_TYPING_MESSAGES.length]
+    : "";
   const typingLine = state.running
-    ? `<div class="cp-line cp-bot cp-typing"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">Copilot</span><span class="cp-kind">${typingKind}</span></div><div class="cp-msg-text"><span class="cp-dot"></span><span class="cp-dot"></span><span class="cp-dot"></span> Working on next step...</div></div></div>`
+    ? `<div class="cp-line cp-bot cp-typing"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">Copilot</span><span class="cp-kind">${typingKind}</span></div><div class="cp-msg-text"><span class="cp-dot"></span><span class="cp-dot"></span><span class="cp-dot"></span> ${escapeHtml(typingMsg)}</div></div></div>`
     : "";
   const logsWindow = logs.slice(-80);
   const logSignature = buildLogRenderSignature(logsWindow, state, s);
@@ -4352,8 +4522,9 @@ async function closePostSubmitUi(settings, options = {}) {
   }
 
   if (isPostApplySearchPage()) {
-    await debugLog(settings, "Redirecting out of post-apply page", { path: window.location.pathname });
-    window.location.href = JOBS_SEARCH_URL;
+    const resumeUrl = getResumableSearchUrl(settings);
+    await debugLog(settings, "Redirecting out of post-apply page", { path: window.location.pathname, resumeUrl });
+    window.location.href = resumeUrl;
   }
 }
 
@@ -4623,12 +4794,29 @@ async function applyComboboxOption(block, label, answer, settings) {
   }
 
   await resilientClick(trigger, "Combobox trigger");
-  await sleep(180);
-  const optionEls = Array.from(
-    document.querySelectorAll(
-      "[role='listbox'] [role='option'], [role='option'], .artdeco-typeahead__result, li[role='option']"
-    )
-  ).filter((el) => isVisibleElement(el));
+  await sleep(300);
+
+  function collectBlockOptions() {
+    const listbox = block.querySelector("[role='listbox']") ||
+      trigger.closest("[role='listbox']") ||
+      trigger.parentElement?.querySelector("[role='listbox']");
+    const scope = listbox || block;
+    return Array.from(
+      scope.querySelectorAll(
+        "[role='option'], li[role='option'], .artdeco-typeahead__result"
+      )
+    ).filter((el) => isVisibleElement(el));
+  }
+
+  let optionEls = collectBlockOptions();
+  if (!optionEls.length) {
+    optionEls = Array.from(
+      document.querySelectorAll(
+        "[role='listbox'] [role='option'], [role='option'], .artdeco-typeahead__result, li[role='option']"
+      )
+    ).filter((el) => isVisibleElement(el));
+  }
+
   const optionsForMatch = optionEls
     .map((el) => ({
       text: String(el.textContent || "").trim(),
@@ -4650,7 +4838,49 @@ async function applyComboboxOption(block, label, answer, settings) {
   if (!target?.el) return false;
   if (normalizeLabel(target.text || "") === normalizeLabel(triggerText || "")) return false;
 
-  await resilientClick(target.el, "Combobox option");
+  try {
+    target.el.scrollIntoView({ behavior: "smooth", block: "center" });
+    await sleep(120);
+  } catch {}
+  target.el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+  await sleep(60);
+  target.el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+  await sleep(60);
+  target.el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  await sleep(350);
+
+  const triggerAfter = getBySelectorList(
+    ["button[aria-haspopup='listbox']", "[role='combobox']", "input[role='combobox']", ".artdeco-dropdown__trigger"],
+    block
+  );
+  const triggerAfterText = String(triggerAfter?.textContent || triggerAfter?.value || "").trim();
+  const selectionConfirmed = normalizeLabel(triggerAfterText || "") === normalizeLabel(target.text || "");
+
+  if (!selectionConfirmed) {
+    try {
+      const fallbackTarget = triggerAfter || trigger;
+      fallbackTarget.focus();
+      await sleep(80);
+      fallbackTarget.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      await sleep(150);
+      fallbackTarget.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await sleep(300);
+    } catch {}
+  }
+
+  const finalTrigger = getBySelectorList(
+    ["button[aria-haspopup='listbox']", "[role='combobox']", "input[role='combobox']", ".artdeco-dropdown__trigger"],
+    block
+  );
+  const finalText = normalizeLabel(String(finalTrigger?.textContent || finalTrigger?.value || "").trim());
+  const listboxStillOpen = block.querySelector("[role='listbox'] [role='option']") ||
+    document.querySelector("[role='listbox'] [role='option']");
+
+  if (!selectionConfirmed && finalText !== normalizeLabel(target.text || "") && listboxStillOpen) {
+    await logLine(`Combobox option did not register for: ${label.slice(0, 60)} (dropdown still open)`, "warn");
+    return false;
+  }
+
   await logLine(
     matchedTarget
       ? `Selected combobox option for: ${label.slice(0, 60)}`
@@ -5052,8 +5282,13 @@ async function forceAnswerModalQuestions(modal, settings) {
 }
 
 async function processEasyApplyModal(settings) {
+  startTimer("processEasyApplyModal");
+  await botChat("Processing application form. Filling in your details...");
   const modal = getActiveModal();
-  if (!modal) return { submitted: false, skipped: true, reason: "No apply modal found" };
+  if (!modal) {
+    captureDebugEvent("modal", "MODAL_NOT_FOUND", { page: capturePageSnapshot() });
+    return { submitted: false, skipped: true, reason: "No apply modal found" };
+  }
 
   let activeSettings = {
     ...settings,
@@ -5067,6 +5302,7 @@ async function processEasyApplyModal(settings) {
   let previousSignature = getModalSignature(modal);
   while (safety < 16) {
     if (!await isRunActive()) {
+      captureDebugEvent("modal", "RUN_STOPPED_BY_OPERATOR", { stepAttempt: safety, durationMs: endTimer("processEasyApplyModal") });
       return { submitted: false, skipped: true, reachedSubmit: false, reason: "Run stopped by operator" };
     }
     safety += 1;
@@ -5223,8 +5459,19 @@ async function processEasyApplyModal(settings) {
           unresolvedRequired: unresolvedAfter.length,
           waitedMs: Number(activeSettings.manualAnswerWaitMs || MANUAL_ANSWER_WAIT_MS)
         });
+        captureDebugEvent("modal", "MANUAL_ANSWER_WAIT_TIMEOUT", {
+          stepAttempt: safety,
+          unresolvedRequired: unresolvedAfter.length,
+          waitedMs: Number(activeSettings.manualAnswerWaitMs || MANUAL_ANSWER_WAIT_MS)
+        });
         if (shouldPauseForInput) {
           await logLine("Need your input for required fields. Open dashboard Jobs to answer, then resume run.", "warn");
+          captureDebugEvent("modal", "PAUSE_FOR_INPUT", {
+            stepAttempt: safety,
+            unresolvedRequired: unresolvedAfter.length,
+            unresolvedFields: unresolvedAfter.slice(0, 8).map((d) => summarizeQuestionBlockState(d)),
+            durationMs: endTimer("processEasyApplyModal")
+          });
           await sendMessage({ type: "CP_PAUSE" });
           return {
             submitted: false,
@@ -5253,6 +5500,7 @@ async function processEasyApplyModal(settings) {
       await applyFollowCompanyPreference(modal, activeSettings);
       if (!settings.dryRun && settings.pauseBeforeSubmit) {
         await logLine("Paused before submit. Review the form, submit manually, then resume run.", "warn");
+        captureDebugEvent("modal", "PAUSED_BEFORE_SUBMIT", { stepAttempt: safety, reason: "pauseBeforeSubmit", durationMs: endTimer("processEasyApplyModal") });
         await sendMessage({ type: "CP_PAUSE" });
         return {
           submitted: false,
@@ -5263,6 +5511,7 @@ async function processEasyApplyModal(settings) {
       }
       if (!settings.dryRun && !settings.autoSubmit) {
         await logLine("Auto-submit is OFF. Paused at submit step. Submit manually, then resume run.", "warn");
+        captureDebugEvent("modal", "AUTO_SUBMIT_DISABLED", { stepAttempt: safety, durationMs: endTimer("processEasyApplyModal") });
         await sendMessage({ type: "CP_PAUSE" });
         return {
           submitted: false,
@@ -5272,8 +5521,11 @@ async function processEasyApplyModal(settings) {
         };
       }
       if (!settings.dryRun && settings.autoSubmit) {
+        await botChat("Ready to submit. Verifying all fields...");
+        await sleep(500);
         const paced = await enforceSubmitRateLimit(activeSettings);
         if (!paced.ok) {
+          captureDebugEvent("modal", "RATE_LIMIT_WAIT_PAUSED", { stepAttempt: safety, durationMs: endTimer("processEasyApplyModal") });
           return {
             submitted: false,
             skipped: true,
@@ -5290,6 +5542,8 @@ async function processEasyApplyModal(settings) {
         const submitCompleted = didSubmitComplete(modal);
         if (submitCompleted) {
           await logLine("Application submitted", "info");
+          await botChat("Application submitted successfully! Moving to next opportunity...");
+          captureDebugEvent("modal", "SUBMIT_SUCCESS", { stepAttempt: safety, durationMs: endTimer("processEasyApplyModal") });
           await closePostSubmitUi(settings, { discardDraft: false });
           return { submitted: true, skipped: false, reachedSubmit: true };
         }
@@ -5307,6 +5561,7 @@ async function processEasyApplyModal(settings) {
         const submitForcedAnswers = await forceAnswerModalQuestions(getActiveModal() || modal, activeSettings);
         if (submitFixedValidation || submitForcedAnswers) {
           await logLine("Submit was blocked. Filled remaining fields and retrying submit.", "warn");
+          captureDebugEvent("modal", "SUBMIT_RETRY_AFTER_FIX", { stepAttempt: safety, fixedValidation: submitFixedValidation, forcedAnswers: submitForcedAnswers });
           stagnantSteps = 0;
           previousSignature = getModalSignature(getActiveModal() || modal);
           continue;
@@ -5318,7 +5573,9 @@ async function processEasyApplyModal(settings) {
           reason: submitValidationRaw || submitValidation || "Submit click did not complete application"
         };
       }
+      captureDebugEvent("modal", "DRY_RUN_REACHED_SUBMIT", { stepAttempt: safety, durationMs: endTimer("processEasyApplyModal") });
       await logLine("Dry-run: reached submit step (not submitting). Use 'start live' to submit for real.", "warn");
+      await botChat("Dry run complete for this job. Form filled successfully.");
       await closePostSubmitUi(settings, { discardDraft: true });
       return { submitted: false, skipped: false, reachedSubmit: true };
     }
@@ -5332,6 +5589,7 @@ async function processEasyApplyModal(settings) {
         const blockedForcedAnswers = await forceAnswerModalQuestions(modal, activeSettings);
         if (blockedFixedValidation || blockedForcedAnswers) {
           await logLine("Next step was blocked. Filled remaining fields and retrying.", "warn");
+          captureDebugEvent("modal", "NEXT_BLOCKED_RETRY", { stepAttempt: safety });
           stagnantSteps = 0;
           previousSignature = getModalSignature(modal);
           continue;
@@ -5345,6 +5603,7 @@ async function processEasyApplyModal(settings) {
       }
       const doneBtn = findDoneOrCloseButton(modal);
       if (doneBtn) {
+        captureDebugEvent("modal", "DONE_CLOSE_CLICKED", { stepAttempt: safety, durationMs: endTimer("processEasyApplyModal") });
         await resilientClick(doneBtn, "Done/Close");
         return {
           submitted: Boolean(settings.autoSubmit && !settings.dryRun),
@@ -5353,6 +5612,13 @@ async function processEasyApplyModal(settings) {
         };
       }
       const validationRaw = getModalValidationMessageRaw(modal);
+      captureDebugEvent("modal", "NO_ACTION_BUTTON", {
+        stepAttempt: safety,
+        hasVisibleSubmit: Boolean(findSubmitButton(modal)),
+        validation: validationRaw || "",
+        durationMs: endTimer("processEasyApplyModal"),
+        ...capturePageSnapshot()
+      });
       return {
         submitted: false,
         skipped: true,
@@ -5405,6 +5671,7 @@ async function processEasyApplyModal(settings) {
           unresolvedFields: unresolvedBlocked.slice(0, 16).map((d) => summarizeQuestionBlockState(d))
         });
         if (validationNorm.includes("resume") && validationNorm.includes("required")) {
+          captureDebugEvent("modal", "RESUME_REQUIRED", { stepAttempt: safety, validation: validationRaw || "", durationMs: endTimer("processEasyApplyModal") });
           if (shouldPauseForInput) {
             await sendMessage({
               type: "CP_REGISTER_PENDING_QUESTIONS",
@@ -5441,6 +5708,13 @@ async function processEasyApplyModal(settings) {
         } else if (unanswered.length) {
           await logLine("Required fields unresolved and pause-at-failed-question is disabled. Skipping job.", "warn");
         }
+        captureDebugEvent("modal", "UNANSWERED_FIELDS_SKIPPED", {
+          stepAttempt: safety,
+          stagnantSteps,
+          validation: validationRaw || validation || "",
+          unansweredCount: unanswered.length,
+          durationMs: endTimer("processEasyApplyModal")
+        });
         return {
           submitted: false,
           skipped: true,
@@ -5454,19 +5728,25 @@ async function processEasyApplyModal(settings) {
     previousSignature = currentSignature;
   }
 
+  captureDebugEvent("modal", "LOOP_EXHAUSTED", { totalSteps: safety, durationMs: endTimer("processEasyApplyModal") });
   return { submitted: false, skipped: true, reachedSubmit: false, reason: "Could not reach submit step" };
 }
 
 async function runCycle(settings) {
+  startTimer("runCycle");
+  captureDebugEvent("cycle", "CYCLE_START", { url: window.location.href, isJobsPage: isJobsPage(), isViewPage: isJobsViewPage() });
   if (hasDailyEasyApplyLimitSignal()) {
+    captureDebugEvent("cycle", "DAILY_LIMIT_REACHED", { durationMs: endTimer("runCycle") });
     await pauseRunForDailyEasyApplyLimit(settings, "LinkedIn daily submission limit reached while scanning jobs");
     return false;
   }
   if (!isJobsPage()) {
+    captureDebugEvent("cycle", "LEFT_JOBS_PAGE", { durationMs: endTimer("runCycle") });
     await logLine("Left jobs page. Pausing run.", "warn");
     return false;
   }
   if (isPostApplySearchPage()) {
+    captureDebugEvent("cycle", "POST_APPLY_REDIRECT", { durationMs: endTimer("runCycle"), path: window.location.pathname });
     await debugLog(settings, "Detected post-apply page during run cycle; redirecting", { path: window.location.pathname });
     resetRemoteLocationKeywordCursor();
     window.location.href = getResumableSearchUrl(settings);
@@ -5728,6 +6008,7 @@ async function runCycle(settings) {
   });
   if (!cards.length) {
     exhaustedSearchPageStreak = 0;
+    captureDebugEvent("cycle", "NO_CARDS_FOUND", { durationMs: endTimer("runCycle") });
     await logLine("No jobs found on current page", "warn");
     const rotatedRemoteLocation = await rotateRemoteLocationKeyword(settings);
     if (rotatedRemoteLocation) return true;
@@ -5752,6 +6033,7 @@ async function runCycle(settings) {
   }
 
   await logLine(`Found ${cards.length} job cards`);
+  await botChat(`Found ${cards.length} jobs. Analyzing each one for the best fit...`);
   let cardsToProcess = cards;
   if (settings.easyApplyOnly) {
     const easyApplyCards = cards.filter((card) => hasEasyApplySignalOnCard(card));
@@ -5916,6 +6198,8 @@ async function runCycle(settings) {
     const previousJobContext = { ...currentJobContext };
     await debugLog(settings, "Processing card", { title, company: cardMeta.companyRaw || cardMeta.company || "" });
     await logLine(`Opening: ${title}`);
+    await botChat(`Reading job details for "${title}"...`);
+    await sleep(400);
     await resilientClick(card, "Job card");
     await sleep(1200);
     const detailSnapshot = await waitForDetailPaneRefresh(cardMeta, previousJobContext, 4800);
@@ -6066,12 +6350,16 @@ async function runCycle(settings) {
 
     classifyActionableCandidate();
     await resilientClick(applyAction.button, "Easy Apply");
+    await botChat("Easy Apply form opened. Analyzing fields...");
+    await sleep(300);
     const modal = await waitForModalOpen(4500);
     if (!modal) {
       if (hasDailyEasyApplyLimitSignal()) {
+        captureDebugEvent("cycle", "DAILY_LIMIT_IN_MODAL_WAIT", { jobKey, durationMs: endTimer("runCycle") });
         await pauseRunForDailyEasyApplyLimit(settings);
         return false;
       }
+      captureDebugEvent("cycle", "MODAL_NOT_FOUND_ON_CLICK", { jobKey, title: currentJobContext.title, company: currentJobContext.company });
       runStats.skipped += 1;
       await logOutcome("warn", "Skipped: Easy Apply click did not open modal", "MODAL_NOT_FOUND");
       await recordOutcome("SKIPPED", {
@@ -6086,6 +6374,15 @@ async function runCycle(settings) {
     }
     await sleep(400);
     const result = await processEasyApplyModal(settings);
+    captureDebugEvent("cycle", "CARD_MODAL_RESULT", {
+      jobKey,
+      title: currentJobContext.title,
+      company: currentJobContext.company,
+      submitted: result.submitted,
+      skipped: result.skipped,
+      reachedSubmit: result.reachedSubmit,
+      reason: result.reason || ""
+    });
     await debugLog(settings, "Modal result", result);
     if (result.submitted || (settings.dryRun && result.reachedSubmit)) {
       runStats.applied += 1;
@@ -6173,6 +6470,12 @@ async function runCycle(settings) {
   if (movedToNextPage) return true;
   const movedToNextTerm = await rotateSearchTerm(settings);
   if (movedToNextTerm) return true;
+  captureDebugEvent("cycle", "CYCLE_END_NO_MORE_PAGES", {
+    durationMs: endTimer("runCycle"),
+    applied: runStats.applied,
+    skipped: runStats.skipped,
+    failed: runStats.failed
+  });
   await logLine("No more result pages for the current search. Stopping run.", "info");
   await sendMessage({ type: "CP_STOP" });
   return false;
@@ -6197,6 +6500,7 @@ async function runAutomationLoop() {
     let noProgressRecoveries = 0;
     let lastProgressMarker = `${runStats.applied}|${runStats.skipped}|${runStats.failed}`;
     await logLine("Automation engine initialized");
+    await botChat("AI Copilot engaged. Scanning for opportunities...");
 
     let guard = 0;
     while (guard < 200) {
@@ -6206,6 +6510,26 @@ async function runAutomationLoop() {
 
       if (state.startedAt && state.startedAt !== lastRunStartedAt) {
         lastRunStartedAt = state.startedAt;
+        const terms = getConfiguredSearchTerms(settings);
+        captureDebugEvent("run", "RUN_START", {
+          startedAt: state.startedAt,
+          dryRun: settings.dryRun,
+          autoSubmit: settings.autoSubmit,
+          easyApplyOnly: settings.easyApplyOnly,
+          searchTerms: terms,
+          searchLocation: settings.searchLocation || "",
+          currentCity: settings.currentCity || "",
+          maxApplicationsPerRun: settings.maxApplicationsPerRun || 3,
+          submitRateMinSec: settings.submitRateMinSec,
+          submitRateMaxSec: settings.submitRateMaxSec,
+          pauseBeforeSubmit: settings.pauseBeforeSubmit,
+          pauseAtFailedQuestion: settings.pauseAtFailedQuestion,
+          filterLocations: settings.filterLocations || [],
+          datePosted: settings.datePosted || "",
+          sortBy: settings.sortBy || "",
+          debugMode: settings.debugMode || false,
+          runNonStop: settings.runNonStop || false,
+        });
         dailyLimitHandledRunId = "";
         runSeenJobKeys = loadRunSeenJobKeys(lastRunStartedAt);
         await refreshKnownAppliedJobIds(true);
@@ -6222,7 +6546,6 @@ async function runAutomationLoop() {
           jobUrl: ""
         };
         exhaustedSearchPageStreak = 0;
-        const terms = getConfiguredSearchTerms(settings);
         if (terms.length > 0) {
           runSearchTermCursor = settings.randomizeSearchOrder
             ? Math.floor(Math.random() * terms.length)
@@ -6298,6 +6621,7 @@ async function runAutomationLoop() {
           `No progress for ${Math.round(noProgressElapsedMs / 1000)}s. Trying recovery (${noProgressRecoveries}/3)...`,
           "warn"
         );
+        await botChat("Stuck on current page. Trying recovery strategy...", "warn");
 
         // Recovery strategy:
         // 1) If on a job view/post-apply page, force back to search.

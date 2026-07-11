@@ -1,0 +1,384 @@
+﻿[DIR] .git
+[DIR] .vscode
+[DIR] app
+[DIR] Auto_job_applier_linkedIn
+[DIR] CareerPilotIndeedExtension
+[DIR] CareerPilotLinkedInExtension
+[DIR] extensiondesign
+[DIR] guidelines
+[DIR] JobsSmartOutreachExtension
+[DIR] prisma
+[DIR] public
+[DIR] resume
+[DIR] scripts
+[DIR] src
+[DIR] test-results
+[FILE] .env
+[FILE] .env.example
+[FILE] .gitignore
+[FILE] ATTRIBUTIONS.md
+[FILE] bestech_guessed_hr_emails.csv
+[FILE] bestech_inside_companies.csv
+[FILE] bestech_nearby_offices_1km.csv
+[FILE] bestech_verified_hr_emails.csv
+[FILE] CareerPilotLinkedInExtension.zip
+[FILE] check-db.mjs
+[FILE] check-user.mjs
+[FILE] docker-compose.yml
+[FILE] index.html
+[FILE] middleware.ts
+[FILE] next-env.d.ts
+[FILE] next.config.mjs
+[FILE] package-lock.json
+[FILE] package.json
+[FILE] postcss.config.mjs
+[FILE] README.md
+[FILE] test_bestech_contacts.csv
+[FILE] test_bestech_contacts_30_6752_76_7409.csv
+[FILE] test_bestech_contacts_30_6752_76_7409_enriched.csv
+[FILE] test_bestech_contacts_enriched.csv
+[FILE] tsconfig.json
+[FILE] vite.config.ts
+  [FILE] settings.json
+  [DIR] api
+  [DIR] cookie-policy
+  [DIR] [...slug]
+  [FILE] AnalyticsScripts.tsx
+  [FILE] apple-icon.png
+  [FILE] ChatWidget.tsx
+  [FILE] cookieConsent.ts
+  [FILE] CookieConsentBanner.tsx
+  [FILE] globals.css
+  [FILE] GoogleConsentMode.tsx
+  [FILE] icon.png
+  [FILE] layout.tsx
+  [FILE] not-found.tsx
+  [FILE] page.tsx
+    [DIR] admin
+    [DIR] auth
+    [DIR] auto-apply
+    [DIR] billing
+    [DIR] chat
+    [DIR] extension
+    [DIR] integrations
+    [DIR] internal
+    [DIR] marketing
+    [DIR] public
+    [DIR] support
+    [DIR] user
+    [DIR] wallet
+    [FILE] page.tsx
+    [FILE] page.tsx
+  [DIR] .github
+  [DIR] config
+  [DIR] modules
+  [DIR] setup
+  [DIR] templates
+  [FILE] .gitignore
+  [FILE] app.py
+  [FILE] LICENSE
+  [FILE] README.md
+  [FILE] runAiBot.py
+    [FILE] FUNDING.yml
+    [FILE] questions.py
+    [FILE] resume.py
+    [FILE] search.py
+    [FILE] settings.py
+    [DIR] ai
+    [DIR] images
+    [DIR] javascript
+    [DIR] resumes
+    [DIR] __deprecated__
+    [FILE] clickers_and_finders.py
+    [FILE] helpers.py
+    [FILE] open_chrome.py
+    [FILE] validator.py
+    [FILE] setup.sh
+    [FILE] windows-setup.bat
+    [FILE] windows-setup.ps1
+    [FILE] index.html
+  [DIR] .test-profile
+  [DIR] icons
+  [DIR] src
+  [DIR] tests
+  [FILE] .gitignore
+  [FILE] CLOUDFLARE_DOCS_INDEX.md
+  [FILE] CLOUDFLARE_IMPLEMENTATION.md
+  [FILE] CLOUDFLARE_QUICK_REFERENCE.md
+  [FILE] CLOUDFLARE_SUMMARY.md
+  [FILE] CLOUDFLARE_TROUBLESHOOTING.md
+  [FILE] DEBUG_CAPTURE.md
+  [FILE] IMPROVEMENTS_SUMMARY.md
+  [FILE] manifest.json
+  [FILE] MANUAL_TEST_GUIDE.md
+  [FILE] package-lock.json
+  [FILE] package.json
+  [FILE] playwright.config.js
+  [FILE] QUICK_REFERENCE.md
+  [FILE] README.md
+  [FILE] run-smartapply-test.sh
+  [FILE] run-tests.sh
+  [FILE] TECHNICAL_SUMMARY.md
+  [FILE] TESTING_CHECKLIST.md
+  [FILE] TESTING_GUIDE.md
+    [DIR] component_crx_cache
+    [DIR] Default
+    [DIR] extensions_crx_cache
+    [DIR] GraphiteDawnCache
+    [DIR] GrShaderCache
+    [DIR] segmentation_platform
+    [DIR] ShaderCache
+    [FILE] first_party_sets.db
+    [FILE] first_party_sets.db-journal
+    [FILE] Last Version
+    [FILE] Local State
+    [FILE] Variations
+    [FILE] icon128.png
+    [FILE] icon16.png
+    [FILE] icon32.png
+    [FILE] icon48.png
+    [DIR] fonts
+    [DIR] images
+    [FILE] background.js
+    [FILE] cloudflare-bypass.js
+    [FILE] content.js
+    [FILE] dashboard-bridge.js
+    [FILE] options.css
+    [FILE] options.html
+    [FILE] options.js
+    [FILE] panel.css
+    [FILE] popup.css
+    [FILE] popup.html
+    [FILE] popup.js
+    [DIR] fixtures
+    [FILE] easy-apply-replica.spec.js
+    [FILE] extension.spec.js
+    [FILE] indeed-extension.spec.js
+    [FILE] indeed-smartapply-full.spec.js
+    [FILE] live-indeed-smoke.spec.js
+    [FILE] live-linkedin-smoke.spec.js
+    [FILE] REAL_WORLD_EASY_APPLY_CASE_MATRIX.md
+    [FILE] smartapply-real-world.spec.js
+  [DIR] icons
+  [DIR] src
+  [DIR] tests
+  [FILE] .gitignore
+  [FILE] manifest.json
+  [FILE] package-lock.json
+  [FILE] package.json
+  [FILE] playwright.config.js
+  [FILE] README.md
+    [FILE] icon128.png
+    [FILE] icon16.png
+    [FILE] icon32.png
+    [FILE] icon48.png
+    [DIR] fonts
+    [DIR] images
+    [FILE] background.js
+    [FILE] content.js
+    [FILE] dashboard-bridge.js
+    [FILE] options.css
+    [FILE] options.html
+    [FILE] options.js
+    [FILE] panel.css
+    [FILE] popup.css
+    [FILE] popup.html
+    [FILE] popup.js
+    [DIR] fixtures
+    [FILE] easy-apply-replica.spec.js
+    [FILE] extension.spec.js
+    [FILE] live-linkedin-smoke.spec.js
+    [FILE] REAL_WORLD_EASY_APPLY_CASE_MATRIX.md
+  [DIR] app
+  [DIR] styles
+  [FILE] panel-preview.html
+    [DIR] components
+    [FILE] App.tsx
+    [FILE] routes.tsx
+    [FILE] fonts.css
+    [FILE] index.css
+    [FILE] tailwind.css
+    [FILE] theme.css
+  [FILE] Guidelines.md
+  [FILE] PRODUCTION_CHECKLIST.md
+  [FILE] SEO_EXECUTION_CHECKLIST.md
+  [DIR] demo
+  [DIR] icons
+  [DIR] playwright-report
+  [DIR] popup
+  [DIR] src
+  [DIR] test-results
+  [DIR] tests
+  [FILE] DEBUG_LOGS_ANALYSIS.md
+  [FILE] DEPLOYMENT_GUIDE.md
+  [FILE] DOM_FALLBACK_FIXES.md
+  [FILE] DOM_SELECTOR_DIAGNOSTICS.md
+  [FILE] ENHANCED_DIAGNOSTICS_UPDATE.md
+  [FILE] FINAL_STATUS.md
+  [FILE] FINAL_SUMMARY.txt
+  [FILE] manifest.json
+  [FILE] package-lock.json
+  [FILE] package.json
+  [FILE] playwright.config.js
+  [FILE] QUICK_REFERENCE.md
+  [FILE] README_DOCUMENTATION_INDEX.md
+  [FILE] SETUP.md
+  [FILE] SOLUTION_SUMMARY.md
+    [FILE] linkedin-feed-dummy.html
+    [FILE] icon128.png
+    [FILE] icon16.png
+    [FILE] icon32.png
+    [FILE] icon48.png
+    [DIR] data
+    [FILE] index.html
+    [FILE] popup.html
+    [FILE] popup.js
+    [FILE] background.js
+    [FILE] bridge.js
+    [FILE] content.js
+    [FILE] panel.css
+    [DIR] feed-replica-LinkedIn-feed-5aa47-ails-from-mocked-feed-posts
+    [FILE] .last-run.json
+    [DIR] fixtures
+    [FILE] collection.spec.js
+    [FILE] feed-replica.spec.js
+    [FILE] popup.spec.js
+    [FILE] real-linkedin.spec.js
+  [DIR] migrations
+  [FILE] schema.prisma
+    [DIR] 20260303173000_init
+    [DIR] 20260305130000_add_blog_posts
+    [DIR] 20260305142000_add_discount_codes
+    [DIR] 20260311110000_add_blog_social_autopost
+    [DIR] 20260311120000_add_blog_facebook_post_state
+    [DIR] 20260311133000_add_social_integrations
+    [DIR] 20260317045258_add_marketing_campaigns
+    [DIR] 20260522063357_add_support_chat
+    [FILE] migration_lock.toml
+  [DIR] .well-known
+  [DIR] blog
+  [DIR] bot
+  [DIR] downloads
+  [DIR] extensiondesign
+  [DIR] Install guide
+  [DIR] logos
+  [DIR] marketing
+  [DIR] uploads
+  [FILE] android-chrome-192x192.png
+  [FILE] android-chrome-512x512.png
+  [FILE] apple-touch-icon.png
+  [FILE] favicon-16x16.png
+  [FILE] favicon-32x32.png
+  [FILE] favicon-48x48.png
+  [FILE] favicon-96x96.png
+  [FILE] favicon.ico
+  [FILE] favicon.svg
+  [FILE] llms.txt
+  [FILE] robots.txt
+  [FILE] site.webmanifest
+  [FILE] sitemap.xml
+    [DIR] appspecific
+    [DIR] covers
+    [FILE] 128660445-eac307db-718e-453b-81c7-30247c5dcac6.gif
+    [FILE] staff-1.svg
+    [FILE] staff-2.svg
+    [FILE] 128660445-eac307db-718e-453b-81c7-30247c5dcac6.gif
+    [FILE] AutoApplyCVLinkedInExtension.zip
+    [FILE] index.html
+    [FILE] panel-preview.html
+    [FILE] Load unpacked.png
+    [FILE] Pin extension.png
+    [FILE] android-chrome-192x192.png
+    [FILE] android-chrome-512x512.png
+    [FILE] apple-touch-icon.png
+    [FILE] brandmark-80.png
+    [FILE] download.png
+    [FILE] favicon-16x16.png
+    [FILE] favicon-32x32.png
+    [FILE] favicon.ico
+    [FILE] billing-evidence.png
+    [FILE] howitworks-install.png
+    [FILE] howitworks-match.png
+    [FILE] howitworks-track.png
+    [FILE] reliability-evidence.png
+    [FILE] value-dashboard.png
+    [DIR] resumes
+  [FILE] Full stack developer Vishal-1.pdf
+  [FILE] jobs_developer_remote.csv
+  [FILE] jobs_developer_remote.json
+  [FILE] job_automation.py
+  [FILE] job_scraper.py
+  [FILE] job_scraper_v2.py
+  [FILE] linkedin_auth.json
+  [FILE] linkedin_debug.html
+  [FILE] linkedin_debug.png
+  [FILE] linkedin_debug_main.html
+  [FILE] linkedin_posts.json
+  [FILE] linkedin_scraper.py
+  [FILE] linkedin_scraper_v2.py
+  [FILE] scraper.py
+  [FILE] Vishal_Sadyal_ATS_Resume.html
+  [FILE] Vishal_Sadyal_ATS_Resume.md
+  [FILE] Vishal_Sadyal_ATS_Resume.odt
+  [FILE] Vishal_Sadyal_ATS_Resume.pdf
+  [DIR] __pycache__
+  [FILE] extract_hr_email_targets.py
+  [FILE] fetch_bestech_business_contacts.py
+  [FILE] linkedin_bridge_runner.py
+    [FILE] fetch_bestech_business_contacts.cpython-38.pyc
+  [DIR] app
+  [DIR] content
+  [DIR] imports
+  [DIR] lib
+  [DIR] styles
+  [FILE] main.tsx
+    [DIR] components
+    [DIR] context
+    [DIR] hooks
+    [DIR] layouts
+    [DIR] pages
+    [DIR] seo
+    [FILE] App.tsx
+    [FILE] Root.tsx
+    [FILE] blogPosts.ts
+    [FILE] careerpilot-design-system-1.md
+    [FILE] careerpilot-design-system-2.md
+    [FILE] careerpilot-design-system-3.md
+    [FILE] careerpilot-design-system.md
+    [FILE] api.ts
+    [FILE] audit.ts
+    [FILE] auth.ts
+    [FILE] auto-apply-adapter.ts
+    [FILE] billing.ts
+    [FILE] blog.ts
+    [FILE] dashboard-tour.ts
+    [FILE] discounts.ts
+    [FILE] env.ts
+    [FILE] extension-bridge-client.ts
+    [FILE] extension-config.ts
+    [FILE] extension-package.ts
+    [FILE] extension-providers.ts
+    [FILE] facebook.ts
+    [FILE] guards.ts
+    [FILE] hires.ts
+    [FILE] job-source.ts
+    [FILE] mail.ts
+    [FILE] onboarding.ts
+    [FILE] otp.ts
+    [FILE] prisma.ts
+    [FILE] queue.ts
+    [FILE] quota.ts
+    [FILE] rate-limit.ts
+    [FILE] resume-ai-parser.ts
+    [FILE] resume-ats-generator.ts
+    [FILE] resume-parser.ts
+    [FILE] schemas.ts
+    [FILE] security.ts
+    [FILE] social-integrations.ts
+    [FILE] telegram.ts
+    [FILE] worker.ts
+    [FILE] fonts.css
+    [FILE] index.css
+    [FILE] tailwind.css
+    [FILE] theme.css
+  [FILE] .last-run.json

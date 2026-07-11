@@ -47,7 +47,7 @@ export default function Signup() {
               <img
                 src="/logos/android-chrome-192x192.png"
                 alt="AutoApply CV"
-                className="w-12 h-12 rounded-xl shadow-premium"
+                className="w-12 h-12 rounded-xl"
                 loading="eager"
                 decoding="async"
               />

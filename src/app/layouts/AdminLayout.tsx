@@ -73,7 +73,7 @@ export default function AdminLayout() {
               <img
                 src="/logos/android-chrome-192x192.png"
                 alt="AutoApply CV"
-                className="w-8 h-8 rounded-lg shadow-sm"
+                className="w-8 h-8 rounded-lg "
                 loading="eager"
                 decoding="async"
               />
