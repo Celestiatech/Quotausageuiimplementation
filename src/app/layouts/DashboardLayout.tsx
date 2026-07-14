@@ -30,6 +30,7 @@ import {
   DASHBOARD_TOUR_ONBOARDING_EXTENSION,
   queueDashboardTourRequest,
 } from 'src/lib/dashboard-tour';
+import MobileBlocker from '../components/MobileBlocker';
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -106,6 +107,13 @@ export default function DashboardLayout() {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,rgba(15,23,42,0.15)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.15)_1px,transparent_1px)] [background-size:48px_48px]"
       />
+      {/* Mobile Blocker — visible < 768px only */}
+      <div className="md:hidden">
+        <MobileBlocker />
+      </div>
+
+      {/* Dashboard — visible ≥ 768px only */}
+      <div className="hidden md:block">
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
@@ -321,6 +329,7 @@ export default function DashboardLayout() {
             <Outlet />
           </div>
         </main>
+      </div>
       </div>
     </div>
   );
