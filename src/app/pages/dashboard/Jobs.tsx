@@ -21,6 +21,7 @@ import { useParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
 import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
+import { syncProfileToExtension as syncProfileToExtensionBase } from "src/lib/sync-profile";
 import {
   DASHBOARD_TOUR_EVENT_NAME,
   DASHBOARD_TOUR_JOBS_EXTENSION,

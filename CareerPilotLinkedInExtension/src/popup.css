@@ -32,74 +32,56 @@
 
 :root {
   --cp-surface: #ffffff;
-  --cp-surface-soft: #f7f7ff;
-  --cp-border: #e2e5f0;
-  --cp-text: #1b1f45;
-  --cp-muted: #6b7194;
+  --cp-surface-soft: #f7f8fc;
+  --cp-border: #e4e7f0;
+  --cp-text: #1a1d3a;
+  --cp-muted: #7b80a0;
   --cp-primary: #6366f1;
   --cp-primary-dark: #4f46e5;
+  --cp-primary-light: #eef2ff;
   --cp-accent: #8b5cf6;
-  --cp-success: #0d9488;
-  --cp-warning: #b45309;
-  --cp-error: #c81e1e;
+  --cp-success: #10b981;
+  --cp-success-light: #ecfdf5;
+  --cp-warning: #f59e0b;
+  --cp-warning-light: #fffbeb;
+  --cp-error: #ef4444;
+  --cp-error-light: #fef2f2;
+  --cp-radius: 10px;
 }
 
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  width: 350px;
 }
 
 body {
-  margin: 0;
-  width: 360px;
+  width: 350px;
+  min-width: 350px;
+  max-width: 350px;
   min-height: 320px;
   font-family: "Poppins", "Segoe UI", Tahoma, sans-serif;
   color: var(--cp-text);
-  background: #f8f9fc;
+  background: var(--cp-surface);
   position: relative;
   overflow: hidden;
 }
 
-body::before {
-  content: "";
-  position: absolute;
-  top: -100px;
-  right: -80px;
-  width: 240px;
-  height: 240px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-body.cp-disconnected {
-  width: 500px;
-  min-height: 380px;
-  background: linear-gradient(165deg, #eef1ff 0%, #f5f8ff 45%, #f8f2ff 100%);
-}
-
-body.cp-disconnected::before {
-  inset: -80px -60px auto auto;
-  width: 320px;
-  height: 320px;
-  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0) 70%);
-}
-
-body.cp-collapsed {
-  min-height: 70px;
-}
-
-body.cp-collapsed .popup-content {
-  max-height: 0;
-  opacity: 0;
-  transform: translateY(-8px);
-  pointer-events: none;
+/* ── Gradient accent bar ── */
+.accent-bar {
+  height: 3px;
+  background: linear-gradient(90deg, var(--cp-primary), var(--cp-accent), #ec4899);
 }
 
 /* ── Layout ── */
 .wrap {
   position: relative;
   z-index: 1;
-  padding: 12px;
+  padding: 12px 16px 14px;
 }
 
 /* ── Header ── */
@@ -108,45 +90,50 @@ body.cp-collapsed .popup-content {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   cursor: pointer;
-  border-radius: 8px;
-  padding: 2px;
+  border-radius: var(--cp-radius);
+  padding: 3px;
+  margin: -3px;
   transition: background-color 150ms ease;
 }
 
 .brand:hover {
-  background: rgba(99, 102, 241, 0.06);
+  background: var(--cp-primary-light);
 }
 
 .brand:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.3);
+  outline: 2px solid rgba(99, 102, 241, 0.4);
   outline-offset: 2px;
 }
 
 .brand-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   border: 0;
-  background: transparent;
   object-fit: contain;
   flex-shrink: 0;
 }
 
+.brand-text {
+  min-width: 0;
+}
+
 h1 {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.2;
   font-weight: 700;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.3px;
+  color: var(--cp-text);
 }
 
 .sub {
@@ -156,31 +143,34 @@ h1 {
   color: var(--cp-muted);
 }
 
-body.cp-disconnected {
-    width: 343px;
+body.cp-connected {
+  width: 350px;
+  max-width: 350px;
 }
 
+/* ── Status badge ── */
 .status-badge {
   border-radius: 999px;
-  padding: 3px 10px;
+  padding: 4px 10px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   border: 1px solid var(--cp-border);
-  background: var(--cp-surface);
+  background: var(--cp-surface-soft);
   color: var(--cp-muted);
   white-space: nowrap;
+  letter-spacing: 0.2px;
 }
 
 .status-badge.running {
   color: #065f46;
   border-color: #a7f3d0;
-  background: #ecfdf5;
+  background: var(--cp-success-light);
 }
 
 .status-badge.paused {
   color: #92400e;
   border-color: #fcd34d;
-  background: #fffbeb;
+  background: var(--cp-warning-light);
 }
 
 .status-badge.idle {
@@ -199,21 +189,21 @@ body.cp-disconnected {
 
 /* ── Account card ── */
 .account-card {
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
+  border-radius: var(--cp-radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  transition: box-shadow 150ms ease;
 }
 
 .account-card.connected {
-  background: var(--cp-surface);
+  background: var(--cp-surface-soft);
   border: 1px solid var(--cp-border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .account-card.disconnected {
-  background: linear-gradient(180deg, #fff7f0 0%, #fffdf9 100%);
-  border: 1px solid #f1dbc8;
-  box-shadow: 0 2px 8px rgba(128, 91, 72, 0.08);
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .account-head {
@@ -229,31 +219,34 @@ body.cp-disconnected {
   gap: 6px;
 }
 
+.account-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cp-error);
+  flex-shrink: 0;
+}
+
+.account-card.connected .account-dot {
+  background: var(--cp-success);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
 .account-alert-icon {
   display: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: radial-gradient(circle at 30% 25%, #ff9f86 0%, #f26549 58%, #d94c32 100%);
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  align-items: center;
-  justify-content: center;
 }
 
 .account-head strong {
   font-size: 12px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--cp-text);
 }
 
 .account-badge {
   border-radius: 999px;
   font-size: 9px;
-  font-weight: 700;
-  padding: 2px 8px;
+  font-weight: 600;
+  padding: 3px 9px;
   border: 1px solid var(--cp-border);
   background: var(--cp-surface);
   color: var(--cp-muted);
@@ -262,18 +255,17 @@ body.cp-disconnected {
 .account-badge.connected {
   border-color: #a7f3d0;
   color: #065f46;
-  background: #ecfdf5;
+  background: var(--cp-success-light);
 }
 
 .account-badge.disconnected {
-  border-color: #fca5a5;
+  border-color: #fecaca;
   color: #991b1b;
-  background: #fef2f2;
+  background: var(--cp-error-light);
 }
 
 .account-card.disconnected .account-head strong {
-  font-size: 13px;
-  color: #991b1b;
+  color: var(--cp-text);
 }
 
 .account-card.disconnected .account-badge.disconnected {
@@ -290,15 +282,14 @@ body.cp-disconnected {
   margin: 6px 0 0;
   font-size: 11px;
   line-height: 1.4;
-  color: #64748b;
+  color: var(--cp-muted);
 }
 
 .account-card.disconnected .account-text {
   margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.35;
-  color: #475569;
-  text-align: center;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cp-muted);
 }
 
 /* ── Actions ── */
@@ -309,25 +300,31 @@ body.cp-disconnected {
 }
 
 .actions.account-actions {
-  margin-top: 8px;
+  margin-top: 10px;
   margin-bottom: 0;
 }
 
 .actions.primary {
   grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
 }
 
+/* ── Buttons ── */
 button {
   border: 1px solid var(--cp-border);
   background: var(--cp-surface);
   color: var(--cp-text);
   border-radius: 8px;
-  padding: 7px 8px;
+  padding: 8px 10px;
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: all 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 button:focus-visible {
@@ -336,72 +333,105 @@ button:focus-visible {
 }
 
 button:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 button:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: var(--cp-surface-soft);
+  border-color: #d0d4e0;
 }
 
-.btn-primary,
-#start {
+.btn-primary {
   border: none;
-  background: linear-gradient(135deg, var(--cp-primary), var(--cp-primary-dark));
+  background: linear-gradient(135deg, var(--cp-primary), var(--cp-accent));
   color: #ffffff;
-}
-
-.btn-primary:hover:not(:disabled),
-#start:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--cp-primary-dark), #4338ca);
-  border: none;
-}
-
-.account-card.disconnected .account-actions .btn-primary {
-  border-radius: 999px;
-  padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  padding: 9px 14px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
 }
 
-#pause {
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--cp-primary-dark), #7c3aed);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  transform: translateY(-1px);
+}
+
+/* ── Start / Pause / Stop ── */
+.btn-start {
+  border: none;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+
+.btn-start:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-pause {
   border-color: #fde68a;
-  background: #fffbeb;
+  background: var(--cp-warning-light);
   color: #92400e;
 }
 
-#pause:hover:not(:disabled) {
+.btn-pause:hover:not(:disabled) {
   background: #fef3c7;
   border-color: #fcd34d;
+  transform: translateY(-1px);
 }
 
-#stop {
+.btn-stop {
   border-color: #fecaca;
-  background: #fef2f2;
+  background: var(--cp-error-light);
   color: #991b1b;
 }
 
-#stop:hover:not(:disabled) {
+.btn-stop:hover:not(:disabled) {
   background: #fee2e2;
   border-color: #fca5a5;
+  transform: translateY(-1px);
 }
 
 /* ── Now card ── */
 .now-card {
   border: 1px solid var(--cp-border);
-  border-radius: 10px;
-  background: var(--cp-surface);
-  padding: 8px 10px;
-  margin-bottom: 8px;
+  border-radius: var(--cp-radius);
+  background: var(--cp-surface-soft);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.now-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--cp-primary-light);
+  color: var(--cp-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.now-text {
+  min-width: 0;
 }
 
 .now-title {
   margin: 0;
   font-size: 11px;
   line-height: 1.3;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--cp-text);
 }
 
@@ -419,10 +449,10 @@ button:hover:not(:disabled) {
   justify-content: space-between;
   gap: 8px;
   border: 1px solid var(--cp-border);
-  border-radius: 10px;
+  border-radius: var(--cp-radius);
   background: var(--cp-surface);
-  padding: 6px 10px;
-  margin-bottom: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
 }
 
 .mode-switch {
@@ -441,12 +471,13 @@ button:hover:not(:disabled) {
 }
 
 .mode-switch-ui {
-  width: 34px;
-  height: 18px;
+  width: 36px;
+  height: 20px;
   border-radius: 999px;
   background: #d1d5db;
   position: relative;
-  transition: background 150ms ease;
+  transition: background 200ms ease;
+  flex-shrink: 0;
 }
 
 .mode-switch-ui::after {
@@ -454,12 +485,12 @@ button:hover:not(:disabled) {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
   background: #ffffff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-  transition: transform 150ms ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 200ms ease;
 }
 
 .mode-switch input:checked + .mode-switch-ui {
@@ -487,19 +518,19 @@ button:hover:not(:disabled) {
   background: var(--cp-surface-soft);
   color: var(--cp-muted);
   font-size: 9px;
-  font-weight: 700;
-  padding: 2px 8px;
+  font-weight: 600;
+  padding: 3px 9px;
 }
 
 .mode-badge.live {
   border-color: #a7f3d0;
-  background: #ecfdf5;
+  background: var(--cp-success-light);
   color: #065f46;
 }
 
 .mode-badge.manual {
   border-color: #c7d2fe;
-  background: #eef2ff;
+  background: var(--cp-primary-light);
   color: #3730a3;
 }
 
@@ -520,45 +551,49 @@ button:hover:not(:disabled) {
   color: var(--cp-warning);
 }
 
-/* ── Disconnected overrides ── */
+/* ── Connected state tweaks ── */
+body.cp-connected .account-card.connected {
+  background: var(--cp-surface-soft);
+}
+
+/* ── Disconnected state ── */
+body.cp-disconnected {
+  width: 350px;
+  min-width: 350px;
+  max-width: 350px;
+  min-height: 380px;
+  overflow: visible;
+}
+
 body.cp-disconnected .head {
   margin-bottom: 10px;
 }
 
-body.cp-disconnected h1 {
-  font-size: 14px;
-}
-
-body.cp-disconnected .sub {
-  color: #475569;
-}
-
 body.cp-disconnected .wrap {
-  padding-bottom: 20px;
+  padding-bottom: 10px;
 }
 
 body.cp-disconnected.cp-collapsed .wrap {
   padding-bottom: 12px;
 }
 
-body.cp-disconnected .wrap::after {
+body.cp-disconnected::after {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: 10px;
-  width: 200px;
-  height: 115px;
-  transform: translateX(-50%);
-  border-radius: 14px;
+  left: 0;
+  right: 0;
+  width: 300px;
+  max-width: 100%;
+  height: 180px;
+  bottom: 0;
+  margin: 0 auto;
   background:
-    radial-gradient(circle at 30% 80%, rgba(85, 149, 255, 0.18) 0%, rgba(85, 149, 255, 0) 55%),
-    radial-gradient(circle at 75% 18%, rgba(120, 175, 255, 0.3) 0%, rgba(120, 175, 255, 0) 52%),
-    url("./images/download.png") center / contain no-repeat;
-  box-shadow: 0 6px 12px rgba(52, 89, 137, 0.1);
+    url("./images/download.png") center bottom / contain no-repeat;
   pointer-events: none;
+  z-index: 2;
 }
 
-body.cp-disconnected.cp-collapsed .wrap::after {
+body.cp-disconnected.cp-collapsed::after {
   content: none;
 }
 
@@ -571,20 +606,34 @@ body.cp-disconnected .status {
   color: #475569;
 }
 
+/* ── Collapsed ── */
+body.cp-collapsed {
+  min-height: 70px;
+}
+
+body.cp-collapsed .popup-content {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+
 /* ── Responsive ── */
 @media (max-width: 480px) {
   body {
     width: 100%;
+    min-width: 0;
     min-height: 280px;
   }
 
   body.cp-disconnected {
     width: 100%;
+    min-width: 0;
     min-height: 340px;
   }
 
   .wrap {
-    padding: 8px 10px;
+    padding: 10px 12px;
   }
 
   body.cp-disconnected .wrap {
@@ -595,7 +644,7 @@ body.cp-disconnected .status {
     padding-bottom: 10px;
   }
 
-  body.cp-disconnected .wrap::after {
+  body.cp-disconnected::after {
     width: 160px;
     height: 92px;
     bottom: 8px;
@@ -607,9 +656,12 @@ body.cp-disconnected .status {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
   .brand,
   .popup-content,
-  button {
+  button,
+  .mode-switch-ui,
+  .mode-switch-ui::after {
     transition: none !important;
   }
 }

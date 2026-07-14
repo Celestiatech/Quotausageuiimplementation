@@ -153,6 +153,18 @@ model User {
   emailTemplates       EmailTemplate[]
   marketingCampaigns   MarketingCampaign[]
   supportConversations SupportConversation[]
+  resume              UserResume?
+}
+
+model UserResume {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  resumeText   String?
+  parsedData   Json?
+  uploadedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model EmailOtp {
@@ -265,6 +277,7 @@ model AutoApplyJob {
   applications     Application[]
 
   @@index([userId, status, createdAt])
+  @@index([status, scheduledAt])
 }
 
 model AutoApplyJobLog {
@@ -299,6 +312,7 @@ model Application {
 
   @@index([userId, submittedAt])
   @@index([jobId, submittedAt])
+  @@index([userId, status])
 }
 
 model Subscription {

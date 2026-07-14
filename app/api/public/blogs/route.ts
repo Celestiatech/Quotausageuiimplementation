@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { fail, handleApiError, ok, parsePagination } from "src/lib/api";
 import { prisma } from "src/lib/prisma";
 import { STATIC_BLOG_POSTS } from "src/content/blogPosts";
+import { withCacheControl } from "src/lib/http-cache";
 
 export async function GET(req: Request) {
   const { page, limit, skip } = parsePagination(req, { defaultLimit: 12, maxLimit: 100 });
@@ -65,7 +66,7 @@ export async function GET(req: Request) {
       });
     }
 
-    return ok("Public blog posts fetched", {
+    return withCacheControl(ok("Public blog posts fetched", {
       posts,
       pagination: {
         page,
@@ -73,7 +74,7 @@ export async function GET(req: Request) {
         total,
         totalPages: Math.ceil(total / limit),
       },
-    });
+    }), { maxAge: 120, staleWhileRevalidate: 600 });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&

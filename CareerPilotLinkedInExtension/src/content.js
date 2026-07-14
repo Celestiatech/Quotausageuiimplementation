@@ -48,6 +48,7 @@ let runRemoteLocationKeywordCursor = 0;
 let lastRunStartedAt = null;
 let dailyLimitHandledRunId = "";
 let resumeChoiceCache = new Map();
+let aiAnswerCache = new Map();
 let lastBootstrapSettings = {};
 let lastPortalQuota = null;
 let knownAppliedJobIds = new Set();
@@ -58,6 +59,8 @@ let lastAutoSubmitAtMs = 0;
 let activeSubmitPaceDelayMs = 0;
 let activeSubmitPaceStartMs = 0;
 let warnedDefaultYearsFallback = false;
+let remoteSelectors = null;
+let remoteSelectorsVersion = 0;
 
 // ── Detailed debug log buffer ──────────────────────────────────────────
 const MAX_DEBUG_LOG_ENTRIES = 2000;
@@ -816,6 +819,49 @@ function getAllBySelectorList(selectors, root = document) {
     if (list.length) return Array.from(list);
   }
   return [];
+}
+
+async function loadRemoteSelectors() {
+  try {
+    const res = await sendMessage({ type: "CP_GET_SELECTORS" });
+    if (res?.ok && res.selectors) {
+      remoteSelectors = res.selectors;
+      remoteSelectorsVersion = res.version || 0;
+    }
+  } catch {}
+}
+
+function getS(key) {
+  if (remoteSelectors && remoteSelectors[key]) return remoteSelectors[key];
+  return null;
+}
+
+function checkSelectorHealth() {
+  const jobCards = getAllBySelectorList(getS("jobCards") || [
+    ".job-card-container",
+    "[data-occludable-job-id]",
+    "li.jobs-search-results__list-item",
+    ".jobs-search-results-list__list-item",
+    "li.scaffold-layout__list-item",
+  ]);
+  const hasJobCards = jobCards.length > 0;
+  const hasSearchInput = !!getBySelectorList(getS("searchInput") || [
+    "input.jobs-search-box__text-input",
+    "input[aria-label*='Search by']",
+    "input[placeholder*='Search']",
+  ]);
+  const hasApplyButton = !!getBySelectorList(getS("easyApplyButton") || [
+    "button.jobs-apply-button",
+    "button[aria-label*='Easy Apply']",
+    "button[aria-label*='Apply']",
+  ]);
+  return {
+    ok: hasJobCards || hasSearchInput,
+    hasJobCards,
+    hasSearchInput,
+    hasApplyButton,
+    jobCardCount: jobCards.length,
+  };
 }
 
 function safeQuerySelectorAll(root, selector, settings = null, context = "querySelectorAll") {
@@ -1738,6 +1784,10 @@ async function recordOutcome(outcomeType, data) {
 }
 
 async function requestAiAnswer(questionLabel, questionType, options = [], validationMessage = "") {
+  const cacheKey = `${normalizeLabel(questionLabel)}|${questionType}|${(options || []).map(normalizeLabel).sort().join(",")}`;
+  const cached = aiAnswerCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   const response = await sendMessage({
     type: "CP_AI_ANSWER",
     question: questionLabel,
@@ -1746,8 +1796,13 @@ async function requestAiAnswer(questionLabel, questionType, options = [], valida
     validationMessage,
     jobContext: currentJobContext
   });
-  if (!response?.ok) return "";
-  return String(response.answer || "").trim();
+  if (!response?.ok) {
+    aiAnswerCache.set(cacheKey, "");
+    return "";
+  }
+  const answer = String(response.answer || "").trim();
+  aiAnswerCache.set(cacheKey, answer);
+  return answer;
 }
 
 function buildAnswerPhrases(answer) {
@@ -3326,6 +3381,16 @@ async function handleChatCommand(input) {
   );
 }
 
+function ensurePanelConnected() {
+  if (!panelEl) {
+    panelEl = document.getElementById(PANEL_ID);
+  }
+  if (panelEl && !panelEl.isConnected) {
+    panelEl = document.getElementById(PANEL_ID);
+  }
+  return panelEl;
+}
+
 function ensurePanel() {
   const existing = document.getElementById(PANEL_ID);
   if (existing) {
@@ -3369,7 +3434,7 @@ function ensurePanel() {
     panel.classList.remove("cp-hidden");
     panel.style.zIndex = "2147483646";
   });
-  document.body.appendChild(toggle);
+  (document.body || document.documentElement).appendChild(toggle);
 
   const panel = document.createElement("div");
   panel.id = PANEL_ID;
@@ -3419,7 +3484,7 @@ function ensurePanel() {
       <button id="cp-chat-send">Send</button>
     </div>
   `;
-  document.body.appendChild(panel);
+  (document.body || document.documentElement).appendChild(panel);
   panelEl = panel;
   lastLogRenderSignature = "";
   panelEl.classList.remove("cp-hidden");
@@ -3677,6 +3742,7 @@ function buildLogRenderSignature(logs, state, settings) {
 }
 
 function renderState(state) {
+  ensurePanelConnected();
   if (!panelEl) return;
   panelEl.classList.remove("cp-hidden");
   if (state.running && panelPrefs.minimized) {
@@ -6582,6 +6648,7 @@ async function runAutomationLoop() {
           exhaustedSearchPageStreak = 0;
           clearSeenJobsForRun(lastRunStartedAt);
           resumeChoiceCache.clear();
+          aiAnswerCache.clear();
           runSearchTermSuccessCount = 0;
           resetRemoteLocationKeywordCursor();
           preparedRun = false;
@@ -6622,6 +6689,14 @@ async function runAutomationLoop() {
           "warn"
         );
         await botChat("Stuck on current page. Trying recovery strategy...", "warn");
+
+        const selectorHealth = checkSelectorHealth();
+        if (!selectorHealth.ok) {
+          await logLine(
+            `Selector health warning: cards=${selectorHealth.jobCardCount}, search=${selectorHealth.hasSearchInput}, apply=${selectorHealth.hasApplyButton}. LinkedIn layout may have changed.`,
+            "warn"
+          );
+        }
 
         // Recovery strategy:
         // 1) If on a job view/post-apply page, force back to search.
@@ -6665,6 +6740,10 @@ async function runAutomationLoop() {
       }
       await sleep(1200);
     }
+    if (guard >= 200) {
+      await logLine("Safety guard limit reached. Stopping run.", "warn");
+      await sendMessage({ type: "CP_STOP" });
+    }
   } catch (error) {
     await sendMessage({ type: "CP_SET_ERROR", error: error?.message || String(error) });
   } finally {
@@ -6697,9 +6776,13 @@ async function startStatePolling() {
       resetRemoteLocationKeywordCursor();
       clearSeenJobsForRun();
       resumeChoiceCache.clear();
+      aiAnswerCache.clear();
     }
     if (boot.state.running && !runningLoop) {
-      runAutomationLoop().catch(() => null);
+      runAutomationLoop().catch((err) => {
+        console.error("[CP] Automation loop crashed:", err);
+        sendMessage({ type: "CP_SET_ERROR", error: err?.message || String(err) });
+      });
     }
     await sleep(STATE_POLL_MS);
   }
@@ -6723,8 +6806,20 @@ if (!window.__CP_COPILOT_ACTIVE__) {
       logPanelDebug("hotkey-reset");
     }
   });
-  startStatePolling().catch(() => null);
+  loadRemoteSelectors().catch(() => {});
+  startStatePolling().catch((err) => {
+    console.error("[CP] State polling crashed:", err);
+  });
 } else {
   ensurePanel();
-  logPanelDebug("reused-script-instance");
+  if (!extensionContextAlive) {
+    extensionContextAlive = true;
+    logPanelDebug("context-reconnected");
+    loadRemoteSelectors().catch(() => {});
+    startStatePolling().catch((err) => {
+      console.error("[CP] State polling crashed:", err);
+    });
+  } else {
+    logPanelDebug("reused-script-instance");
+  }
 }

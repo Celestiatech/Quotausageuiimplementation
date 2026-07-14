@@ -30,7 +30,11 @@ export async function POST(req: NextRequest) {
       envAdminPassword === password;
 
     if (bootstrapMatchesEnv) {
+      const alreadyAdmin = admin && admin.role === "admin";
+      const passwordValid = admin ? await bcrypt.compare(envAdminPassword, admin.passwordHash) : false;
+
       if (!admin) {
+        console.warn("[CP] Admin bootstrap: creating new admin from env vars");
         admin = await prisma.user.create({
           data: {
             name: envAdminName,
@@ -43,18 +47,16 @@ export async function POST(req: NextRequest) {
             quotaResetTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
           },
         });
-      } else {
-        const passwordMatches = await bcrypt.compare(envAdminPassword, admin.passwordHash);
-        if (!passwordMatches || admin.role !== "admin") {
-          admin = await prisma.user.update({
-            where: { id: admin.id },
-            data: {
-              role: "admin",
-              passwordHash: await bcrypt.hash(envAdminPassword, 10),
-              name: admin.name || envAdminName,
-            },
-          });
-        }
+      } else if (!alreadyAdmin && !passwordValid) {
+        console.warn("[CP] Admin bootstrap: promoting existing user to admin from env vars");
+        admin = await prisma.user.update({
+          where: { id: admin.id },
+          data: {
+            role: "admin",
+            passwordHash: await bcrypt.hash(envAdminPassword, 10),
+            name: admin.name || envAdminName,
+          },
+        });
       }
     }
 

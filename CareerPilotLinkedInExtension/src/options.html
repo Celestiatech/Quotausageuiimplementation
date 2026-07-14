@@ -17,15 +17,51 @@
       </header>
 
       <form id="settings-form" class="card">
-        <h2>Safety</h2>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: Run Behavior                      -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>Run Behavior</h2>
+        <p class="note">Submit mode (Dry Run / Live) is controlled from the popup panel toggle.</p>
+
         <div class="row checks">
           <label class="check">
             <input id="liveModeAcknowledged" type="checkbox" />
             <span>I acknowledge live auto-submit risk</span>
           </label>
+          <label class="check">
+            <input id="easyApplyOnly" type="checkbox" />
+            <span>Enable Easy Apply filter</span>
+          </label>
+          <label class="check">
+            <input id="autoResumeOnAnswer" type="checkbox" />
+            <span>Auto Resume After Answer</span>
+          </label>
+          <label class="check">
+            <input id="runNonStop" type="checkbox" />
+            <span>Run non-stop cycles</span>
+          </label>
+          <label class="check">
+            <input id="pauseBeforeSubmit" type="checkbox" />
+            <span>Pause before submit</span>
+          </label>
+          <label class="check">
+            <input id="pauseAtFailedQuestion" type="checkbox" />
+            <span>Pause at failed question</span>
+          </label>
+          <label class="check">
+            <input id="overwritePreviousAnswers" type="checkbox" />
+            <span>Overwrite existing answers</span>
+          </label>
+          <label class="check">
+            <input id="followCompanies" type="checkbox" />
+            <span>Follow company on submit</span>
+          </label>
+          <label class="check">
+            <input id="debugMode" type="checkbox" />
+            <span>Debug Mode (verbose logs)</span>
+          </label>
         </div>
-
-        <h2>Run Limits</h2>
 
         <div class="row">
           <label>
@@ -45,30 +81,6 @@
 
         <div class="row checks">
           <label class="check">
-            <input id="easyApplyOnly" type="checkbox" />
-            <span>Enable Easy Apply filter</span>
-          </label>
-          <label class="check">
-            <input id="debugMode" type="checkbox" />
-            <span>Debug Mode (verbose logs)</span>
-          </label>
-          <label class="check">
-            <input id="dryRun" type="checkbox" />
-            <span>Dry Run (do not submit)</span>
-          </label>
-          <label class="check">
-            <input id="autoSubmit" type="checkbox" />
-            <span>Auto Submit</span>
-          </label>
-          <label class="check">
-            <input id="autoResumeOnAnswer" type="checkbox" />
-            <span>Auto Resume After Answer</span>
-          </label>
-          <label class="check">
-            <input id="runNonStop" type="checkbox" />
-            <span>Run non-stop cycles</span>
-          </label>
-          <label class="check">
             <input id="alternateSortBy" type="checkbox" />
             <span>Alternate sort each cycle</span>
           </label>
@@ -80,25 +92,12 @@
             <input id="stopDateCycleAt24hr" type="checkbox" />
             <span>Stop date cycle at Past 24 hours</span>
           </label>
-          <label class="check">
-            <input id="followCompanies" type="checkbox" />
-            <span>Follow company on submit</span>
-          </label>
-          <label class="check">
-            <input id="pauseBeforeSubmit" type="checkbox" />
-            <span>Pause before submit</span>
-          </label>
-          <label class="check">
-            <input id="pauseAtFailedQuestion" type="checkbox" />
-            <span>Pause at failed question</span>
-          </label>
-          <label class="check">
-            <input id="overwritePreviousAnswers" type="checkbox" />
-            <span>Overwrite existing answers</span>
-          </label>
         </div>
 
-        <h2>Search</h2>
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: Search Terms & Sorting             -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>Search Terms &amp; Sorting</h2>
 
         <label>
           <span>Search Terms (comma/newline separated)</span>
@@ -135,7 +134,10 @@
           </label>
         </div>
 
-        <h2>Advanced Search Filters</h2>
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: LinkedIn Advanced Filters          -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>LinkedIn Advanced Filters</h2>
 
         <label>
           <span>Experience Level (comma/newline separated)</span>
@@ -153,13 +155,23 @@
         </label>
 
         <label>
-          <span>Companies (comma/newline separated)</span>
-          <textarea id="companies" rows="2" placeholder="Google, Amazon"></textarea>
+          <span>Search Location (LinkedIn city/location box)</span>
+          <input id="searchLocation" type="text" placeholder="United States" />
         </label>
 
         <label>
           <span>Locations Filter (comma/newline separated)</span>
           <textarea id="filterLocations" rows="2" placeholder="United States, New York"></textarea>
+        </label>
+
+        <label>
+          <span>Companies (comma/newline separated)</span>
+          <textarea id="companies" rows="2" placeholder="Google, Amazon"></textarea>
+        </label>
+
+        <label>
+          <span>Job Titles Filter (comma/newline separated)</span>
+          <textarea id="jobTitles" rows="2" placeholder="Software Engineer"></textarea>
         </label>
 
         <label>
@@ -170,11 +182,6 @@
         <label>
           <span>Job Function (comma/newline separated)</span>
           <textarea id="jobFunction" rows="2" placeholder="Engineering"></textarea>
-        </label>
-
-        <label>
-          <span>Job Titles Filter (comma/newline separated)</span>
-          <textarea id="jobTitles" rows="2" placeholder="Software Engineer"></textarea>
         </label>
 
         <label>
@@ -202,11 +209,6 @@
           </label>
         </div>
 
-        <label>
-          <span>Search Location (LinkedIn city/location box)</span>
-          <input id="searchLocation" type="text" placeholder="United States" />
-        </label>
-
         <div class="row checks two-col">
           <label class="check">
             <input id="didMasters" type="checkbox" />
@@ -222,6 +224,11 @@
           <span>Current Experience (years, -1 disables cap)</span>
           <input id="currentExperience" type="number" min="-1" max="50" />
         </label>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: Company Filtering                  -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>Company Filtering</h2>
 
         <label>
           <span>Blacklisted Companies (comma separated)</span>
@@ -243,12 +250,32 @@
           <input id="badWords" type="text" placeholder="staffing, recruiter, internship" />
         </label>
 
-        <h2>Contact and Common Answers</h2>
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: Personal Information               -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>Personal Information</h2>
 
-        <label>
-          <span>Current City (for location questions)</span>
-          <input id="currentCity" type="text" placeholder="San Francisco" />
-        </label>
+        <div class="row">
+          <label>
+            <span>First Name</span>
+            <input id="firstName" type="text" placeholder="Jane" />
+          </label>
+          <label>
+            <span>Middle Name</span>
+            <input id="middleName" type="text" placeholder="A" />
+          </label>
+        </div>
+
+        <div class="row">
+          <label>
+            <span>Last Name</span>
+            <input id="lastName" type="text" placeholder="Doe" />
+          </label>
+          <label>
+            <span>Full Name (optional override)</span>
+            <input id="fullName" type="text" placeholder="Jane A Doe" />
+          </label>
+        </div>
 
         <label>
           <span>Contact Email</span>
@@ -265,6 +292,53 @@
             <input id="phoneCountryCode" type="text" placeholder="+1" />
           </label>
         </div>
+
+        <div class="row">
+          <label>
+            <span>LinkedIn URL</span>
+            <input id="linkedinUrl" type="url" placeholder="https://www.linkedin.com/in/you" />
+          </label>
+          <label>
+            <span>Website/Portfolio</span>
+            <input id="websiteUrl" type="url" placeholder="https://example.com" />
+          </label>
+        </div>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: Address                            -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>Address</h2>
+
+        <label>
+          <span>Current City (for location questions)</span>
+          <input id="currentCity" type="text" placeholder="San Francisco" />
+        </label>
+
+        <label>
+          <span>Street Address</span>
+          <input id="streetAddress" type="text" placeholder="123 Main St" />
+        </label>
+
+        <div class="row">
+          <label>
+            <span>State/Province</span>
+            <input id="stateRegion" type="text" placeholder="California" />
+          </label>
+          <label>
+            <span>Postal Code</span>
+            <input id="postalCode" type="text" placeholder="94105" />
+          </label>
+        </div>
+
+        <label>
+          <span>Country</span>
+          <input id="country" type="text" placeholder="United States" />
+        </label>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: Screening Answers                  -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>Screening Answers</h2>
 
         <div class="row">
           <label>
@@ -332,6 +406,11 @@
           </label>
         </div>
 
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: Salary & Compensation              -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>Salary &amp; Compensation</h2>
+
         <div class="row">
           <label>
             <span>Desired Salary</span>
@@ -354,65 +433,15 @@
           </label>
         </div>
 
-        <div class="row">
-          <label>
-            <span>LinkedIn URL</span>
-            <input id="linkedinUrl" type="url" placeholder="https://www.linkedin.com/in/you" />
-          </label>
-          <label>
-            <span>Website/Portfolio</span>
-            <input id="websiteUrl" type="url" placeholder="https://example.com" />
-          </label>
-        </div>
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SECTION: Professional Profile               -->
+        <!-- ═══════════════════════════════════════════ -->
+        <h2>Professional Profile</h2>
 
         <label>
           <span>Recent Employer</span>
           <input id="recentEmployer" type="text" placeholder="Acme Corp" />
         </label>
-
-        <div class="row">
-          <label>
-            <span>First Name</span>
-            <input id="firstName" type="text" placeholder="Jane" />
-          </label>
-          <label>
-            <span>Middle Name</span>
-            <input id="middleName" type="text" placeholder="A" />
-          </label>
-        </div>
-
-        <div class="row">
-          <label>
-            <span>Last Name</span>
-            <input id="lastName" type="text" placeholder="Doe" />
-          </label>
-          <label>
-            <span>Full Name (optional override)</span>
-            <input id="fullName" type="text" placeholder="Jane A Doe" />
-          </label>
-        </div>
-
-        <div class="row">
-          <label>
-            <span>Street Address</span>
-            <input id="streetAddress" type="text" placeholder="123 Main St" />
-          </label>
-          <label>
-            <span>State/Province</span>
-            <input id="stateRegion" type="text" placeholder="California" />
-          </label>
-        </div>
-
-        <div class="row">
-          <label>
-            <span>Postal Code</span>
-            <input id="postalCode" type="text" placeholder="94105" />
-          </label>
-          <label>
-            <span>Country</span>
-            <input id="country" type="text" placeholder="United States" />
-          </label>
-        </div>
 
         <label>
           <span>LinkedIn Headline</span>
@@ -429,6 +458,9 @@
           <textarea id="coverLetter" rows="4" placeholder="Cover letter text..."></textarea>
         </label>
 
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- Save Button                                 -->
+        <!-- ═══════════════════════════════════════════ -->
         <div class="actions">
           <button type="submit">Save Settings</button>
           <span id="status"></span>

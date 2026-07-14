@@ -1,6 +1,17 @@
 function sendMessage(message) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(message, (res) => resolve(res || { ok: false }));
+    try {
+      chrome.runtime.sendMessage(message, (res) => {
+        const err = chrome.runtime?.lastError;
+        if (err) {
+          resolve({ ok: false, error: err.message || "Extension unavailable" });
+          return;
+        }
+        resolve(res || { ok: false });
+      });
+    } catch (e) {
+      resolve({ ok: false, error: e?.message || "Extension unavailable" });
+    }
   });
 }
 
@@ -146,8 +157,6 @@ function readForm() {
 
     easyApplyOnly: getChecked("easyApplyOnly"),
     debugMode: getChecked("debugMode"),
-    dryRun: getChecked("dryRun"),
-    autoSubmit: getChecked("autoSubmit"),
     autoResumeOnAnswer: getChecked("autoResumeOnAnswer"),
     runNonStop: getChecked("runNonStop"),
     alternateSortBy: getChecked("alternateSortBy"),

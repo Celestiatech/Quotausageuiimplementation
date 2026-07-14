@@ -141,6 +141,40 @@ void chrome.storage.local.get([PORTAL_ORIGIN_STATE_KEY, PORTAL_LAST_SYNC_SNAPSHO
   lastPortalSyncSnapshot = lastSync;
 }).catch(() => {});
 
+const SELECTORS_CACHE_KEY = "cpRemoteSelectors";
+const SELECTORS_FETCH_INTERVAL_MS = 3600000;
+
+async function fetchRemoteSelectors() {
+  try {
+    const origin = getPortalOrigin();
+    if (!origin) return null;
+    const res = await fetchWithTimeout(`${origin}/api/public/extension-selectors`, {}, 10000);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json?.data?.selectors) {
+      await chrome.storage.local.set({ [SELECTORS_CACHE_KEY]: json.data });
+      return json.data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function getRemoteSelectors() {
+  try {
+    const snap = await chrome.storage.local.get(SELECTORS_CACHE_KEY);
+    const cached = snap?.[SELECTORS_CACHE_KEY];
+    if (cached && cached.selectors && cached.version) {
+      const age = Date.now() - new Date(cached.updatedAt || 0).getTime();
+      if (age < SELECTORS_FETCH_INTERVAL_MS) return cached;
+    }
+  } catch {}
+  return fetchRemoteSelectors();
+}
+
+getRemoteSelectors();
+
 async function notifyDashboardTabs(payload) {
   try {
     const origin = getPortalOrigin();
@@ -443,20 +477,12 @@ async function refreshPortalScreeningAnswersIntoSettings() {
 let portalAnswerPollTimer = null;
 function ensurePortalAnswerPoller() {
   if (portalAnswerPollTimer) return;
-  portalAnswerPollTimer = setInterval(async () => {
-    try {
-      const snap = await chrome.storage.local.get("cpPendingQuestions");
-      const pending = Array.isArray(snap?.cpPendingQuestions) ? snap.cpPendingQuestions : [];
-      if (!pending.length) {
-        clearInterval(portalAnswerPollTimer);
-        portalAnswerPollTimer = null;
-        return;
-      }
-      await refreshPortalScreeningAnswersIntoSettings();
-    } catch {
-      // ignore
-    }
-  }, 8000);
+  try {
+    chrome.alarms.create("cpPortalAnswerPoll", { periodInMinutes: 0.15 });
+    portalAnswerPollTimer = true;
+  } catch {
+    // fallback: ignore if alarms permission not available
+  }
 }
 
 async function reportPendingQuestionsToPortal(questions) {
@@ -1889,9 +1915,31 @@ chrome.runtime.onInstalled.addListener(async () => {
   });
 });
 
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== "cpPortalAnswerPoll") return;
+  try {
+    const snap = await chrome.storage.local.get("cpPendingQuestions");
+    const pending = Array.isArray(snap?.cpPendingQuestions) ? snap.cpPendingQuestions : [];
+    if (!pending.length) {
+      chrome.alarms.clear("cpPortalAnswerPoll");
+      portalAnswerPollTimer = null;
+      return;
+    }
+    await refreshPortalScreeningAnswersIntoSettings();
+  } catch {
+    // ignore
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (!message || !message.type) return;
+
+    if (message.type === "CP_GET_SELECTORS") {
+      const selectors = await getRemoteSelectors();
+      sendResponse({ ok: true, selectors: selectors?.selectors || null, version: selectors?.version || 0 });
+      return;
+    }
 
     if (message.type === "CP_GET_BOOTSTRAP") {
       const dailyCap = await getDailyCapState();

@@ -1,11 +1,13 @@
 import { ok } from "src/lib/api";
 import { requireAuth } from "src/lib/guards";
 import { getWalletSummary } from "src/lib/hires";
+import { cacheGetOrSet } from "src/lib/cache";
 
 export async function GET() {
   const authResult = await requireAuth();
   if ("error" in authResult) return authResult.error;
-  const summary = await getWalletSummary(authResult.auth.user.id);
+  const userId = authResult.auth.user.id;
+  const summary = await cacheGetOrSet(`user:quota:${userId}`, 30, () => getWalletSummary(userId));
   const quotaTotal = Math.max(1, Number(summary.user.dailyHireCap || 3));
   const quotaUsedRaw = Math.max(0, Number(summary.user.dailyHireUsed || 0));
   const quotaUsed = Math.min(quotaTotal, quotaUsedRaw);

@@ -12,7 +12,7 @@ function createPrisma() {
   const adapter = new PrismaNeon(config);
   return new PrismaClient({
     adapter,
-    log: ["error", "warn"],
+    log: process.env.NODE_ENV === "production" ? ["error"] : ["error", "warn"],
   });
 }
 
@@ -20,3 +20,9 @@ export const prisma =
   globalForPrisma.prisma ?? createPrisma();
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+export async function closePrisma() {
+  try {
+    await prisma.$disconnect();
+  } catch {}
+}

@@ -4,9 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AutoApply CV Copilot</title>
+    <style>html,body,body.cp-connected,body.cp-disconnected{width:350px;min-width:350px;max-width:350px}body{margin:0;overflow:hidden}.popup-content{opacity:0}</style>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
+    <div class="accent-bar"></div>
     <main class="wrap">
       <header class="head">
         <div
@@ -19,8 +21,8 @@
           title="Hide popup content"
         >
           <img class="brand-logo" src="../icons/icon128.png" alt="AutoApply CV" />
-          <div>
-            <h1>AutoApply CV Copilot</h1>
+          <div class="brand-text">
+            <h1>AutoApply CV</h1>
             <p class="sub">LinkedIn job assistant</p>
           </div>
         </div>
@@ -31,6 +33,7 @@
         <section id="accountCard" class="account-card disconnected">
           <div class="account-head">
             <div class="account-title-wrap">
+              <span class="account-dot"></span>
               <strong id="accountTitle">Account</strong>
             </div>
             <span id="accountBadge" class="account-badge disconnected">Disconnected</span>
@@ -39,14 +42,22 @@
             Sign in to connect your profile and enable auto-apply controls.
           </p>
           <div class="actions account-actions">
-            <button id="accountAction" class="btn-primary">Sign in to AutoApply CV</button>
+            <button id="accountAction" class="btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+              <span id="accountActionText">Sign in to AutoApply CV</span>
+            </button>
           </div>
         </section>
 
         <section id="runArea">
           <section class="now-card">
-            <p id="nowTitle" class="now-title">Loading run state...</p>
-            <p id="nowDetail" class="now-detail">Connecting to extension service worker.</p>
+            <div class="now-icon" id="nowIcon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="now-text">
+              <p id="nowTitle" class="now-title">Loading run state...</p>
+              <p id="nowDetail" class="now-detail">Connecting to extension service worker.</p>
+            </div>
           </section>
 
           <div class="mode-control">
@@ -59,9 +70,18 @@
           </div>
 
           <div class="actions primary">
-            <button id="start">Start</button>
-            <button id="pause">Pause</button>
-            <button id="stop">Stop</button>
+            <button id="start" class="btn-start">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Start
+            </button>
+            <button id="pause" class="btn-pause">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              Pause
+            </button>
+            <button id="stop" class="btn-stop">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+              Stop
+            </button>
           </div>
         </section>
 

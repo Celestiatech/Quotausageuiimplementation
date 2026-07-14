@@ -1,16 +1,29 @@
 function sendMessage(message) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(message, (res) => resolve(res || { ok: false }));
+    try {
+      chrome.runtime.sendMessage(message, (res) => {
+        const err = chrome.runtime?.lastError;
+        if (err) {
+          resolve({ ok: false, error: err.message || "Extension unavailable" });
+          return;
+        }
+        resolve(res || { ok: false });
+      });
+    } catch (e) {
+      resolve({ ok: false, error: e?.message || "Extension unavailable" });
+    }
   });
 }
 
 const JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search/?f_AL=true";
 const PROD_BASE_URL = "https://autoapplycv.in";
-const DEV_BASE_URL = "http://localhost:3001";
+const DEV_BASE_URL = "http://localhost:3000";
 const REMOTE_BASE_CANDIDATES = [
   "https://autoapplycv.in",
   "https://www.autoapplycv.in",
   "https://autoapplycv.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:3001",
 ];
 let accountConnected = false;
 let portalBaseUrl = PROD_BASE_URL;
@@ -45,6 +58,8 @@ async function resolvePortalBaseUrl() {
       "https://autoapplycv.in/*",
       "https://www.autoapplycv.in/*",
       "https://autoapplycv.vercel.app/*",
+      "http://localhost:3000/*",
+      "http://127.0.0.1:3000/*",
       "http://localhost:3001/*",
       "http://127.0.0.1:3001/*",
     ] });
@@ -89,6 +104,8 @@ async function detectSignedInUserFromTabs() {
     "https://autoapplycv.in/*",
     "https://www.autoapplycv.in/*",
     "https://autoapplycv.vercel.app/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
     "http://localhost:3001/*",
     "http://127.0.0.1:3001/*",
   ];
@@ -135,7 +152,7 @@ async function detectSignedInUserFromTabs() {
 
 async function detectSignedInUserOnOrigin(origin) {
   const base = String(origin || "").trim().replace(/\/+$/, "");
-  if (!base) return null;
+  if (!base) return { ok: false, checked: false };
   try {
     const res = await fetch(`${base}/api/auth/me`, {
       method: "GET",
@@ -144,30 +161,37 @@ async function detectSignedInUserOnOrigin(origin) {
     });
     const data = await res.json().catch(() => null);
     const user = data?.data?.user || data?.user || null;
-    if (!res.ok || !data?.success || !user?.email) return null;
+    if (!res.ok || !data?.success || !user?.email) return { ok: false, checked: true };
     return {
       ok: true,
+      checked: true,
       email: String(user.email || ""),
       name: String(user.name || ""),
       origin: base,
     };
   } catch {
-    return null;
+    return { ok: false, checked: false };
   }
 }
 
-function renderAccountState(settings, sessionUser) {
+function renderAccountState(settings, sessionUser, sessionCheckRan) {
   const card = document.getElementById("accountCard");
   const title = document.getElementById("accountTitle");
   const badge = document.getElementById("accountBadge");
   const text = document.getElementById("accountText");
   const action = document.getElementById("accountAction");
+  const actionText = document.getElementById("accountActionText");
   const runArea = document.getElementById("runArea");
   const body = document.body;
 
   const connectedFromSettings = isAccountConnected(settings || {});
   const connectedFromSession = Boolean(sessionUser?.ok && sessionUser?.email);
-  accountConnected = connectedFromSettings || connectedFromSession;
+
+  if (sessionCheckRan) {
+    accountConnected = connectedFromSession;
+  } else {
+    accountConnected = connectedFromSettings;
+  }
   if (body) {
     body.classList.toggle("cp-connected", accountConnected);
     body.classList.toggle("cp-disconnected", !accountConnected);
@@ -189,7 +213,7 @@ function renderAccountState(settings, sessionUser) {
         ? `Signed in as ${contactEmail}. You can run auto-apply now.`
         : "Your account is connected. You can run auto-apply now.";
     }
-    action.textContent = "Open AutoApply CV Dashboard";
+    if (actionText) actionText.textContent = "Open AutoApply CV Dashboard";
     action.dataset.action = "dashboard";
     action.classList.add("btn-primary");
     if (runArea) runArea.style.display = "block";
@@ -201,7 +225,7 @@ function renderAccountState(settings, sessionUser) {
     badge.textContent = "Disconnected";
     title.textContent = "Sign in required";
     text.textContent = "Sign in to AutoApply CV to continue.";
-    action.textContent = "Sign in to AutoApply CV";
+    if (actionText) actionText.textContent = "Sign in to AutoApply CV";
     action.dataset.action = "login";
     action.classList.add("btn-primary");
     if (runArea) runArea.style.display = "none";
@@ -410,12 +434,21 @@ async function refresh() {
     sendMessage({ type: "CP_LOAD_SETTINGS" }),
     detectSignedInUserOnOrigin(portalBaseUrl),
   ]);
-  const sessionUser = selectedOriginSession || await detectSignedInUserFromTabs();
+  let sessionUser;
+  let sessionCheckRan = Boolean(selectedOriginSession?.checked);
+  if (selectedOriginSession?.ok) {
+    sessionUser = selectedOriginSession;
+  } else if (selectedOriginSession?.checked) {
+    sessionUser = null;
+  } else {
+    sessionUser = await detectSignedInUserFromTabs();
+    sessionCheckRan = sessionUser !== null;
+  }
   if (!boot.ok) {
     setStatus("Extension service unavailable.", "error");
     return;
   }
-  renderAccountState(loadedSettings?.settings || {}, sessionUser);
+  renderAccountState(loadedSettings?.settings || {}, sessionUser, sessionCheckRan);
   if (!accountConnected) {
     setStatus("Sign in to AutoApply CV to enable run controls.", "warn");
     return;
@@ -572,6 +605,12 @@ async function init() {
   bindPopupToggle();
   await loadCollapsedPreference();
   await refresh();
+  const content = document.querySelector(".popup-content");
+  if (content) content.style.opacity = "1";
 }
 
-init().catch(() => setStatus("Unavailable", "error"));
+init().catch(() => {
+  setStatus("Unavailable", "error");
+  const content = document.querySelector(".popup-content");
+  if (content) content.style.opacity = "1";
+});

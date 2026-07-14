@@ -7,9 +7,17 @@ import { getWalletSummary } from "src/lib/hires";
 import { enqueueJob, isQueueConfigured } from "src/lib/queue";
 import { writeAuditLog } from "src/lib/audit";
 import { processAutoApplyJob } from "src/lib/worker";
+import { enforceRateLimit, rateLimitKey } from "src/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const rl = await enforceRateLimit({
+      key: rateLimitKey(req, "auto_apply.create"),
+      limit: 5,
+      windowMs: 60_000,
+    });
+    if (rl) return rl;
+
     const authResult = await requireAuth();
     if ("error" in authResult) return authResult.error;
     const payload = createJobSchema.parse(await req.json());

@@ -240,7 +240,6 @@ export async function consumeHiresForApplies(input: {
 
   const user = await ensureHireWindow(input.userId);
   if (user.plan === "pro") {
-    // Pro is subscription-unlimited: do not debit paid Hires.
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -250,6 +249,7 @@ export async function consumeHiresForApplies(input: {
     });
     return { ok: true as const, consumed: input.count, sourceBreakdown: { free: input.count, paid: 0 } };
   }
+
   const freeRemaining = getFreeRemaining(user);
   const paidNeeded = Math.max(0, input.count - freeRemaining);
   if (user.hireBalance < paidNeeded) {
@@ -268,22 +268,29 @@ export async function consumeHiresForApplies(input: {
 
     const freeConsumed = Math.min(freeNow, input.count);
     const nextBalance = refreshed.hireBalance - paidNow;
-    const updated = await tx.user.update({
-      where: { id: refreshed.id },
+
+    const updated = await tx.user.updateMany({
+      where: {
+        id: refreshed.id,
+        hireBalance: { gte: paidNow },
+      },
       data: {
         hireBalance: nextBalance,
         hireSpent: { increment: input.count },
-        // Track only free daily consumption against the daily cap.
         dailyHireUsed: { increment: freeConsumed },
       },
     });
 
+    if (updated.count === 0) {
+      return { ok: false as const, reason: "INSUFFICIENT_HIRES" as const };
+    }
+
     if (paidNow > 0) {
       await createTxnInTx(tx, {
-        userId: updated.id,
+        userId: refreshed.id,
         type: "debit_apply",
         amount: -paidNow,
-        balanceAfter: updated.hireBalance,
+        balanceAfter: nextBalance,
         referenceType: input.referenceType,
         referenceId: input.referenceId,
         metadataJson: {

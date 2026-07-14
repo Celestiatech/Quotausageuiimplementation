@@ -5,9 +5,17 @@ import { fail, handleApiError, ok } from "src/lib/api";
 import { parseResumeFile } from "src/lib/resume-parser";
 import { parseResumeWithAi } from "src/lib/resume-ai-parser";
 import { writeAuditLog } from "src/lib/audit";
+import { enforceRateLimit, rateLimitKey } from "src/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const rl = await enforceRateLimit({
+      key: rateLimitKey(req, "resume.upload"),
+      limit: 3,
+      windowMs: 300_000,
+    });
+    if (rl) return rl;
+
     const authResult = await requireAuth();
     if ("error" in authResult) return authResult.error;
 
@@ -56,17 +64,32 @@ export async function POST(req: NextRequest) {
       } : {}),
     };
 
+    const userId = authResult.auth.user.id;
+
     await prisma.user.update({
-      where: { id: authResult.auth.user.id },
+      where: { id: userId },
       data: {
         resumeFileName: file.name,
         resumeFilePath: null,
+      },
+    });
+
+    await prisma.userResume.upsert({
+      where: { userId },
+      update: {
         resumeText: parsed.text.slice(0, 100000),
+        parsedData: mergedExtracted,
+        uploadedAt: new Date(),
+      },
+      create: {
+        userId,
+        resumeText: parsed.text.slice(0, 100000),
+        parsedData: mergedExtracted,
       },
     });
 
     await writeAuditLog({
-      actorUserId: authResult.auth.user.id,
+      actorUserId: userId,
       action: "user.resume_uploaded",
       targetType: "resume",
       metadataJson: {

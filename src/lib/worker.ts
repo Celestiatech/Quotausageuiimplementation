@@ -3,6 +3,7 @@ import { decryptText } from "./security";
 import { prisma } from "./prisma";
 import { consumeHiresForApplies, getWalletSummary, refundHires } from "./hires";
 import { runAutoApply } from "./auto-apply-adapter";
+import { enqueueNotification } from "./notifications";
 
 async function addJobLog(
   jobId: string,
@@ -156,6 +157,14 @@ export async function processAutoApplyJob(jobId: string) {
     await addJobLog(job.id, "complete", "Job completed successfully", "info", {
       applicationCount: result.applications.length,
     });
+
+    await enqueueNotification({
+      userId: job.userId,
+      type: "job_applied",
+      title: "Auto-Apply Run Complete",
+      body: `Your job run submitted ${result.applications.length} application${result.applications.length === 1 ? "" : "s"}. Check your dashboard for details.`,
+      data: { jobId: job.id, applicationCount: result.applications.length },
+    });
   } catch (error) {
     if (reservedCount > 0) {
       await refundHires({
@@ -184,5 +193,15 @@ export async function processAutoApplyJob(jobId: string) {
       },
     });
     await addJobLog(job.id, "error", message, "error", { attempts, maxAttempts, canRetry });
+
+    if (!canRetry) {
+      await enqueueNotification({
+        userId: job.userId,
+        type: "job_failed",
+        title: "Auto-Apply Run Failed",
+        body: `Your job run failed after ${attempts} attempt${attempts === 1 ? "" : "s"}. ${message}`,
+        data: { jobId: job.id, error: message },
+      });
+    }
   }
 }
