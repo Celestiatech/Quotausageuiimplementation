@@ -182,22 +182,16 @@ export async function getAuthUserFromRequest() {
   if (accessToken) {
     try {
       const payload = verifyAccessToken(accessToken);
-      const session = await prisma.session.findUnique({
-        where: { id: payload.sessionId },
-        include: { user: true },
-      });
-      if (session && session.status === "active" && session.expiresAt.getTime() > Date.now()) {
-        return {
-          sessionId: session.id,
-          user: {
-            id: payload.id,
-            email: payload.email,
-            role: payload.role,
-          } as AuthUser,
-        };
-      }
+      return {
+        sessionId: payload.sessionId,
+        user: {
+          id: payload.id,
+          email: payload.email,
+          role: payload.role,
+        } as AuthUser,
+      };
     } catch {
-      // Access token may be expired/invalid; try refresh session below.
+      // Access token expired or invalid — try refresh below.
     }
   }
 

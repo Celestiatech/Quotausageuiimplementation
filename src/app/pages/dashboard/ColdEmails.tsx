@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -18,7 +18,6 @@ import {
   Copy,
   Check,
   ExternalLink,
-  X,
   Download,
   Play,
   Square,
@@ -26,12 +25,11 @@ import {
   Briefcase,
   Hash,
   ChevronDown,
-  Eye,
   MailCheck,
   Users,
   Zap,
+  FileText,
 } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +39,7 @@ interface CollectedHR {
   title: string;
   company: string;
   email: string;
+  phone?: string;
   category: string;
   linkedinUrl: string;
   sourcePostUrl?: string;
@@ -52,95 +51,142 @@ interface EmailTemplate {
   name: string;
   subject: string;
   textContent: string;
-  htmlContent?: string;
   category: string;
 }
 
-interface SendRecord {
-  id: string;
-  email: string;
-  name: string;
-  company: string;
-  subject: string;
-  sentAt: string;
-  status: "sent" | "failed";
-  error?: string;
-}
-
-type Tab = "collect" | "list" | "send";
+type Tab = "collect" | "list" | "templates";
 
 // ─── Built-in Cold Email Templates ────────────────────────────────────────────
 
 const BUILTIN_TEMPLATES: EmailTemplate[] = [
   {
     id: "cold-short",
-    name: "Short & Catchy",
-    subject: "Quick intro — open to {role} roles",
+    name: "Impact-driven",
+    subject: "{role} with {skills} — quick intro for {company}",
     category: "cold-outreach",
     textContent: `Hi {name},
 
-I came across {company} and I'm genuinely impressed by what you're building.
+I came across {company} and I'm genuinely impressed by what you're building. I'm reaching out because I believe my background in {field} could be a strong fit for your team.
 
-I'm currently exploring {role} opportunities and thought I'd reach out directly. I have experience in [your skills] and would love to contribute to your team.
+About me:
+• {years}+ years of experience in {field}
+• Core strengths: {skills}
+• Based in {location}
 
-Would you be open to a quick 10-minute call this week?
+I'd love to jump on a quick 10-minute call this week to discuss how I can contribute to {company}'s success.
 
 Best,
-{senderName}`,
-    htmlContent: "",
+{senderName}
+{senderEmail} | {senderPhone}
+{senderLinkedin}`,
   },
   {
     id: "value-based",
-    name: "Value-Based (LinkedIn Style)",
-    subject: "Interested in joining {company} — {role}",
+    name: "Value-First",
+    subject: "Adding value at {company} as a {role}",
     category: "cold-outreach",
     textContent: `Hi {name},
 
-I noticed {company} is hiring for {role} roles — I've been following your work and the direction you're heading looks exciting.
+I've been following {company}'s recent work and I'm excited about the direction you're heading. Your focus on innovation aligns perfectly with my experience.
 
-A bit about me: [2–3 bullet points of your top achievements].
+Here's what I bring to the table:
+• {years}+ years of experience in {field}
+• Skilled in: {skills}
+• Track record of delivering {results}
+• {location}-based, ready to hit the ground running
 
-I'd love to learn more about the team and see if there's a fit. Happy to share my resume or portfolio anytime.
+I'd love the opportunity to share my portfolio and discuss how I can contribute to your upcoming projects.
 
-Thanks for reading,
-{senderName}`,
-    htmlContent: "",
+Looking forward to connecting,
+{senderName}
+{senderEmail}
+{senderLinkedin}`,
   },
   {
     id: "high-converting",
-    name: "High-Converting (Formal)",
-    subject: "Application: {role} at {company}",
+    name: "Professional (Formal)",
+    subject: "Application for {role} position at {company}",
     category: "cold-outreach",
     textContent: `Dear {name},
 
-I am writing to express my strong interest in {role} opportunities at {company}. With [X years] of experience in [your field], I have consistently delivered [specific result].
+I am writing to express my strong interest in the {role} role at {company}. With {years} years of comprehensive experience in {field}, I have a proven track record of delivering measurable results.
 
-I have attached my resume for your review. I would welcome the chance to discuss how my background aligns with your team's goals.
+My expertise spans:
+• {skills}
+• {years}+ years delivering {results}
+• Strong background in {field}
+
+I would welcome the opportunity to discuss how my experience aligns with {company}'s objectives. I've attached my resume for your review and am available for an interview at your convenience.
 
 Thank you for your time and consideration.
 
 Sincerely,
-{senderName}`,
-    htmlContent: "",
+{senderName}
+{senderEmail} | {senderPhone}
+{senderLinkedin} | {senderPortfolio}`,
   },
   {
     id: "remote-us-ca",
-    name: "Remote (US / Canada HR)",
-    subject: "Remote {role} candidate — available immediately",
+    name: "Remote-Ready (US/CA)",
+    subject: "Remote {role} — {years}+ years, available immediately",
     category: "cold-outreach",
     textContent: `Hi {name},
 
-I'm reaching out because {company} caught my attention and I'm actively looking for remote {role} positions.
+I noticed {company} is actively growing and I'm reaching out because I believe my skills as a {role} would be a great addition to your team.
 
-I'm based in [your location] and have been working remotely for [X years], delivering results across time zones with minimal friction.
+I am a remote-first professional based in {location} with {years}+ years of experience in {field}. I've successfully collaborated across time zones and delivered high-impact results:
 
-Key strengths: [skill 1] · [skill 2] · [skill 3].
+• Technical skills: {skills}
+• Proven track record: {results}
+• Fully equipped for remote work with a reliable setup
 
-Would love to connect — even a brief chat would be great!
+I'd love to connect briefly to discuss how I can help {company} achieve its goals.
 
-Cheers,
-{senderName}`,
-    htmlContent: "",
+Best regards,
+{senderName}
+{senderEmail}
+{senderLinkedin}`,
+  },
+  {
+    id: "bold-direct",
+    name: "Bold & Direct",
+    subject: "{role} — I can help {company} scale",
+    category: "cold-outreach",
+    textContent: `Hi {name},
+
+I'll keep this brief: I'm a {role} with {years}+ years in {field} and a strong track record of delivering results. I've been watching {company} and I know I can contribute immediately.
+
+Key highlights:
+• {skills}
+• {years}+ years shipping production-grade work
+• Based in {location} — remote or onsite
+
+I'm not sending a generic application — I genuinely believe I can move the needle for {company}. Let's set up a 10-minute call this week.
+
+Let's talk,
+{senderName}
+{senderEmail} | {senderPhone}
+{senderLinkedin}`,
+  },
+  {
+    id: "storytelling",
+    name: "Storytelling",
+    subject: "My journey in {field} — and why {company} caught my eye",
+    category: "cold-outreach",
+    textContent: `Hi {name},
+
+I'll be honest — I don't usually reach out to companies cold. But when I came across {company}, something clicked.
+
+I've spent the last {years} years building my career in {field}, working on challenging problems and delivering real results. My core strengths — {skills} — have helped me ship products that users love and stakeholders trust.
+
+I'm currently exploring {role} opportunities and would love to see if my background aligns with what {company} needs next. I've attached my portfolio for a deeper look.
+
+Would you have 10 minutes this week for a quick chat?
+
+Warmly,
+{senderName}
+{senderEmail}
+{senderLinkedin} | {senderPortfolio}`,
   },
 ];
 
@@ -174,171 +220,189 @@ const KEYWORD_SUGGESTIONS = [
 
 const MAX_CONTACTS = 100;
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function loadContacts(): CollectedHR[] {
+  try {
+    const saved = localStorage.getItem("cold_emails_contacts");
+    if (saved) return JSON.parse(saved);
+  } catch { /* ignore */ }
+  return [];
+}
+
+function saveContacts(contacts: CollectedHR[]) {
+  localStorage.setItem("cold_emails_contacts", JSON.stringify(contacts));
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ColdEmails() {
-  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("collect");
 
   // ── Collect Tab State ──
-  const [keyword, setKeyword] = useState("we are hiring");
-  const [category, setCategory] = useState("");
+  const [keyword, setKeyword] = useState("we are hiring software engineer");
+  const [timeRange, setTimeRange] = useState("any");
   const [isCollecting, setIsCollecting] = useState(false);
-  const [collectProgress, setCollectProgress] = useState(0);
   const [collectStatus, setCollectStatus] = useState("");
-  const stopRef = useRef(false);
+
+  // ── Extension state ──
+  const [extensionConnected, setExtensionConnected] = useState(false);
+  const [extensionChecking, setExtensionChecking] = useState(true);
+  const [extCount, setExtCount] = useState(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const detectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── List Tab State ──
-  const [contacts, setContacts] = useState<CollectedHR[]>([]);
+  const [contacts, setContacts] = useState<CollectedHR[]>(() => loadContacts());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [newContact, setNewContact] = useState({
-    name: "", title: "", company: "", email: "", category: "", linkedinUrl: "",
+    name: "", title: "", company: "", email: "", phone: "", category: "", linkedinUrl: "",
   });
 
-  // ── Send Tab State ──
-  const [templates, setTemplates] = useState<EmailTemplate[]>(BUILTIN_TEMPLATES);
-  const [selectedTemplateId, setSelectedTemplateId] = useState(BUILTIN_TEMPLATES[0].id);
-  const [customSubject, setCustomSubject] = useState("");
-  const [customBody, setCustomBody] = useState("");
-  const [senderName, setSenderName] = useState(user?.name ?? "");
-  const [role, setRole] = useState("");
-  const [sendRecords, setSendRecords] = useState<SendRecord[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const [sendProgress, setSendProgress] = useState(0);
-  const [sendStatus, setSendStatus] = useState("");
-  const [previewOpen, setPreviewOpen] = useState(false);
+  // ── Templates tab ──
+  const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
 
-  // ── Load saved contacts from localStorage ──
+  // ── Persist contacts ──
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("cold_emails_contacts");
-      if (saved) setContacts(JSON.parse(saved));
-      const savedRecords = localStorage.getItem("cold_emails_sent");
-      if (savedRecords) setSendRecords(JSON.parse(savedRecords));
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("cold_emails_contacts", JSON.stringify(contacts));
+    saveContacts(contacts);
   }, [contacts]);
 
-  useEffect(() => {
-    localStorage.setItem("cold_emails_sent", JSON.stringify(sendRecords));
-  }, [sendRecords]);
-
-  // ── Fetch DB templates ──
-  useEffect(() => {
-    fetch("/api/user/email-templates", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data?.templates) && data.templates.length > 0) {
-          setTemplates([...BUILTIN_TEMPLATES, ...data.templates]);
+  // ── hroRpc ─────────────────────────────────────────────────────────────────
+  const hroRpc = useCallback((type: string, extra?: Record<string, unknown>, timeoutMs = 5000): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const _id = `hro_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const timer = setTimeout(() => {
+        window.removeEventListener("message", onRes);
+        reject(new Error("timeout"));
+      }, timeoutMs);
+      function onRes(event: MessageEvent) {
+        const d = event.data;
+        if (d?._src === "hro_bridge" && d?.type === "HRO_RES" && d?._id === _id) {
+          clearTimeout(timer);
+          window.removeEventListener("message", onRes);
+          if (d.error) reject(new Error(d.error));
+          else resolve(d.data);
         }
-      })
-      .catch(() => {});
+      }
+      window.addEventListener("message", onRes);
+      window.postMessage({ _src: "webapp", type, _id, ...extra }, "*");
+    });
   }, []);
 
-  // ── Sync template body when selection changes ──
-  useEffect(() => {
-    const tpl = templates.find((t) => t.id === selectedTemplateId);
-    if (tpl) {
-      setCustomSubject(tpl.subject);
-      setCustomBody(tpl.textContent);
-    }
-  }, [selectedTemplateId, templates]);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // COLLECT: Search LinkedIn via the existing hr-outreach/search API
-  // ─────────────────────────────────────────────────────────────────────────────
-  const handleStartCollect = async () => {
-    if (contacts.length >= MAX_CONTACTS) {
-      setCollectStatus(`✅ Already collected ${MAX_CONTACTS} contacts. Clear list to start fresh.`);
-      return;
-    }
-    stopRef.current = false;
-    setIsCollecting(true);
-    setCollectStatus("🔍 Searching LinkedIn for hiring posts…");
-
-    const needed = MAX_CONTACTS - contacts.length;
-    let gathered = 0;
-    const seen = new Set(contacts.map((c) => c.email.toLowerCase()));
-    const queries = [
-      keyword,
-      `${keyword} ${category}`,
-      `site:linkedin.com/posts "${keyword}"`,
-    ].filter(Boolean);
-
-    for (const q of queries) {
-      if (stopRef.current || gathered >= needed) break;
-
-      try {
-        setCollectStatus(`🔍 Querying: "${q}"…`);
-        const res = await fetch("/api/user/hr-outreach/search", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: q, platform: "linkedin", country: "all" }),
+  // ── Sync from extension ──
+  const syncFromExtension = useCallback(async () => {
+    try {
+      const res = await hroRpc("HRO_GET_CONTACTS", undefined, 4000);
+      if (res?.contacts) {
+        setExtCount(res.count || res.contacts.length || 0);
+        setExtensionConnected(true);
+        setContacts((prev) => {
+          const existing = new Set(prev.map((c) => c.email.toLowerCase()));
+          const merged = [...prev];
+          for (const c of res.contacts) {
+            if (c.email && !existing.has(c.email.toLowerCase())) {
+              merged.push({
+                id: c.id || `ext_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                name: c.name || "Unknown",
+                title: c.title || "",
+                company: c.company || "",
+                email: c.email,
+                phone: c.phone || "",
+                category: c.category || "",
+                linkedinUrl: c.linkedinUrl || "",
+                sourcePostUrl: c.sourcePostUrl || "",
+                collectedAt: c.collectedAt || new Date().toISOString(),
+              });
+              existing.add(c.email.toLowerCase());
+            }
+          }
+          saveContacts(merged);
+          return merged;
         });
-        const data = await res.json();
-        const results: Array<{
-          name?: string; title?: string; company?: string;
-          email?: string; linkedinUrl?: string;
-        }> = Array.isArray(data?.results)
-          ? data.results
-          : (Array.isArray(data?.contacts) ? data.contacts : []);
-
-        for (const r of results) {
-          if (stopRef.current || gathered >= needed) break;
-          if (!r.email || seen.has(r.email.toLowerCase())) continue;
-
-          seen.add(r.email.toLowerCase());
-          const newHR: CollectedHR = {
-            id: `hr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            name: r.name ?? "Unknown",
-            title: r.title ?? "HR / Recruiter",
-            company: r.company ?? "Unknown Company",
-            email: r.email,
-            category: category || CATEGORY_OPTIONS[0],
-            linkedinUrl: r.linkedinUrl ?? "",
-            collectedAt: new Date().toISOString(),
-          };
-
-          setContacts((prev) => {
-            const updated = [...prev, newHR];
-            setCollectProgress(Math.min(updated.length, MAX_CONTACTS));
-            return updated;
-          });
-          gathered++;
-          setCollectStatus(`✅ Collected ${contacts.length + gathered} contacts so far…`);
-          await new Promise((r) => setTimeout(r, 300));
-        }
-      } catch {
-        setCollectStatus("⚠️ Search error, retrying next query…");
       }
+    } catch {
+      // context invalidated or timeout
     }
+  }, [hroRpc]);
 
-    setIsCollecting(false);
-    const total = contacts.length + gathered;
-    if (total >= MAX_CONTACTS) {
-      setCollectStatus(`🎯 Cap reached! ${MAX_CONTACTS} HR contacts collected. Head to Email List.`);
-    } else if (gathered === 0) {
-      setCollectStatus("ℹ️ No new contacts found. Try a different keyword or category.");
-    } else {
-      setCollectStatus(`✅ Done! Collected ${gathered} new contacts (${total} total).`);
+  // ── Extension detection ──
+  useEffect(() => {
+    let mounted = true;
+
+    detectTimeoutRef.current = setTimeout(() => {
+      if (mounted && !extensionConnected) {
+        setExtensionChecking(false);
+      }
+    }, 6000);
+
+    const handler = (event: MessageEvent) => {
+      if (event.data?._src !== "hro_bridge") return;
+      if (event.data?.type === "HRO_BRIDGE_READY") {
+        clearTimeout(detectTimeoutRef.current);
+        setTimeout(() => {
+          if (mounted) syncFromExtension();
+        }, 1500);
+      } else if (event.data?.type === "HRO_BRIDGE_DISCONNECTED") {
+        setExtensionConnected(false);
+        setExtensionChecking(true);
+      }
+    };
+    window.addEventListener("message", handler);
+
+    syncFromExtension().catch(() => {});
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await hroRpc("HRO_GET_STATUS", undefined, 3000);
+        setExtensionConnected(true);
+        setExtensionChecking(false);
+        setExtCount(status.count || 0);
+        setIsCollecting(status.isCollecting || false);
+      } catch {
+        setExtensionConnected(false);
+      }
+    }, 4000);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("message", handler);
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (detectTimeoutRef.current) clearTimeout(detectTimeoutRef.current);
+    };
+  }, [syncFromExtension, hroRpc]);
+
+  // ── Collect actions ──
+  const buildLinkedInUrl = useCallback((kw: string, range: string) => {
+    const base = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(kw)}&origin=GLOBAL_SEARCH_HEADER`;
+    if (range && range !== "any") return `${base}&datesPosted=${range}`;
+    return base;
+  }, []);
+
+  const handleStartCollect = async () => {
+    try {
+      setIsCollecting(true);
+      setCollectStatus("Opening LinkedIn search page...");
+      await hroRpc("HRO_START_COLLECTING", { keyword, timeRange });
+      window.open(buildLinkedInUrl(keyword, timeRange), "_blank");
+    } catch {
+      setIsCollecting(false);
+      setCollectStatus("Failed to start collection. Is the extension connected?");
     }
   };
 
-  const handleStopCollect = () => {
-    stopRef.current = true;
-    setIsCollecting(false);
-    setCollectStatus("⏹ Collection stopped.");
+  const handleStopCollect = async () => {
+    try {
+      await hroRpc("HRO_STOP_COLLECTING");
+      setIsCollecting(false);
+      setCollectStatus("Stopped.");
+    } catch {
+      setIsCollecting(false);
+    }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // LIST helpers
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ── List helpers ──
   const handleCopyEmail = (id: string, email: string) => {
     navigator.clipboard.writeText(email).then(() => {
       setCopiedId(id);
@@ -352,22 +416,22 @@ export default function ColdEmails() {
 
   const handleAddContact = () => {
     if (!newContact.email) return;
-    const contact: CollectedHR = {
-      id: `hr_manual_${Date.now()}`,
+    const hr: CollectedHR = {
+      id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       ...newContact,
       collectedAt: new Date().toISOString(),
     };
-    setContacts((prev) => [...prev, contact]);
-    setNewContact({ name: "", title: "", company: "", email: "", category: "", linkedinUrl: "" });
+    setContacts((prev) => [...prev, hr]);
+    setNewContact({ name: "", title: "", company: "", email: "", phone: "", category: "", linkedinUrl: "" });
     setShowAddForm(false);
   };
 
   const handleExportCSV = () => {
-    const headers = ["Name", "Title", "Company", "Email", "Category", "LinkedIn URL", "Collected At"];
+    const headers = ["Name", "Title", "Company", "Email", "Phone", "Category", "LinkedIn URL", "Collected At"];
     const rows = contacts.map((c) => [
-      c.name, c.title, c.company, c.email, c.category, c.linkedinUrl, c.collectedAt,
+      c.name, c.title, c.company, c.email, c.phone || "", c.category, c.linkedinUrl, c.collectedAt,
     ]);
-    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v ?? ""}"`).join(",")).join("\n");
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${(v ?? "")}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -375,6 +439,13 @@ export default function ColdEmails() {
     a.download = `hr_contacts_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleCopyTemplate = (id: string, text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedTemplateId(id);
+      setTimeout(() => setCopiedTemplateId(null), 2000);
+    });
   };
 
   const filteredContacts = contacts.filter((c) => {
@@ -388,84 +459,7 @@ export default function ColdEmails() {
     );
   });
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // SEND
-  // ─────────────────────────────────────────────────────────────────────────────
-  const buildBody = (contact: CollectedHR) =>
-    customBody
-      .replace(/{name}/g, contact.name.split(" ")[0] || contact.name)
-      .replace(/{company}/g, contact.company)
-      .replace(/{role}/g, role || "Software Engineer")
-      .replace(/{senderName}/g, senderName || user?.name || "");
-
-  const buildSubject = (contact: CollectedHR) =>
-    customSubject
-      .replace(/{name}/g, contact.name.split(" ")[0] || contact.name)
-      .replace(/{company}/g, contact.company)
-      .replace(/{role}/g, role || "Software Engineer");
-
-  const handleSendCampaign = async () => {
-    const targets = contacts.filter((c) => c.email);
-    if (targets.length === 0) {
-      setSendStatus("⚠️ No contacts with emails in your list.");
-      return;
-    }
-    setIsSending(true);
-    setSendProgress(0);
-    setSendStatus(`📤 Sending to ${targets.length} contacts…`);
-
-    let sent = 0;
-    const newRecords: SendRecord[] = [];
-
-    for (const contact of targets) {
-      try {
-        const body = buildBody(contact);
-        const subject = buildSubject(contact);
-        const res = await fetch("/api/user/hr-outreach/send", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            toEmail: contact.email,
-            toName: contact.name,
-            subject,
-            body,
-            company: contact.company,
-          }),
-        });
-        const data = await res.json();
-        newRecords.push({
-          id: `send_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          email: contact.email,
-          name: contact.name,
-          company: contact.company,
-          subject,
-          sentAt: new Date().toISOString(),
-          status: res.ok ? "sent" : "failed",
-          error: !res.ok ? (data?.error ?? "Unknown error") : undefined,
-        });
-        sent++;
-      } catch (e: unknown) {
-        newRecords.push({
-          id: `send_${Date.now()}`,
-          email: contact.email,
-          name: contact.name,
-          company: contact.company,
-          subject: buildSubject(contact),
-          sentAt: new Date().toISOString(),
-          status: "failed",
-          error: e instanceof Error ? e.message : "Network error",
-        });
-      }
-      setSendProgress(Math.round(((sent) / targets.length) * 100));
-      await new Promise((r) => setTimeout(r, 200));
-    }
-
-    setSendRecords((prev) => [...newRecords, ...prev]);
-    setIsSending(false);
-    const successCount = newRecords.filter((r) => r.status === "sent").length;
-    setSendStatus(`✅ Done! ${successCount}/${targets.length} emails sent successfully.`);
-  };
+  const contactsWithEmail = contacts.filter((c) => c.email).length;
 
   // ─────────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -483,10 +477,16 @@ export default function ColdEmails() {
             Cold Emails
           </h1>
           <p className="text-gray-500 mt-1 text-sm">
-            Collect HR contacts from LinkedIn hiring posts and send targeted cold emails.
+            Collect HR contacts from LinkedIn hiring posts. Send from HR Outreach page (1 Hire per email).
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {extensionConnected && (
+            <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Extension Connected
+            </span>
+          )}
           <span className="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
             <Users className="w-3.5 h-3.5 inline mr-1" />
             {contacts.length} / {MAX_CONTACTS} collected
@@ -517,11 +517,6 @@ export default function ColdEmails() {
             transition={{ duration: 0.5, ease: "easeOut" }}
           />
         </div>
-        {contacts.length >= MAX_CONTACTS && (
-          <p className="text-xs text-emerald-600 font-medium mt-2 flex items-center gap-1">
-            <CheckCircle className="w-3.5 h-3.5" /> Target reached! Ready to send campaign.
-          </p>
-        )}
       </div>
 
       {/* ── Tabs ── */}
@@ -529,8 +524,8 @@ export default function ColdEmails() {
         {(
           [
             { id: "collect", label: "Collect HRs", icon: Search },
-            { id: "list", label: `Email List (${contacts.length})`, icon: Users },
-            { id: "send", label: "Send Campaign", icon: Send },
+            { id: "list", label: `Contacts (${contacts.length})`, icon: Users },
+            { id: "templates", label: "Templates", icon: FileText },
           ] as const
         ).map(({ id, label, icon: Icon }) => (
           <button
@@ -568,6 +563,17 @@ export default function ColdEmails() {
                 LinkedIn Hiring Post Search
               </h2>
 
+              {/* Extension Status */}
+              {!extensionChecking && !extensionConnected && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">Extension not detected</p>
+                    <p className="text-xs text-amber-600 mt-1">Install and enable the HR Outreach extension, then refresh this page.</p>
+                  </div>
+                </div>
+              )}
+
               {/* Keyword */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">Search Keyword</label>
@@ -594,34 +600,29 @@ export default function ColdEmails() {
                 </div>
               </div>
 
-              {/* Category */}
+              {/* Time Range */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                  <Hash className="w-3.5 h-3.5" /> Job Category (optional)
-                </label>
-                <div className="relative">
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full appearance-none px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                  >
-                    <option value="">All Categories</option>
-                    {CATEGORY_OPTIONS.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
+                <label className="text-sm font-medium text-gray-700">Time Range</label>
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer"
+                >
+                  <option value="any">Any time</option>
+                  <option value="past24h">Past 24 hours</option>
+                  <option value="pastWeek">Past week</option>
+                  <option value="pastMonth">Past month</option>
+                </select>
               </div>
 
               {/* How it works */}
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-700 space-y-1">
                 <p className="font-medium flex items-center gap-1"><Sparkles className="w-4 h-4" /> How it works</p>
                 <ul className="list-disc list-inside space-y-0.5 text-blue-600 text-xs ml-1">
-                  <li>Searches LinkedIn hiring posts using your keyword + category</li>
-                  <li>Extracts HR name, company, job category, and email</li>
-                  <li>Stops automatically at {MAX_CONTACTS} unique contacts</li>
-                  <li>All contacts are saved locally and persist across sessions</li>
+                  <li>Opens LinkedIn post search with your keyword and time filter</li>
+                  <li>Extension auto-scrolls and extracts HR name, email, phone</li>
+                  <li>Contacts sync back here automatically</li>
+                  <li>Send emails from the HR Outreach page (1 Hire per email)</li>
                 </ul>
               </div>
 
@@ -630,7 +631,7 @@ export default function ColdEmails() {
                 {!isCollecting ? (
                   <button
                     onClick={handleStartCollect}
-                    disabled={contacts.length >= MAX_CONTACTS}
+                    disabled={contacts.length >= MAX_CONTACTS || (!extensionConnected && !extensionChecking)}
                     className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity shadow-md"
                   >
                     <Play className="w-4 h-4" />
@@ -650,7 +651,6 @@ export default function ColdEmails() {
                     onClick={() => {
                       if (window.confirm("Clear all collected contacts?")) {
                         setContacts([]);
-                        setCollectProgress(0);
                         setCollectStatus("");
                       }
                     }}
@@ -674,18 +674,28 @@ export default function ColdEmails() {
                       <RefreshCw className="w-4 h-4 text-indigo-500 animate-spin flex-shrink-0" />
                     )}
                     <span>{collectStatus}</span>
+                    {isCollecting && (
+                      <a
+                        href={buildLinkedInUrl(keyword, timeRange)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Open LinkedIn
+                      </a>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               {[
                 { label: "Collected", value: contacts.length, icon: Users, color: "text-indigo-600", bg: "bg-indigo-50" },
+                { label: "With Email", value: contactsWithEmail, icon: Mail, color: "text-emerald-600", bg: "bg-emerald-50" },
                 { label: "Remaining", value: MAX_CONTACTS - contacts.length, icon: Target, color: "text-amber-600", bg: "bg-amber-50" },
-                { label: "Sent", value: sendRecords.filter((r) => r.status === "sent").length, icon: MailCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
-                { label: "Failed", value: sendRecords.filter((r) => r.status === "failed").length, icon: AlertCircle, color: "text-red-500", bg: "bg-red-50" },
               ].map(({ label, value, icon: Icon, color, bg }) => (
                 <div key={label} className="bg-white/80 backdrop-blur border border-white/60 rounded-2xl p-4 shadow-sm flex items-center gap-3">
                   <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center`}>
@@ -702,7 +712,7 @@ export default function ColdEmails() {
         )}
 
         {/* ══════════════════════════════════════════════════════════════════════ */}
-        {/* TAB: EMAIL LIST                                                        */}
+        {/* TAB: CONTACTS LIST                                                   */}
         {/* ══════════════════════════════════════════════════════════════════════ */}
         {activeTab === "list" && (
           <motion.div
@@ -720,7 +730,7 @@ export default function ColdEmails() {
                 <input
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
-                  placeholder="Filter by name, company, email…"
+                  placeholder="Filter by name, company, email..."
                   className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 />
               </div>
@@ -759,6 +769,7 @@ export default function ColdEmails() {
                       { key: "title", placeholder: "Job Title (e.g. HR Manager)", icon: Briefcase },
                       { key: "company", placeholder: "Company Name", icon: Building2 },
                       { key: "email", placeholder: "Email Address *", icon: Mail },
+                      { key: "phone", placeholder: "Phone Number", icon: Hash },
                       { key: "linkedinUrl", placeholder: "LinkedIn Profile URL", icon: Linkedin },
                     ].map(({ key, placeholder, icon: Icon }) => (
                       <div key={key} className="relative">
@@ -854,6 +865,11 @@ export default function ColdEmails() {
                       <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
                         <Mail className="w-3 h-3" />{contact.email}
                       </p>
+                      {contact.phone && (
+                        <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                          <Hash className="w-3 h-3" />{contact.phone}
+                        </p>
+                      )}
                     </div>
 
                     {/* Actions */}
@@ -896,212 +912,66 @@ export default function ColdEmails() {
         )}
 
         {/* ══════════════════════════════════════════════════════════════════════ */}
-        {/* TAB: SEND CAMPAIGN                                                     */}
+        {/* TAB: TEMPLATES (read-only, copy to clipboard)                          */}
         {/* ══════════════════════════════════════════════════════════════════════ */}
-        {activeTab === "send" && (
+        {activeTab === "templates" && (
           <motion.div
-            key="send"
+            key="templates"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.2 }}
-            className="space-y-5"
+            className="space-y-4"
           >
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {/* Left: Compose */}
-              <div className="bg-white/80 backdrop-blur border border-white/60 rounded-2xl p-6 shadow-sm space-y-5">
-                <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
-                  <Mail className="w-5 h-5 text-indigo-600" /> Compose Email
-                </h2>
+            <div className="bg-white/80 backdrop-blur border border-white/60 rounded-2xl p-6 shadow-sm space-y-2">
+              <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-600" /> Email Templates
+              </h2>
+              <p className="text-sm text-gray-500">
+                Preview and copy these templates. Use them when sending from the HR Outreach page.
+              </p>
+            </div>
 
-                {/* Sender Name & Role */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Your Name</label>
-                    <input
-                      value={senderName}
-                      onChange={(e) => setSenderName(e.target.value)}
-                      placeholder="Your full name"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Target Role</label>
-                    <input
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      placeholder="e.g. Frontend Developer"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    />
-                  </div>
-                </div>
-
-                {/* Template Selector */}
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-600">Email Template</label>
-                  <div className="relative">
-                    <select
-                      value={selectedTemplateId}
-                      onChange={(e) => setSelectedTemplateId(e.target.value)}
-                      className="w-full appearance-none px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                    >
-                      {templates.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Subject */}
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-600">Subject</label>
-                  <input
-                    value={customSubject}
-                    onChange={(e) => setCustomSubject(e.target.value)}
-                    placeholder="Email subject"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                  />
-                </div>
-
-                {/* Body */}
-                <div className="space-y-1">
+            <div className="grid gap-4">
+              {BUILTIN_TEMPLATES.map((tpl) => (
+                <div key={tpl.id} className="bg-white/80 backdrop-blur border border-white/60 rounded-2xl p-5 shadow-sm space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-gray-600">Email Body</label>
+                    <div>
+                      <h3 className="font-semibold text-gray-800 text-sm">{tpl.name}</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">Subject: {tpl.subject}</p>
+                    </div>
                     <button
-                      onClick={() => setPreviewOpen((v) => !v)}
-                      className="text-xs text-indigo-600 hover:underline flex items-center gap-1"
+                      onClick={() => handleCopyTemplate(tpl.id, tpl.textContent)}
+                      className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 hover:border-indigo-400 px-3 py-1.5 rounded-lg transition-colors"
                     >
-                      <Eye className="w-3.5 h-3.5" /> Preview
+                      {copiedTemplateId === tpl.id ? (
+                        <><Check className="w-3 h-3 text-emerald-500" /> Copied</>
+                      ) : (
+                        <><Copy className="w-3 h-3" /> Copy</>
+                      )}
                     </button>
                   </div>
-                  <textarea
-                    value={customBody}
-                    onChange={(e) => setCustomBody(e.target.value)}
-                    rows={10}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
-                  />
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-xs text-gray-600 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+                    {tpl.textContent}
+                  </div>
                   <p className="text-xs text-gray-400">
-                    Placeholders: <code className="bg-gray-100 px-1 rounded">{"{name}"}</code>{" "}
+                    Placeholders:{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{name}"}</code>{" "}
                     <code className="bg-gray-100 px-1 rounded">{"{company}"}</code>{" "}
                     <code className="bg-gray-100 px-1 rounded">{"{role}"}</code>{" "}
-                    <code className="bg-gray-100 px-1 rounded">{"{senderName}"}</code>
+                    <code className="bg-gray-100 px-1 rounded">{"{senderName}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{skills}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{field}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{years}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{location}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{senderEmail}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{senderPhone}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{senderLinkedin}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{senderPortfolio}"}</code>{" "}
+                    <code className="bg-gray-100 px-1 rounded">{"{results}"}</code>
                   </p>
                 </div>
-
-                {/* Preview Panel */}
-                <AnimatePresence>
-                  {previewOpen && contacts.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700 whitespace-pre-wrap font-mono"
-                    >
-                      <p className="text-xs font-semibold text-gray-500 mb-1">PREVIEW (using first contact)</p>
-                      <p className="font-semibold">Subject: {buildSubject(contacts[0])}</p>
-                      <hr className="my-2" />
-                      {buildBody(contacts[0])}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Send Button */}
-                <div className="space-y-3">
-                  <button
-                    onClick={handleSendCampaign}
-                    disabled={isSending || contacts.length === 0}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity shadow-md"
-                  >
-                    {isSending ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        Sending… {sendProgress}%
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4" />
-                        Send to All {contacts.length} Contacts
-                      </>
-                    )}
-                  </button>
-
-                  {/* Send Progress Bar */}
-                  {isSending && (
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <motion.div
-                        className="h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"
-                        animate={{ width: `${sendProgress}%` }}
-                        transition={{ duration: 0.3 }}
-                      />
-                    </div>
-                  )}
-
-                  {sendStatus && (
-                    <p className="text-sm text-gray-600 text-center">{sendStatus}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Right: Sent History */}
-              <div className="bg-white/80 backdrop-blur border border-white/60 rounded-2xl p-6 shadow-sm flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
-                    <MailCheck className="w-5 h-5 text-emerald-600" /> Sent History
-                  </h2>
-                  {sendRecords.length > 0 && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm("Clear sent history?")) setSendRecords([]);
-                      }}
-                      className="text-xs text-red-400 hover:text-red-600"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-
-                {sendRecords.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
-                    <Send className="w-10 h-10 text-gray-200 mb-3" />
-                    <p className="text-gray-400 text-sm">No emails sent yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 overflow-y-auto max-h-[480px] pr-1">
-                    {sendRecords.map((rec) => (
-                      <div
-                        key={rec.id}
-                        className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors"
-                      >
-                        <div className="mt-0.5 flex-shrink-0">
-                          {rec.status === "sent" ? (
-                            <CheckCircle className="w-4 h-4 text-emerald-500" />
-                          ) : (
-                            <AlertCircle className="w-4 h-4 text-red-400" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{rec.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{rec.email} · {rec.company}</p>
-                          <p className="text-xs text-gray-400 truncate">{rec.subject}</p>
-                          {rec.error && (
-                            <p className="text-xs text-red-400 mt-0.5">{rec.error}</p>
-                          )}
-                        </div>
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
-                            rec.status === "sent"
-                              ? "bg-emerald-50 text-emerald-600"
-                              : "bg-red-50 text-red-500"
-                          }`}
-                        >
-                          {rec.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              ))}
             </div>
           </motion.div>
         )}

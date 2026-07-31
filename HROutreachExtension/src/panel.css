@@ -1,0 +1,277 @@
+:root {
+  --hro-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+  --hro-text: #0b1220;
+  --hro-muted: rgba(11, 18, 32, 0.50);
+  --hro-primary: #6d7bff;
+  --hro-success: #19c58c;
+  --hro-warning: #f4b23f;
+  --hro-error: #f35b5b;
+  --hro-bg: rgba(255, 255, 255, 0.85);
+  --hro-border: rgba(11, 18, 32, 0.08);
+  --hro-shadow: 0 8px 32px rgba(10, 16, 30, 0.12);
+}
+
+/* ── Toggle button ── */
+#hro-toggle {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 2147483647;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #6d7bff, #9b7bff);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(109, 123, 255, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+#hro-toggle:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(109, 123, 255, 0.40);
+}
+
+/* ── Panel ── */
+#hro-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 84px;
+  width: 400px;
+  max-height: 70vh;
+  z-index: 2147483646;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--hro-bg);
+  color: var(--hro-text);
+  font-family: var(--hro-font);
+  border: 1px solid var(--hro-border);
+  box-shadow: var(--hro-shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+#hro-panel.hro-hidden { display: none; }
+
+/* ── Header ── */
+#hro-panel .hro-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hro-border);
+  cursor: move;
+  user-select: none;
+}
+#hro-panel .hro-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+#hro-panel .hro-orb {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+#hro-panel .hro-orb img {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  object-fit: cover;
+}
+#hro-panel .hro-title {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#hro-panel .hro-sub {
+  font-size: 10px;
+  color: var(--hro-muted);
+  margin-top: 1px;
+}
+#hro-panel .hro-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#hro-panel .hro-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(11, 18, 32, 0.06);
+  color: var(--hro-muted);
+  white-space: nowrap;
+}
+#hro-panel .hro-badge.hro-run {
+  background: rgba(25, 197, 140, 0.12);
+  color: rgba(12, 105, 77, 0.9);
+}
+#hro-panel .hro-badge.hro-pause {
+  background: rgba(244, 178, 63, 0.14);
+  color: rgba(130, 78, 10, 0.9);
+}
+#hro-panel .hro-window-actions {
+  display: flex;
+  gap: 4px;
+}
+#hro-panel .hro-window-actions button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(11, 18, 32, 0.06);
+  color: var(--hro-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#hro-panel .hro-window-actions button:hover {
+  background: rgba(11, 18, 32, 0.10);
+}
+#hro-panel.hro-dragging .hro-head { cursor: grabbing; }
+
+/* ── Status card ── */
+#hro-panel .hro-now {
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(109, 123, 255, 0.06);
+  border: 1px solid rgba(109, 123, 255, 0.12);
+}
+#hro-panel .hro-now-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--hro-primary);
+  margin-bottom: 1px;
+}
+#hro-panel .hro-now-detail {
+  font-size: 10px;
+  color: var(--hro-muted);
+  line-height: 1.3;
+}
+
+/* ── Progress ── */
+#hro-panel .hro-progress {
+  margin: 8px 12px 0;
+}
+#hro-panel .hro-progress-bar-bg {
+  height: 4px;
+  background: rgba(11, 18, 32, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+#hro-panel .hro-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6d7bff, #9b7bff);
+  transition: width 0.4s ease;
+}
+#hro-panel .hro-progress-text {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--hro-muted);
+  font-weight: 600;
+}
+
+/* ── Controls ── */
+#hro-panel .hro-controls {
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Quick buttons */
+#hro-panel .hro-quick {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+#hro-panel .hro-quick button {
+  border: 1px solid var(--hro-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 7px 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(11, 18, 32, 0.75);
+  cursor: pointer;
+  transition: background 0.12s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+#hro-panel .hro-quick button:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+#hro-panel .hro-quick .hro-start {
+  background: linear-gradient(135deg, #6d7bff, #9b7bff);
+  border-color: transparent;
+  color: #fff;
+}
+#hro-panel .hro-quick .hro-start:hover {
+  background: linear-gradient(135deg, #5a6aee, #8a6aee);
+}
+#hro-panel .hro-quick .hro-stop {
+  background: rgba(243, 91, 91, 0.10);
+  border-color: rgba(243, 91, 91, 0.20);
+  color: rgba(180, 40, 40, 0.9);
+}
+#hro-panel .hro-quick .hro-stop:hover {
+  background: rgba(243, 91, 91, 0.18);
+}
+#hro-panel .hro-quick .hro-dashboard {
+  background: rgba(11, 18, 32, 0.04);
+}
+
+/* Info row */
+#hro-panel .hro-info-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+#hro-panel .hro-info-pill {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--hro-muted);
+}
+
+/* ── Minimized / Maximized ── */
+#hro-panel.hro-minimized {
+  max-height: none !important;
+  height: auto !important;
+}
+#hro-panel.hro-minimized .hro-now,
+#hro-panel.hro-minimized .hro-controls,
+#hro-panel.hro-minimized .hro-progress,
+#hro-panel.hro-minimized .hro-info-row {
+  display: none;
+}
+#hro-panel.hro-maximized {
+  width: 520px !important;
+  max-height: none !important;
+  height: calc(100vh - 20px) !important;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  #hro-toggle { right: 14px; bottom: 14px; width: 42px; height: 42px; }
+  #hro-panel { right: 8px; left: 8px; width: auto; bottom: 68px; max-height: calc(100vh - 78px); }
+}
+@media (max-width: 560px) {
+  #hro-panel { right: 0; left: 0; bottom: 0; max-height: 100vh; height: 100vh; border-radius: 0; }
+}

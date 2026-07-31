@@ -29,6 +29,7 @@ type AdminUser = {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
   plan: 'free' | 'pro' | 'coach';
   createdAt: string;
 };
@@ -168,6 +169,7 @@ export default function AdminOverview() {
                   <div>
                     <div className="font-semibold text-gray-900">{user.name}</div>
                     <div className="text-sm text-gray-600">{user.email}</div>
+                    <div className="text-xs text-gray-400">{user.phone || ""}</div>
                   </div>
                 </div>
                 <div className="text-right">

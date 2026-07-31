@@ -560,6 +560,15 @@ button:hover:not(:disabled) {
   color: var(--cp-warning);
 }
 
+/* ── Panel toggle ── */
+.toggle-row {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: 14px;
+  background: var(--cp-surface);
+}
+
 body.cp-disconnected .head {
   margin-bottom: 18px;
 }

@@ -69,14 +69,22 @@ export default function DashboardLayout() {
       children: [
         { name: 'LinkedIn', href: '/dashboard/jobs/linkedin' },
         { name: 'Indeed Beta', href: '/dashboard/jobs/indeed' },
+        { name: 'HR Outreach', href: '/dashboard/hr-outreach' },
       ],
     },
     { name: 'Applications', href: '/dashboard/applications', icon: Briefcase },
     { name: 'Resume Builder', href: '/dashboard/resume', icon: FileText },
     { name: 'Interview Prep', href: '/dashboard/interview', icon: MessageSquare },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-    { name: 'Marketing', href: '/dashboard/marketing', icon: Mail },
-    { name: 'HR Outreach', href: '/dashboard/hr-outreach', icon: Send },
+    {
+      name: 'Marketing',
+      href: '/dashboard/marketing/email',
+      icon: Mail,
+      children: [
+        { name: 'Email', href: '/dashboard/marketing/email' },
+        { name: 'WhatsApp', href: '/dashboard/marketing/whatsapp' },
+      ],
+    },
     { name: 'Cold Emails', href: '/dashboard/cold-emails', icon: MailCheck },
     onboardingComplete
       ? { name: 'Billing', href: '/dashboard/billing', icon: CreditCard }
@@ -153,7 +161,7 @@ export default function DashboardLayout() {
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
               const hasChildren = Array.isArray((item as any).children) && (item as any).children.length > 0;
-              const groupActive = location.pathname === item.href || location.pathname.startsWith('/dashboard/jobs');
+              const groupActive = location.pathname === item.href || location.pathname.startsWith('/dashboard/jobs') || location.pathname.startsWith('/dashboard/marketing') || ((item as any).children as Array<{ href: string }> | undefined)?.some((child) => location.pathname === child.href) || false;
               const isActive = location.pathname === item.href;
 
               if (!hasChildren) {

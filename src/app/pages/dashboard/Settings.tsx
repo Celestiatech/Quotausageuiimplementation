@@ -45,6 +45,10 @@ export default function Settings() {
                 <div className="font-semibold text-gray-900">{user?.email || "-"}</div>
               </div>
               <div>
+                <div className="text-gray-500">Phone</div>
+                <div className="font-semibold text-gray-900">{user?.phone || "-"}</div>
+              </div>
+              <div>
                 <div className="text-gray-500">Plan</div>
                 <div className="font-semibold text-gray-900 capitalize">{user?.plan || "-"}</div>
               </div>

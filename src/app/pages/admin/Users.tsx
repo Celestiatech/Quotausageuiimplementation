@@ -5,6 +5,7 @@ type AdminUser = {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: "user" | "admin";
   plan: "free" | "pro" | "coach";
   quotaUsed: number;
@@ -21,6 +22,7 @@ type AdminUser = {
 type EditUserForm = {
   name: string;
   email: string;
+  phone: string;
   role: AdminUser["role"];
   plan: AdminUser["plan"];
   quotaTotal: string;
@@ -53,6 +55,7 @@ export default function Users() {
   const [editForm, setEditForm] = useState<EditUserForm>({
     name: "",
     email: "",
+    phone: "",
     role: "user",
     plan: "free",
     quotaTotal: "0",
@@ -119,6 +122,7 @@ export default function Users() {
     setEditForm({
       name: String(user.name || ""),
       email: String(user.email || ""),
+      phone: String(user.phone || ""),
       role: user.role,
       plan: user.plan,
       quotaTotal: String(user.quotaTotal ?? 0),
@@ -182,6 +186,7 @@ export default function Users() {
         body: JSON.stringify({
           name,
           email,
+          phone: editForm.phone.trim() || undefined,
           role: editForm.role,
           plan: editForm.plan,
           quotaTotal: Math.floor(quotaTotal),
@@ -276,6 +281,7 @@ export default function Users() {
             <thead className="bg-gradient-to-r from-gray-50 to-slate-100">
               <tr className="text-xs uppercase tracking-wide text-gray-600">
                 <th className="px-4 py-3 text-left font-semibold">User</th>
+                <th className="px-4 py-3 text-left font-semibold">Phone</th>
                 <th className="px-4 py-3 text-left font-semibold">Role</th>
                 <th className="px-4 py-3 text-left font-semibold">Plan</th>
                 <th className="px-4 py-3 text-left font-semibold">Daily Usage</th>
@@ -303,6 +309,9 @@ export default function Users() {
                           <div className="text-xs text-gray-500">{u.email}</div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="text-sm text-gray-700">{u.phone || "-"}</span>
                     </td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${roleBadgeClass[u.role]}`}>
@@ -361,7 +370,7 @@ export default function Users() {
               })}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                     No users found
                   </td>
                 </tr>
@@ -404,6 +413,16 @@ export default function Users() {
                   value={editForm.email}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 outline-none focus:border-indigo-400"
+                />
+              </label>
+
+              <label className="text-sm text-gray-700">
+                <div className="mb-1 font-semibold">Phone</div>
+                <input
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 outline-none focus:border-indigo-400"
+                  placeholder="+1 555 123 4567"
                 />
               </label>
 

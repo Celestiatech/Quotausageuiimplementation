@@ -18,9 +18,16 @@ function clampText(value: unknown, maxLen: number) {
   return text.slice(0, maxLen);
 }
 
+const WHATSAPP_PHONE = "919805559015";
+
+function openWhatsApp(message: string) {
+  const text = message.trim() || "Hi, I need support.";
+  const url = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(text)}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export default function ChatWidget() {
   const enabled = useMemo(() => {
-    // Enable by default in dev; can be disabled via env in prod.
     const flag = String(process.env.NEXT_PUBLIC_CHATBOT_ENABLED || "").trim().toLowerCase();
     if (flag === "0" || flag === "false" || flag === "no") return false;
     return true;
@@ -30,21 +37,15 @@ export default function ChatWidget() {
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
   const [actions, setActions] = useState<ChatAction[]>([]);
-  const [mode, setMode] = useState<"assistant" | "human">("assistant");
-  const [humanAgent, setHumanAgent] = useState<"Aricka" | "Rahul">("Aricka");
-  const [conversationId, setConversationId] = useState("");
-  const [visitorId, setVisitorId] = useState("");
-  const [pollAfter, setPollAfter] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
       content:
-        "Hi! I’m here to help with signup/OTP, dashboard, pricing, billing, and auto apply. What do you need?",
+        "Hi! I'm here to help with signup/OTP, dashboard, pricing, billing, and auto apply. What do you need?",
     },
   ]);
   const [error, setError] = useState<string>("");
   const listRef = useRef<HTMLDivElement | null>(null);
-  const seenSupportMessageIdsRef = useRef<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
 
   const title = String(process.env.NEXT_PUBLIC_CHATBOT_TITLE || "Ask me").trim();
@@ -59,106 +60,11 @@ export default function ChatWidget() {
 
   useEffect(() => {
     if (!enabled) return;
-    if (typeof window === "undefined") return;
-    try {
-      const key = "cp_support_visitor_id";
-      const existing = String(window.localStorage.getItem(key) || "").trim();
-      if (existing) {
-        setVisitorId(existing);
-        return;
-      }
-      const next = `v_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-      window.localStorage.setItem(key, next);
-      setVisitorId(next);
-    } catch {
-      // Ignore.
-    }
-  }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled) return;
     if (!open) return;
     const el = listRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [enabled, messages, open]);
-
-  const ensureConversation = async () => {
-    if (conversationId) return conversationId;
-    const v = visitorId || `v_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    if (!visitorId) setVisitorId(v);
-    const res = await fetch("/api/support/conversations", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ visitorId: v }),
-    });
-    const data = (await res.json()) as { success?: boolean; data?: { conversationId?: string }; message?: string };
-    if (!res.ok || !data?.success || !data?.data?.conversationId) {
-      throw new Error(data?.message || "Failed to start conversation");
-    }
-    setConversationId(data.data.conversationId);
-    return data.data.conversationId;
-  };
-
-  const pollHuman = async (cid: string) => {
-    const url = new URL("/api/support/messages", window.location.origin);
-    url.searchParams.set("conversationId", cid);
-    if (pollAfter) url.searchParams.set("after", pollAfter);
-    const res = await fetch(url.toString(), { method: "GET" });
-    const data = (await res.json()) as {
-      success?: boolean;
-      data?: { messages?: Array<{ id: string; sender: string; content: string; createdAt: string }> };
-    };
-    if (!res.ok || !data?.success) return;
-    const incoming = Array.isArray(data?.data?.messages) ? data.data.messages : [];
-    if (!incoming.length) return;
-    const unseen = incoming.filter((m) => {
-      if (!m?.id) return true;
-      if (seenSupportMessageIdsRef.current.has(m.id)) return false;
-      seenSupportMessageIdsRef.current.add(m.id);
-      return true;
-    });
-    if (!unseen.length) {
-      const last = incoming[incoming.length - 1];
-      if (last?.createdAt) setPollAfter(String(last.createdAt));
-      return;
-    }
-    const mapped: ChatMessage[] = unseen.map((m) => ({
-      id: m.id,
-      role: m.sender === "admin" ? "assistant" : "user",
-      content: String(m.content || ""),
-    }));
-    setMessages((prev) => {
-      const next = [...prev, ...mapped];
-      const hasAdminReply = unseen.some((m) => m.sender === "admin");
-      if (!hasAdminReply) return next;
-      return next.map((msg) => (msg.role === "user" ? { ...msg, status: "seen" } : msg));
-    });
-    const last = unseen[unseen.length - 1];
-    if (last?.createdAt) setPollAfter(String(last.createdAt));
-  };
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (!open) return;
-    if (mode !== "human") return;
-    if (!conversationId) return;
-    let stopped = false;
-    const tick = async () => {
-      if (stopped) return;
-      try {
-        await pollHuman(conversationId);
-      } catch {
-        // Ignore polling errors.
-      }
-    };
-    const id = window.setInterval(() => void tick(), 3000);
-    void tick();
-    return () => {
-      stopped = true;
-      window.clearInterval(id);
-    };
-  }, [conversationId, enabled, mode, open, pollAfter]);
 
   const send = async () => {
     const text = input.trim();
@@ -179,48 +85,21 @@ export default function ChatWidget() {
     setBusy(true);
 
     try {
-      if (mode === "human") {
-        const cid = await ensureConversation();
-        const res = await fetch("/api/support/messages", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ conversationId: cid, visitorId, content: text, agentName: humanAgent }),
-        });
-        const data = (await res.json()) as {
-          success?: boolean;
-          message?: string;
-          data?: { message?: { id?: string; createdAt?: string } };
-        };
-        if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to send message");
-        const createdAt = String(data?.data?.message?.createdAt || "").trim();
-        const createdId = String(data?.data?.message?.id || "").trim();
-        if (createdId) seenSupportMessageIdsRef.current.add(createdId);
-        if (createdAt) setPollAfter(createdAt);
-        setMessages((prev) =>
-          prev
-            .map((m) => (m.id === localId ? { ...m, status: "sent" as const } : m))
-            .concat({
-              role: "assistant",
-              content: `Thanks! Your message has been sent to ${humanAgent}. Our support team usually replies within a few minutes—please wait.`,
-            })
-        );
-      } else {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ messages: nextMessages }),
-        });
-        const data = (await res.json()) as { success?: boolean; message?: string; reply?: string; actions?: ChatAction[] };
-        if (!res.ok || !data?.reply) {
-          throw new Error(data?.message || "Chat failed");
-        }
-            setMessages((prev) =>
-              prev
-            .map((m) => (m.id === localId ? { ...m, status: "seen" as const } : m))
-            .concat({ role: "assistant", content: String(data.reply) })
-            );
-        setActions(Array.isArray(data.actions) ? data.actions.slice(0, 4) : []);
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+      const data = (await res.json()) as { success?: boolean; message?: string; reply?: string; actions?: ChatAction[] };
+      if (!res.ok || !data?.reply) {
+        throw new Error(data?.message || "Chat failed");
       }
+      setMessages((prev) =>
+        prev
+          .map((m) => (m.id === localId ? { ...m, status: "seen" as const } : m))
+          .concat({ role: "assistant", content: String(data.reply) })
+      );
+      setActions(Array.isArray(data.actions) ? data.actions.slice(0, 4) : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chat failed");
       setMessages((prev) => [
@@ -228,10 +107,7 @@ export default function ChatWidget() {
         ...(prev.some((m) => m.id === localId) ? [] : [userMessage]),
         {
           role: "assistant",
-          content:
-            mode === "human"
-              ? "I couldn’t send your message to support right now. Please try again in a moment."
-              : "I couldn’t respond right now. Please try again in a moment.",
+          content: "I couldn't respond right now. Please try again in a moment.",
         },
       ]);
     } finally {
@@ -311,7 +187,7 @@ export default function ChatWidget() {
                 <div className={m.role === "user" ? "max-w-[85%] text-right" : "max-w-[85%] text-left"}>
                   {m.role === "assistant" ? (
                     <div className="mb-1 text-[10px] font-semibold tracking-wide text-gray-500">
-                      {mode === "human" ? "Support" : title}
+                      {title}
                     </div>
                   ) : null}
                   <div className="inline-block">
@@ -345,44 +221,22 @@ export default function ChatWidget() {
           <div className="border-t border-gray-100 px-3 py-3">
             {error ? <div className="mb-2 text-xs text-red-600">{error}</div> : null}
             <div className="mb-2 flex items-center justify-between gap-2">
-              {mode === "assistant" ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHumanAgent("Aricka");
-                      setMode("human");
-                    }}
-                    className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-800 hover:bg-gray-50"
-                  >
-                    Chat with Aricka
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHumanAgent("Rahul");
-                      setMode("human");
-                    }}
-                    className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-800 hover:bg-gray-50"
-                  >
-                    Chat with Rahul
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setMode("assistant")}
-                    className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-800 hover:bg-gray-50"
-                  >
-                    Back to assistant
-                  </button>
-                  <span className="text-[11px] text-gray-500">Support: {humanAgent}</span>
-                </div>
-              )}
-              {mode === "human" ? (
-                <span className="text-[11px] text-gray-500">Replies will appear here.</span>
-              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openWhatsApp(input)}
+                  className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-800 hover:bg-gray-50"
+                >
+                  Chat with Aricka
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openWhatsApp(input)}
+                  className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-800 hover:bg-gray-50"
+                >
+                  Chat with Rahul
+                </button>
+              </div>
             </div>
             {actions.length ? (
               <div className="mb-2 flex flex-wrap gap-2">

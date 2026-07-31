@@ -594,7 +594,25 @@ document.getElementById("accountAction").addEventListener("click", async () => {
 async function init() {
   bindPopupToggle();
   await loadCollapsedPreference();
+  await loadPanelToggle();
   await refresh();
+}
+
+async function loadPanelToggle() {
+  const panelToggle = document.getElementById("panelToggle");
+  if (!panelToggle) return;
+  try {
+    const res = await sendMessage({ type: "CP_GET_PANEL_ENABLED" });
+    panelToggle.checked = Boolean(res?.enabled);
+  } catch {
+    panelToggle.checked = false;
+  }
+  panelToggle.addEventListener("change", async () => {
+    const enabled = Boolean(panelToggle.checked);
+    try {
+      await sendMessage({ type: "CP_TOGGLE_PANEL", enabled });
+    } catch {}
+  });
 }
 
 init().catch(() => setStatus("Unavailable", "error"));

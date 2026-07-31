@@ -8,6 +8,8 @@ type SendMailInput = {
   html: string;
   text?: string;
   template?: string;
+  replyTo?: string;
+  attachments?: { filename: string; content: Buffer }[];
 };
 
 const toBool = (value: string | undefined, fallback: boolean) => {
@@ -94,13 +96,20 @@ export async function sendMail(input: SendMailInput) {
   const transporter = getTransporter();
 
   try {
-    const result = await transporter.sendMail({
+    const mailOptions: nodemailer.SendMailOptions = {
       from: `"${config.fromName}" <${config.fromAddress}>`,
       to: input.to,
       subject: input.subject,
       text: input.text,
       html: input.html,
-    });
+    };
+    if (input.replyTo) {
+      mailOptions.replyTo = input.replyTo;
+    }
+    if (input.attachments) {
+      mailOptions.attachments = input.attachments;
+    }
+    const result = await transporter.sendMail(mailOptions);
 
     await safeLogEmail({
       toEmail: input.to,

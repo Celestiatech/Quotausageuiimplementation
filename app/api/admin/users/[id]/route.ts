@@ -13,6 +13,7 @@ const updateUserSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     email: z.string().trim().email().max(255).optional(),
+    phone: z.string().trim().min(6).max(30).optional(),
     role: z.enum(["user", "admin"]).optional(),
     plan: z.enum(["free", "pro", "coach"]).optional(),
     quotaTotal: z.number().int().min(0).max(100000).optional(),
@@ -74,6 +75,7 @@ export async function PATCH(req: Request, context: RouteParams) {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         plan: true,
         quotaUsed: true,
@@ -119,6 +121,7 @@ export async function PATCH(req: Request, context: RouteParams) {
     const updateData: Prisma.UserUpdateInput = {};
     if (payload.name !== undefined) updateData.name = payload.name;
     if (normalizedEmail !== undefined) updateData.email = normalizedEmail;
+    if (payload.phone !== undefined) updateData.phone = payload.phone;
     if (payload.role !== undefined) updateData.role = payload.role;
     if (payload.plan !== undefined) updateData.plan = payload.plan;
     if (payload.quotaTotal !== undefined) updateData.quotaTotal = payload.quotaTotal;
@@ -134,6 +137,7 @@ export async function PATCH(req: Request, context: RouteParams) {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         plan: true,
         quotaUsed: true,
@@ -157,6 +161,7 @@ export async function PATCH(req: Request, context: RouteParams) {
         previous: {
           name: existing.name,
           email: existing.email,
+          phone: existing.phone,
           role: existing.role,
           plan: existing.plan,
           quotaTotal: existing.quotaTotal,
@@ -168,6 +173,7 @@ export async function PATCH(req: Request, context: RouteParams) {
         next: {
           name: updated.name,
           email: updated.email,
+          phone: updated.phone,
           role: updated.role,
           plan: updated.plan,
           quotaTotal: updated.quotaTotal,

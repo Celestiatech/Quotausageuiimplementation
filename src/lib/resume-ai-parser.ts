@@ -98,8 +98,12 @@ const SYSTEM_PROMPT = `You extract structured data from resumes. Return ONLY val
   }
 }
 
-Use null for missing fields. Do not include any text outside the JSON.
-Extract ALL experience entries, ALL projects, ALL education, ALL certifications, and ALL skills completely. Do not skip or summarize any items. Include every bullet point from each experience entry. Include every project with its full description, technologies, and link. The output JSON must contain the complete data from the resume without omission.`;
+Use null only when a field truly does not exist in the resume. Do not include any text outside the JSON.
+Extract ALL experience entries, ALL projects, ALL education, ALL certifications, and ALL skills completely. Do not skip or summarize any items.
+For experience: include every bullet point from each entry.
+For projects: extract the description from any surrounding text (bullet points, paragraphs, context). If there is no explicit description, infer a brief 1-sentence description from the project name and technologies used. Never leave project.description as null — use an empty string only if absolutely nothing can be inferred.
+For skills: include every skill mentioned anywhere in the resume (technical skills, tools, platforms, languages, frameworks).
+The output JSON must contain the complete data from the resume without omission.`;
 
 export async function parseResumeWithAi(
   resumeText: string,

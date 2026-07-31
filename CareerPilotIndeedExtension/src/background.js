@@ -2616,6 +2616,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       return;
     }
+
+    if (message.type === "CP_TOGGLE_PANEL") {
+      await chrome.storage.local.set({ indeed_panel_enabled: Boolean(message.enabled) });
+      const tabs = await chrome.tabs.query({ url: ["https://www.indeed.com/*", "https://*.indeed.com/*"] });
+      for (const tab of tabs || []) {
+        if (!tab?.id) continue;
+        try {
+          chrome.tabs.sendMessage(tab.id, {
+            type: "CP_PANEL_VISIBILITY",
+            enabled: Boolean(message.enabled),
+          }, () => void 0);
+        } catch {
+          // ignore per-tab failures
+        }
+      }
+      sendResponse({ ok: true, enabled: Boolean(message.enabled) });
+      return;
+    }
+
+    if (message.type === "CP_GET_PANEL_ENABLED") {
+      const snap = await chrome.storage.local.get("indeed_panel_enabled");
+      sendResponse({ ok: true, enabled: Boolean(snap?.indeed_panel_enabled) });
+      return;
+    }
   })().catch(async (error) => {
     await pushLog(error?.message || String(error), "error");
     sendResponse({ ok: false, error: error?.message || "Internal extension error" });

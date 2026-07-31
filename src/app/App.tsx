@@ -186,7 +186,9 @@ const routes = createRoutesFromElements(
       <Route path="settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
       <Route path="profile" element={<Suspense fallback={<PageLoader />}><Profile /></Suspense>} />
       <Route path="billing" element={<Suspense fallback={<PageLoader />}><Billing /></Suspense>} />
-      <Route path="marketing" element={<Suspense fallback={<PageLoader />}><Marketing /></Suspense>} />
+      <Route path="marketing" element={<Navigate to="/dashboard/marketing/email" replace />} />
+      <Route path="marketing/email" element={<Suspense fallback={<PageLoader />}><Marketing /></Suspense>} />
+      <Route path="marketing/whatsapp" element={<Suspense fallback={<PageLoader />}><Marketing /></Suspense>} />
       <Route path="hr-outreach" element={<Suspense fallback={<PageLoader />}><HROutreach /></Suspense>} />
       <Route path="cold-emails" element={<Suspense fallback={<PageLoader />}><ColdEmails /></Suspense>} />
       <Route path="onboarding" element={<Suspense fallback={<PageLoader />}><Onboarding /></Suspense>} />

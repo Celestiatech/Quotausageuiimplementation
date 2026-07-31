@@ -154,6 +154,7 @@ model User {
   marketingCampaigns   MarketingCampaign[]
   supportConversations SupportConversation[]
   resume              UserResume?
+  hrOutreachContacts  HROutreachContact[]
 }
 
 model UserResume {
@@ -185,6 +186,7 @@ model EmailOtp {
 
 model EmailLog {
   id                String      @id @default(cuid())
+  userId            String?
   toEmail           String
   subject           String
   template          String?
@@ -537,4 +539,27 @@ model CampaignEmail {
   @@index([campaignId])
   @@index([email])
   @@index([status])
+}
+
+model HROutreachContact {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  title         String   @default("")
+  company       String   @default("")
+  email         String   @default("")
+  phone         String   @default("")
+  linkedinUrl   String   @default("")
+  source        String   @default("web") // ext, man, web
+  jobType       String   @default("") // remote, on-site, hybrid
+  searchKeyword String   @default("")
+  searchDate    String   @default("")
+  notes         String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, email])
 }

@@ -191,6 +191,40 @@ async function pushQuotaToExtension() {
   }
 }
 
+function toggleIndeedPanel(enabled) {
+  if (!BRIDGE_ENABLED) return Promise.resolve({ ok: false, error: "bridge disabled" });
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ type: "CP_TOGGLE_PANEL", enabled }, (res) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(res || { ok: false });
+      });
+    } catch (err) {
+      resolve({ ok: false, error: String(err?.message || err) });
+    }
+  });
+}
+
+function getIndeedPanelEnabled() {
+  if (!BRIDGE_ENABLED) return Promise.resolve({ ok: false, error: "bridge disabled" });
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ type: "CP_GET_PANEL_ENABLED" }, (res) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(res || { ok: false });
+      });
+    } catch (err) {
+      resolve({ ok: false, error: String(err?.message || err) });
+    }
+  });
+}
+
 if (BRIDGE_ENABLED) {
   announceBridgeReady();
   ensureBridgeHeartbeat();

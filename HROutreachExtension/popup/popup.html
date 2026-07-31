@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>HR Direct Outreach</title>
+    <style>html,body{width:350px;min-width:350px;max-width:350px}body{margin:0;overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}</style>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="accent-bar"></div>
+    <main class="wrap">
+      <header class="head">
+        <div class="brand">
+          <img class="brand-logo" src="../icons/icon128.png" alt="HR Outreach" />
+          <div class="brand-text">
+            <h1>HR Outreach</h1>
+            <p class="sub">LinkedIn HR contact collector</p>
+          </div>
+        </div>
+        <span id="statusBadge" class="status-badge idle">Idle</span>
+      </header>
+
+      <section class="popup-content">
+        <!-- Status card -->
+        <section class="now-card">
+          <div class="now-icon" id="nowIcon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <div class="now-text">
+            <p id="nowTitle" class="now-title">Loading...</p>
+            <p id="nowDetail" class="now-detail">Connecting to extension.</p>
+          </div>
+        </section>
+
+        <!-- Panel toggle -->
+        <div class="toggle-row">
+          <label class="toggle-switch" for="panelToggle">
+            <input id="panelToggle" type="checkbox" />
+            <span class="toggle-switch-ui" aria-hidden="true"></span>
+            <span class="toggle-switch-text">Show panel on LinkedIn</span>
+          </label>
+        </div>
+
+        <!-- Progress ring -->
+        <div class="ring-section">
+          <div class="ring-wrap">
+            <svg class="ring-svg" width="72" height="72" viewBox="0 0 72 72">
+              <circle class="ring-bg" cx="36" cy="36" r="30" />
+              <circle class="ring-fill" id="ringFill" cx="36" cy="36" r="30"
+                stroke-dasharray="188.5" stroke-dashoffset="188.5" />
+            </svg>
+            <div class="ring-text" id="ringCount">0</div>
+          </div>
+          <p class="ring-label"><span id="ringMax">0</span> contacts</p>
+        </div>
+
+        <!-- Keyword input -->
+        <div class="input-group">
+          <label class="input-label">Search Keyword</label>
+          <input type="text" id="keyword" value="we are hiring" placeholder="e.g. we are hiring software engineer" class="text-input" />
+        </div>
+
+        <!-- Action buttons -->
+        <div class="actions">
+          <button class="btn-start" id="btnStart">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Start Collecting
+          </button>
+          <button class="btn-pause" id="btnStop" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            Pause
+          </button>
+          <button class="btn-stop" id="btnClear">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            Clear All
+          </button>
+        </div>
+
+        <div class="actions-secondary">
+          <button class="btn-secondary" id="btnExport">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
+          </button>
+          <button class="btn-secondary" id="btnDashboard">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </button>
+        </div>
+      </section>
+
+      <p id="status" class="status"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

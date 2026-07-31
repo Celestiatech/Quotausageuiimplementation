@@ -2,13 +2,7 @@ const BRIDGE_VERSION = "2026.03.03";
 const EXTENSION_PROVIDER = "linkedin";
 const PLATFORM_STATUS_MESSAGE = "CP_LINKEDIN_STATUS";
 const PLATFORM_STATUS_KEY = "linkedIn";
-const BRIDGE_DEBUG = (() => {
-  try {
-    return localStorage.getItem("cpBridgeDebug") === "1";
-  } catch {
-    return false;
-  }
-})();
+const BRIDGE_DEBUG = true;
 
 const DEFAULT_ALLOWLIST = [
   "https://autoapplycv.in",
@@ -51,6 +45,7 @@ function isAllowedDashboardOrigin(origin, allowlist) {
 
 let dynamicAllowlist = [...DEFAULT_ALLOWLIST];
 let BRIDGE_ENABLED = isAllowedDashboardOrigin(window.location.origin, dynamicAllowlist);
+console.log('[CP Bridge] BRIDGE_ENABLED =', BRIDGE_ENABLED, '| origin =', window.location.origin);
 let bridgeHeartbeatTimer = null;
 
 function nowIso() {
@@ -200,7 +195,9 @@ if (BRIDGE_ENABLED) {
 try {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message) return;
+    console.log('[CP Bridge] onMessage:', message.type, message);
     if (message.type === "CP_PORTAL_SYNCED") {
+      console.log('[CP Bridge] CP_PORTAL_SYNCED:', message);
       try {
         // Trigger React listeners (DashboardLayout listens for this to refresh the user wallet immediately).
         window.dispatchEvent(new CustomEvent("cp:extensionImported", { detail: message }));
@@ -222,13 +219,16 @@ try {
       return;
     }
     if (message.type === "CP_WEB_IMPORT_OUTCOMES") {
+      console.log('[CP Bridge] CP_WEB_IMPORT_OUTCOMES received, entries:', message.entries?.length || 0);
       (async () => {
         try {
           const entries = Array.isArray(message.entries) ? message.entries : [];
           if (!entries.length) {
+            console.log('[CP Bridge] No entries to import');
             sendResponse({ attempted: true, status: 400, body: { success: false, message: "No entries to import" } });
             return;
           }
+          console.log('[CP Bridge] Importing entries:', JSON.stringify(entries.slice(0, 3)), '... total:', entries.length);
           const res = await fetch(`${window.location.origin}/api/extension/import`, {
             method: "POST",
             cache: "no-store",
@@ -237,6 +237,7 @@ try {
             body: JSON.stringify({ entries }),
           });
           const body = await res.json().catch(() => null);
+          console.log('[CP Bridge] Import response:', res.status, body);
           if (res.ok && body?.success) {
             try {
               window.dispatchEvent(new Event("cp:extensionImported"));
@@ -246,6 +247,7 @@ try {
           }
           sendResponse({ attempted: true, status: res.status, body });
         } catch (error) {
+          console.error('[CP Bridge] Import failed:', error);
           sendResponse({
             attempted: true,
             status: 0,

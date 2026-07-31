@@ -494,6 +494,28 @@ function ensurePanel() {
     return;
   }
 
+  // Check if panel is enabled in settings (default: false)
+  chrome.storage.local.get("indeed_panel_enabled", (data) => {
+    if (!data.indeed_panel_enabled) return;
+    createPanelDOM();
+  });
+}
+
+function removePanel() {
+  const panel = document.getElementById(PANEL_ID);
+  const toggle = document.getElementById(TOGGLE_ID);
+  if (panel) panel.remove();
+  if (toggle) toggle.remove();
+  panelMounted = false;
+}
+
+function createPanelDOM() {
+  if (panelMounted) return;
+  if (document.getElementById(PANEL_ID) || document.getElementById(TOGGLE_ID)) {
+    panelMounted = true;
+    return;
+  }
+
   const toggle = document.createElement("button");
   toggle.id = TOGGLE_ID;
   toggle.type = "button";
@@ -1810,6 +1832,25 @@ function boot() {
     void pollBootstrap();
   }, PANEL_POLL_MS);
 }
+
+// ── Panel on/off toggle listener ──
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "CP_PANEL_VISIBILITY") {
+    if (msg.enabled) {
+      if (!panelMounted) {
+        createPanelDOM();
+      } else {
+        const panel = document.getElementById(PANEL_ID);
+        if (panel) panel.classList.remove("cp-hidden");
+      }
+    } else {
+      removePanel();
+    }
+  }
+  if (msg.type === "CP_GET_PANEL_ENABLED") {
+    // handled by background; this is a no-op here
+  }
+});
 
 // ======================== Debug Helper ========================
 window.cpDebugCapture = async function() {
