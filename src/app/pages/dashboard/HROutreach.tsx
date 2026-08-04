@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { HR_OUTREACH_EXTENSION_STORE_URL } from "src/lib/extension-providers";
 import {
   Search,
   Mail,
@@ -1106,6 +1107,15 @@ export default function HROutreach() {
                 It auto-collects up to 100 contacts and syncs them to this dashboard.
               </p>
               <div className="flex items-center gap-3 mt-3">
+                <a
+                  href={HR_OUTREACH_EXTENSION_STORE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity shadow-md"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Install from Chrome Web Store
+                </a>
                 <button
                   onClick={detectExtension}
                   disabled={refreshing}
@@ -1134,7 +1144,7 @@ export default function HROutreach() {
           {/* Steps */}
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { step: "1", title: "Install Extension", desc: "Add HR Direct Outreach to Chrome" },
+              { step: "1", title: "Install Extension", desc: "Add HR Direct Outreach from the Chrome Web Store" },
               { step: "2", title: "Open LinkedIn & Collect", desc: "Click Start — extension scrapes hiring posts" },
               { step: "3", title: "Send Emails", desc: "Contacts sync here automatically" },
             ].map(({ step, title, desc }) => (

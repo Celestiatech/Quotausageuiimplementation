@@ -8,6 +8,7 @@ export type ExtensionProviderConfig = {
   rootDir: string;
   sourceKey: string;
   zipPrefix: string;
+  storeUrl: string | null;
 };
 
 const EXTENSION_PROVIDERS: Record<ExtensionProvider, ExtensionProviderConfig> = {
@@ -19,6 +20,7 @@ const EXTENSION_PROVIDERS: Record<ExtensionProvider, ExtensionProviderConfig> = 
     rootDir: "CareerPilotLinkedInExtension",
     sourceKey: "linkedin_extension",
     zipPrefix: "AutoApplyCVLinkedInExtensionVersion",
+    storeUrl: "https://chromewebstore.google.com/detail/mcfmniiniaigfhhjlaegpmhecbdoikjd",
   },
   indeed: {
     provider: "indeed",
@@ -28,8 +30,16 @@ const EXTENSION_PROVIDERS: Record<ExtensionProvider, ExtensionProviderConfig> = 
     rootDir: "CareerPilotIndeedExtension",
     sourceKey: "indeed_extension",
     zipPrefix: "AutoApplyCVIndeedExtensionVersion",
+    storeUrl: null,
   },
 };
+
+export const HR_OUTREACH_EXTENSION_STORE_URL =
+  "https://chromewebstore.google.com/detail/cilkgachncgahbonpdcfjmjifingpnah";
+
+export function getExtensionStoreUrl(provider: unknown, fallback: ExtensionProvider = "linkedin"): string | null {
+  return getExtensionProviderConfig(provider, fallback).storeUrl;
+}
 
 export function normalizeExtensionProvider(
   value: unknown,

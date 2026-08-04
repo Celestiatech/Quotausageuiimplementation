@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "HR Direct Outreach",
   "version": "1.0.0",
-  "description": "Scrape LinkedIn hiring posts for HR contacts (name, title, company, email, phone) and sync to your Cold Emails dashboard.",
+  "description": "Finds HR contact details on LinkedIn hiring posts and syncs them to your Cold Emails dashboard.",
   "permissions": [
     "storage",
     "tabs",
@@ -14,15 +14,7 @@
     "https://www.linkedin.com/*",
     "https://autoapplycv.in/*",
     "https://www.autoapplycv.in/*",
-    "https://autoapplycv.vercel.app/*",
-    "http://localhost:3000/*",
-    "http://127.0.0.1:3000/*",
-    "http://localhost:3001/*",
-    "http://127.0.0.1:3001/*",
-    "http://localhost/*",
-    "https://localhost/*",
-    "http://127.0.0.1/*",
-    "https://127.0.0.1/*"
+    "https://autoapplycv.vercel.app/*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -46,15 +38,7 @@
       "matches": [
         "https://autoapplycv.in/*",
         "https://www.autoapplycv.in/*",
-        "https://autoapplycv.vercel.app/*",
-        "http://localhost:3000/*",
-        "http://127.0.0.1:3000/*",
-        "http://localhost:3001/*",
-        "http://127.0.0.1:3001/*",
-        "http://localhost/*",
-        "https://localhost/*",
-        "http://127.0.0.1/*",
-        "https://127.0.0.1/*"
+        "https://autoapplycv.vercel.app/*"
       ],
       "js": ["src/bridge.js"],
       "run_at": "document_idle"

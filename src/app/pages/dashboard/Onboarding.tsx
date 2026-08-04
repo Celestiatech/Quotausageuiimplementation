@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
+import { getExtensionProviderConfig } from "src/lib/extension-providers";
 import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
 import {
   DASHBOARD_TOUR_EVENT_NAME,
@@ -818,18 +819,10 @@ export default function Onboarding() {
     downloadFileName: formatExtensionPackageFileName("1.1.3"),
     downloadBaseName: formatExtensionPackageName("1.1.3"),
   });
-  const currentPackageBaseName =
-    extensionRelease.downloadBaseName || formatExtensionPackageName(extensionRelease.version || "1.1.3");
-  const currentPackageFileName =
-    extensionRelease.downloadFileName || formatExtensionPackageFileName(extensionRelease.version || "1.1.3");
   const installedPackageName =
     extensionStatus.installed && extensionStatus.version ? formatExtensionPackageName(extensionStatus.version) : "";
   const checkExtensionButtonRef = useRef<HTMLButtonElement | null>(null);
   const saveAndFinishButtonRef = useRef<HTMLButtonElement | null>(null);
-  const currentPackageLabelRef = useRef<HTMLParagraphElement | null>(null);
-  const downloadOpenButtonRef = useRef<HTMLButtonElement | null>(null);
-  const downloadZipButtonRef = useRef<HTMLAnchorElement | null>(null);
-  const openLinkedInJobsButtonRef = useRef<HTMLAnchorElement | null>(null);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const [installGuideStepIndex, setInstallGuideStepIndex] = useState(0);
   const [installGuideCompletedIds, setInstallGuideCompletedIds] = useState<string[]>([]);
@@ -950,51 +943,26 @@ export default function Onboarding() {
     }
   };
 
-  const canDownloadExtensionZip = Boolean(
-    String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim(),
-  );
-
-  const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
+  const extensionStoreUrl = String(
+    process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || getExtensionProviderConfig("linkedin").storeUrl || "",
+  ).trim();
 
   const installGuideSteps = useMemo<ExtensionInstallGuideStep[]>(
     () => [
       {
-        id: "download-zip",
-        title: "Download extension",
-        body: `Download ${currentPackageFileName} from this page.`,
-        note: "This is the ZIP file you will extract in the next step.",
-        actionLabel: "Download current ZIP",
-        targetRef: downloadZipButtonRef,
-      },
-      {
-        id: "extract-folder",
-        title: "Extract folder",
-        body: "Right-click the downloaded ZIP and select Extract All. Open the extracted folder.",
-        note: `The extracted folder should look like ${currentPackageBaseName} and contain manifest.json.`,
-        targetRef: currentPackageLabelRef,
-      },
-      {
-        id: "open-chrome-extensions",
-        title: "Load unpacked",
-        body: "Open Chrome menu (three dots) > Extensions > Manage Extensions. Turn on Developer mode on the top-right, then click Load unpacked on the top-left. Select the extracted folder.",
-        note: `Select the extracted folder ${currentPackageBaseName}. This matches the screenshot: Developer mode on the right, Load unpacked on the left.`,
-        image: "/Install guide/Load unpacked.png",
-        imageAlt: "Chrome Extensions page showing Developer mode enabled and Load unpacked button",
-        actionLabel: "Download + Open Extensions",
-        targetRef: downloadOpenButtonRef,
-      },
-      {
-        id: "pin-extension",
-        title: "Pin extension",
-        body: "Click the puzzle piece icon in Chrome's toolbar, find AutoApply CV LinkedIn Extension, and pin it for easy access.",
-        image: "/Install guide/Pin extension.png",
-        imageAlt: "Chrome toolbar showing the extensions menu with pin option",
+        id: "install-store",
+        title: "Install from Chrome Web Store",
+        body: "Open the AutoApply CV LinkedIn Copilot page on the Chrome Web Store and click Add to Chrome.",
+        note: extensionStoreUrl
+          ? "The extension installs automatically after you confirm the permission prompt."
+          : "You can also search for 'AutoApply CV LinkedIn Copilot' on the Chrome Web Store.",
+        actionLabel: "Open Chrome Web Store",
         targetRef: checkExtensionButtonRef,
       },
       {
         id: "verify-install",
         title: "Check extension",
-        body: "After the extension card appears in Chrome, click the extension icon, make sure you are signed in to LinkedIn, then come back here and click Check Extension.",
+        body: "After the extension is installed, click the extension icon, make sure you are signed in to LinkedIn, then come back here and click Check Extension.",
         note: installedPackageName
           ? `Detected right now: ${installedPackageName}. If this is the new version, click Step done.`
           : "If detection still fails, refresh this page and click Check Extension again, then click Step done.",
@@ -1003,7 +971,7 @@ export default function Onboarding() {
         targetRef: checkExtensionButtonRef,
       },
     ],
-    [checkingExtension, currentPackageBaseName, currentPackageFileName, installedPackageName],
+    [checkingExtension, extensionStoreUrl, installedPackageName],
   );
 
   const checkExtensionStatus = async (opts?: { silent?: boolean }) => {
@@ -1072,73 +1040,19 @@ export default function Onboarding() {
     }
   };
 
-  const onInstallOrReloadExtension = async () => {
+  const openExtensionStore = () => {
     if (typeof window === "undefined") return;
     setError("");
     setMessage("");
-    const downloadFileName = currentPackageFileName;
-    try {
-      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
-        method: "GET",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = downloadFileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch {
-      const anchor = document.createElement("a");
-      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
-      anchor.download = downloadFileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+    if (!extensionStoreUrl) {
+      setError("Chrome Web Store URL is not configured yet.");
+      return;
     }
-
-    setMessage(
-      `ZIP downloaded: ${downloadFileName}. Extract it, open Manage Extensions, turn on Developer mode, then click Load unpacked and choose the extracted folder.`,
-    );
-
-    window.setTimeout(() => {
-      window.open("chrome://extensions/", "_blank");
-    }, 160);
-  };
-
-  const downloadCurrentZipOnly = async () => {
-    if (typeof window === "undefined") return;
-    setError("");
-    const downloadFileName = currentPackageFileName;
-    try {
-      const res = await fetch(`${extensionZipUrl}?ts=${Date.now()}`, {
-        method: "GET",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = downloadFileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch {
-      const anchor = document.createElement("a");
-      anchor.href = `${extensionZipUrl}?ts=${Date.now()}`;
-      anchor.download = downloadFileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+    const opened = window.open(extensionStoreUrl, "_blank", "noopener,noreferrer");
+    if (opened) {
+      opened.opener = null;
     }
-
-    setMessage(`ZIP downloaded: ${downloadFileName}. Unzip it before the next step.`);
+    setMessage("Opening the Chrome Web Store. Click Add to Chrome to install the extension.");
   };
 
   const openLinkedInJobsTab = () => {
@@ -1186,7 +1100,7 @@ export default function Onboarding() {
 
     if (installGuideStepIndex >= installGuideSteps.length - 1) {
       setInstallGuideOpen(false);
-      setMessage("Guided install completed. If the version still looks old, reload the unpacked extension once in chrome://extensions.");
+      setMessage("Guided install completed. If the extension does not appear yet, refresh this page and check again.");
       return;
     }
 
@@ -1194,12 +1108,8 @@ export default function Onboarding() {
   };
 
   const runInstallGuideStepAction = (step: ExtensionInstallGuideStep) => {
-    if (step.id === "download-zip") {
-      void downloadCurrentZipOnly();
-      return;
-    }
-    if (step.id === "open-chrome-extensions") {
-      void onInstallOrReloadExtension();
+    if (step.id === "install-store") {
+      openExtensionStore();
       return;
     }
     if (step.id === "verify-install") {

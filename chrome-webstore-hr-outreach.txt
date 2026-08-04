@@ -1,0 +1,131 @@
+CHROME WEB STORE — HR Direct Outreach
+=====================================
+
+STORE LISTING
+=============
+
+TITLE
+-----
+HR Direct Outreach
+
+SUMMARY
+-------
+Collects HR contact details from LinkedIn hiring posts and syncs them to your Cold Emails dashboard.
+
+DESCRIPTION
+-----------
+Build your own HR outreach list from LinkedIn hiring posts.
+
+What it does
+- When you browse LinkedIn hiring search results, HR Direct Outreach collects HR contacts mentioned in the posts: name, job title, company, email, phone, and LinkedIn URL.
+- Collected contacts are shown live with a contact counter, and can be exported to CSV.
+- Syncs everything to your Cold Emails dashboard on autoapplycv.in so you can run outreach campaigns.
+
+How it works
+1. Open the HR Direct Outreach popup and enter a search keyword (e.g. "we are hiring").
+2. Press Start Collecting — the extension opens LinkedIn hiring search results and scans posts.
+3. Review collected contacts, export to CSV, or open the dashboard to run your campaign.
+
+Features
+- Keyword-based collection from LinkedIn hiring posts
+- Collects name, title, company, email, phone, LinkedIn URL
+- Pause / resume / clear with a live contact counter
+- One-click CSV export
+- Syncs to your Cold Emails dashboard
+
+Important
+- Only collect contact details from posts you are authorised to use for outreach.
+- Use collected data responsibly and in line with applicable privacy laws.
+- Data is stored in your own account; see the privacy policy at https://autoapplycv.in/privacy-policy
+
+CATEGORY
+--------
+Productivity
+
+LANGUAGE
+--------
+English
+
+STORE ICON (128 x 128)
+----------------------
+Upload: HROutreachExtension/icons/icon128.png (already 128x128)
+
+SCREENSHOTS (at least 1 required — exactly 1280x800 or 640x400, JPEG or 24-bit PNG, NO alpha)
+----------------------------------------------------------------------------------------------
+None exist yet. Capture real ones and resize:
+1. Browser screenshot of the panel running on LinkedIn hiring search results.
+2. Screenshot of the HR Outreach / Cold Emails dashboard page in your app.
+
+HOME PAGE URL / OFFICIAL URL
+----------------------------
+https://autoapplycv.in
+
+SUPPORT URL
+-----------
+https://autoapplycv.in/contact
+
+MATURE CONTENT
+--------------
+No
+
+ITEM SUPPORT
+------------
+On
+
+
+PRIVACY FORM
+============
+
+SINGLE PURPOSE DESCRIPTION
+--------------------------
+Collects HR contact details (name, title, company, email, phone) from LinkedIn hiring posts the user views, so the user can build their own outreach list, and syncs them to the user's own Cold Emails dashboard.
+
+PERMISSION JUSTIFICATIONS
+-------------------------
+storage:
+Stores collected contacts and collection state locally so the user can pause and resume collection and keep settings between sessions.
+
+tabs:
+Opens and focuses the LinkedIn tab used for collection and checks its URL to confirm it is a LinkedIn hiring search page.
+
+scripting:
+Injects the collection content script and panel into LinkedIn hiring search result pages.
+
+activeTab:
+Grants temporary access to the current LinkedIn tab when the user starts collection.
+
+notifications:
+Shows notifications when collection milestones are reached so the user knows progress without watching.
+
+HOST PERMISSION JUSTIFICATION
+-----------------------------
+Runs on LinkedIn hiring search pages and syncs collected contacts to the user's own dashboard account at autoapplycv.in and autoapplycv.vercel.app.
+
+REMOTE CODE
+-----------
+No, I am not using Remote code.
+
+DATA USAGE — WHAT USER DATA DO YOU COLLECT?
+-------------------------------------------
+Select ONLY these two:
+[x] Personally identifiable information  (name, email and phone of HR contacts)
+[x] Website content                      (content of LinkedIn hiring posts)
+
+DO NOT select: Health information, Financial and payment information, Authentication information,
+Personal communications, Location, Web history, User activity.
+
+CERTIFICATIONS (check all three)
+--------------------------------
+[x] I do not sell or transfer user data to third parties, apart from the approved use cases
+[x] I do not use or transfer user data for purposes that are unrelated to my item's single purpose
+[x] I do not use or transfer user data to determine creditworthiness or for lending purposes
+
+PRIVACY POLICY URL
+------------------
+https://autoapplycv.in/privacy-policy
+
+WARNING
+-------
+This extension collects third-party personal data (names, emails, phones of HR staff).
+This is the highest-risk part of the review. Ensure the privacy policy explicitly covers
+this data and how users may opt out / request deletion. Expect possible rejection or extra scrutiny.

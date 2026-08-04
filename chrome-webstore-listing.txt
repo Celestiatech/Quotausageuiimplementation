@@ -1,0 +1,80 @@
+CHROME WEB STORE LISTING — AutoApply CV LinkedIn Copilot
+========================================================
+
+TITLE (from package)
+--------------------
+AutoApply CV LinkedIn Copilot
+
+SUMMARY (from package)
+----------------------
+LinkedIn auto-apply assistant with a live status panel for your job search.
+
+DESCRIPTION
+-----------
+Apply to LinkedIn jobs faster with AutoApply CV LinkedIn Copilot.
+
+What it does
+- Speeds up the LinkedIn Easy Apply flow using a copilot panel that sits alongside the job you're viewing.
+- A live status panel shows exactly what the copilot is doing as it fills in and reviews an application.
+- Tracks your applications and lets you review results in the popup and on your autoapplycv.in dashboard.
+
+Key features
+- Guided assistant for LinkedIn Easy Apply jobs
+- Live status panel with step-by-step feedback
+- Resume and profile sync to your AutoApply CV dashboard
+- You stay in control: the copilot acts only when you explicitly start it on a job page
+
+How it works
+1. Install the extension and sign in to autoapplycv.in.
+2. Open a LinkedIn job with Easy Apply.
+3. Start the copilot from the panel — it guides you through the application step by step.
+
+Data & privacy
+- The extension only reads the LinkedIn job pages you open and the data you submit.
+- Application activity is synced to your AutoApply CV dashboard account.
+- No data is shared with third parties. See https://autoapplycv.in/privacy-policy
+
+CATEGORY
+--------
+Productivity
+
+LANGUAGE
+--------
+English
+
+STORE ICON (128 x 128)
+----------------------
+Upload: icons/icon128.png (already 128x128)
+
+SCREENSHOTS (at least 1 required — exactly 1280x800 or 640x400, JPEG or 24-bit PNG, NO alpha)
+----------------------------------------------------------------------------------------------
+Generate/crop from public/marketing/*.png (they are 1920x1080 and must be resized first).
+Recommended order:
+1. value-dashboard.png
+2. howitworks-install.png
+3. howitworks-match.png
+4. howitworks-track.png
+5. reliability-evidence.png
+
+HOME PAGE URL / OFFICIAL URL
+----------------------------
+https://autoapplycv.in
+(Verify ownership in Google Search Console.)
+
+SUPPORT URL
+-----------
+https://autoapplycv.in/contact
+(Alternative: https://autoapplycv.in/help-center)
+
+MATURE CONTENT
+--------------
+No
+
+ITEM SUPPORT
+------------
+On
+
+REQUIRED BEFORE PUBLISH (not on the listing form)
+-------------------------------------------------
+- Privacy policy URL: https://autoapplycv.in/privacy-policy
+- Data usage disclosure: extension transmits application data to your dashboard (autoapplycv.in).

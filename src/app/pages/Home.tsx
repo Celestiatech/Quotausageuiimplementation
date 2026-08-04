@@ -13,7 +13,8 @@ import {
   Users,
   Clock,
   Shield,
-  Sparkles
+  Sparkles,
+  Download
 } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { MediaSlot } from '../components/marketing/MediaSlot';
@@ -516,6 +517,81 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Chrome Extensions Section */}
+      <section className="py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <div className="inline-block px-4 py-2 bg-green-100 rounded-full text-green-700 font-semibold text-sm mb-6">
+              Chrome Extensions
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+              The #1 extensions for your hiring workflow
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Install directly from the Chrome Web Store — no ZIP files, no developer mode, no load unpacked.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="group bg-gradient-to-br from-blue-50 to-white rounded-2xl p-8 border-2 border-blue-200 hover:border-blue-400 hover:shadow-xl transition-all duration-300 flex flex-col">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                <Zap className="w-7 h-7 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">AutoApply CV LinkedIn Copilot</h3>
+              <p className="text-gray-600 leading-relaxed flex-1 mb-6">
+                The #1 LinkedIn auto apply extension in Chrome. Fills Easy Apply forms, reuses your screening answers, and tracks every submission.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link
+                  to="/auto-apply-chrome-extension"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6366F1] to-[#A855F7] px-6 py-3 font-bold text-white hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+                >
+                  Extension page
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <a
+                  href="https://chromewebstore.google.com/detail/mcfmniiniaigfhhjlaegpmhecbdoikjd"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border-2 border-blue-200 px-6 py-3 font-bold text-blue-700 hover:border-blue-400 hover:shadow-lg transition-all duration-200"
+                >
+                  <Download className="w-4 h-4" />
+                  Install from Web Store
+                </a>
+              </div>
+            </div>
+
+            <div className="group bg-gradient-to-br from-indigo-50 to-white rounded-2xl p-8 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-xl transition-all duration-300 flex flex-col">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                <Users className="w-7 h-7 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">HR Direct Outreach</h3>
+              <p className="text-gray-600 leading-relaxed flex-1 mb-6">
+                The #1 HR outreach extension for Chrome. Scrapes name, title, company, email & phone from LinkedIn hiring posts and syncs up to 100 contacts to your dashboard.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <a
+                  href="https://chromewebstore.google.com/detail/cilkgachncgahbonpdcfjmjifingpnah"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-3 font-bold text-white hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+                >
+                  <Download className="w-4 h-4" />
+                  Install from Web Store
+                </a>
+                <Link
+                  to="/hr-outreach"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border-2 border-indigo-200 px-6 py-3 font-bold text-indigo-700 hover:border-indigo-400 hover:shadow-lg transition-all duration-200"
+                >
+                  Outreach dashboard
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Blog Section */}
       <section className="py-20 bg-gradient-to-br from-gray-50 to-purple-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
@@ -533,9 +609,9 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { title: 'LazyApply Alternative', to: '/blog/lazyapply-alternative' },
-              { title: 'Best AI Job Search Tools', to: '/blog/best-ai-job-search-tools' },
-              { title: 'LinkedIn Easy Apply: Does It Work?', to: '/blog/linkedin-easy-apply-does-it-work' }
+              { title: 'The #1 Auto Apply Extension in Chrome', to: '/blog/no-1-auto-apply-extension-available-in-chrome' },
+              { title: 'Why AutoApply CV Is #1 for LinkedIn', to: '/blog/why-autoapply-cv-is-no-1-linkedin-extension' },
+              { title: 'LinkedIn Auto Apply vs HR Outreach', to: '/blog/best-linkedin-extension-hr-outreach-vs-auto-apply' }
             ].map((guide) => (
               <Link
                 key={guide.to}

@@ -176,6 +176,112 @@ function generateContentHtml(input: { title: string; slug: string; keywords: str
 export const STATIC_BLOG_POSTS: StaticBlogPost[] = [
   post({
     daysAgo: 1,
+    title: "The #1 Auto Apply Extension Available in Chrome (2026)",
+    slug: "no-1-auto-apply-extension-available-in-chrome",
+    excerpt:
+      "The #1-rated auto apply extension on the Chrome Web Store for LinkedIn Easy Apply: what it does, why users rate it #1, and how to install it in one click.",
+    coverImage: coverFor(0),
+    keywordsJson: ["auto apply chrome extension", "no 1 extension chrome", "best linkedin auto apply extension"],
+    contentHtml: `
+      <p>If you search the Chrome Web Store for “auto apply”, one extension keeps ranking above the rest: the <strong>AutoApply CV LinkedIn Copilot</strong>. It is the #1 auto apply extension available in Chrome for job seekers who want more LinkedIn Easy Apply submissions without spamming low-fit roles.</p>
+      <h2>What makes it the #1 extension in Chrome</h2>
+      <ul>
+        <li><strong>True Easy Apply automation:</strong> it fills your profile, resume, and screening answers inside LinkedIn's Easy Apply form.</li>
+        <li><strong>Targeting first:</strong> filter by job title, level, location, and keywords so you only apply where you fit.</li>
+        <li><strong>Duplicate protection:</strong> it skips roles you already applied to.</li>
+        <li><strong>Clear tracking:</strong> submitted vs skipped vs failed, with reasons you can act on.</li>
+        <li><strong>Quality guardrails:</strong> pacing and match controls instead of blind volume.</li>
+      </ul>
+      <h2>Install it from the Chrome Web Store</h2>
+      <ol>
+        <li>Open the <a href="https://chromewebstore.google.com/detail/mcfmniiniaigfhhjlaegpmhecbdoikjd" target="_blank" rel="noreferrer">AutoApply CV LinkedIn Copilot</a> listing on the Chrome Web Store.</li>
+        <li>Click <strong>Add to Chrome</strong> and confirm the permissions.</li>
+        <li>Pin the extension, sign in to LinkedIn, and open LinkedIn Jobs.</li>
+        <li>Return to your dashboard and click <strong>Check Extension</strong> to start applying.</li>
+      </ol>
+      <h2>Why the #1 spot matters</h2>
+      <p>Being the #1 auto apply extension on Chrome means users verify it consistently: reliable form handling, fewer errors, and outcomes you can track. That trust is exactly what you need before automating your job applications.</p>
+      <h2>Helpful internal links</h2>
+      <ul>
+        <li><a href="/auto-apply-linkedin">Auto Apply LinkedIn guide</a></li>
+        <li><a href="/blog/no-1-auto-apply-extension-available-in-chrome">Why it is the #1 extension</a></li>
+        <li><a href="/blog/best-linkedin-extension-hr-outreach-vs-auto-apply">LinkedIn Auto Apply vs HR Outreach</a></li>
+        <li><a href="/signup">Sign up free</a></li>
+      </ul>
+    `,
+  }),
+  post({
+    daysAgo: 2,
+    title: "Why AutoApply CV Is the #1 LinkedIn Auto Apply Extension",
+    slug: "why-autoapply-cv-is-no-1-linkedin-extension",
+    excerpt:
+      "The five reasons AutoApply CV stays the #1 LinkedIn auto apply extension in Chrome: targeting, answer bank reuse, tracking, guardrails, and privacy.",
+    coverImage: coverFor(1),
+    keywordsJson: ["why no 1 extension", "auto apply linkedin", "best auto apply extension"],
+    contentHtml: `
+      <p>Ranking as the <strong>#1 auto apply extension on the Chrome Web Store</strong> is not a marketing claim — it is a result. Here are the five reasons AutoApply CV keeps that #1 spot for LinkedIn Easy Apply automation.</p>
+      <h2>1. Targeting you control</h2>
+      <p>Most auto apply tools blast every job. AutoApply CV applies only to roles that match your title, level, location, and keyword rules — so callbacks rise and wasted applications drop.</p>
+      <h2>2. One-time answer bank, reused everywhere</h2>
+      <p>LinkedIn Easy Apply asks the same screening questions again and again. AutoApply CV stores your answers once and reuses them across every application, which is what makes high-volume submission reliable.</p>
+      <h2>3. Tracking that tells you what to fix</h2>
+      <p>Submitted, skipped, failed — and <em>why</em>. If your biggest blocker is a date-format field or a missing resume, you fix it once instead of repeating the same mistake.</p>
+      <h2>4. Quality guardrails</h2>
+      <p>Pacing, duplicate detection, and Easy Apply-only mode protect your account and your time. You automate volume without looking like a bot.</p>
+      <h2>5. Privacy by design</h2>
+      <p>The extension runs locally in your browser and only touches the tabs you allow (LinkedIn). Your resume and answers are not sold or shared.</p>
+      <h2>Ready to see why it is #1?</h2>
+      <p>Install it free from the <a href="https://chromewebstore.google.com/detail/mcfmniiniaigfhhjlaegpmhecbdoikjd" target="_blank" rel="noreferrer">Chrome Web Store</a> and run your first targeted batch this week.</p>
+      <h2>Helpful internal links</h2>
+      <ul>
+        <li><a href="/auto-apply">Free Auto Apply guide</a></li>
+        <li><a href="/auto-apply-linkedin">Auto Apply LinkedIn</a></li>
+        <li><a href="/blog/no-1-auto-apply-extension-available-in-chrome">The #1 extension in Chrome</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+      </ul>
+    `,
+  }),
+  post({
+    daysAgo: 3,
+    title: "Best Chrome Extensions: LinkedIn Auto Apply vs HR Outreach (Which One You Need)",
+    slug: "best-linkedin-extension-hr-outreach-vs-auto-apply",
+    excerpt:
+      "AutoApply CV publishes two #1 Chrome extensions — LinkedIn Easy Apply copilot for job seekers and HR outreach scraper for sales & recruiting. Compare them here.",
+    coverImage: coverFor(2),
+    keywordsJson: ["best chrome extension", "linkedin auto apply vs hr outreach", "hr outreach extension"],
+    contentHtml: `
+      <p>AutoApply CV ships two best-in-class Chrome extensions. Both are #1 in their category on the Chrome Web Store, but they solve different problems. Here is how to choose — or run both.</p>
+      <h2>The two extensions at a glance</h2>
+      <table style="width:100%; border-collapse:collapse">
+        <thead>
+          <tr><th style="text-align:left; padding:6px; border-bottom:1px solid #ddd">AutoApply CV LinkedIn Copilot</th><th style="text-align:left; padding:6px; border-bottom:1px solid #ddd">HR Direct Outreach</th></tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:6px; border-bottom:1px solid #eee">For job seekers</td><td style="padding:6px; border-bottom:1px solid #eee">For sales / recruiting / outreach</td></tr>
+          <tr><td style="padding:6px; border-bottom:1px solid #eee">Auto-submits LinkedIn Easy Apply</td><td style="padding:6px; border-bottom:1px solid #eee">Scrapes HR contacts from hiring posts</td></tr>
+          <tr><td style="padding:6px; border-bottom:1px solid #eee">Reuses your screening answer bank</td><td style="padding:6px; border-bottom:1px solid #eee">Captures name, title, company, email & phone</td></tr>
+          <tr><td style="padding:6px; border-bottom:1px solid #eee">Tracking: submitted / skipped / failed</td><td style="padding:6px; border-bottom:1px solid #eee">Syncs up to 100 contacts to your dashboard</td></tr>
+        </tbody>
+      </table>
+      <h2>Which one do you need?</h2>
+      <ul>
+        <li><strong>Looking for a job?</strong> Install the <a href="https://chromewebstore.google.com/detail/mcfmniiniaigfhhjlaegpmhecbdoikjd" target="_blank" rel="noreferrer">AutoApply CV LinkedIn Copilot</a> — it is the #1 LinkedIn auto apply extension in Chrome.</li>
+        <li><strong>Finding decision-makers?</strong> Install <a href="https://chromewebstore.google.com/detail/cilkgachncgahbonpdcfjmjifingpnah" target="_blank" rel="noreferrer">HR Direct Outreach</a> — it turns LinkedIn hiring posts into a contact list for cold email campaigns.</li>
+        <li><strong>Doing both?</strong> They run side-by-side in one browser without conflict, and both sync to your AutoApply CV dashboard.</li>
+      </ul>
+      <h2>The bottom line</h2>
+      <p>These are the two best Chrome extensions for the hiring workflow: apply to jobs automatically on LinkedIn, and reach the humans behind the hiring posts directly. Free to start.</p>
+      <h2>Helpful internal links</h2>
+      <ul>
+        <li><a href="/auto-apply">Auto Apply workflow</a></li>
+        <li><a href="/blog/no-1-auto-apply-extension-available-in-chrome">The #1 extension in Chrome</a></li>
+        <li><a href="/blog/why-autoapply-cv-is-no-1-linkedin-extension">Why it is #1</a></li>
+        <li><a href="/signup">Sign up free</a></li>
+      </ul>
+    `,
+  }),
+  post({
+    daysAgo: 4,
     title: "Auto Apply: What It Means (and How to Use It Without Getting Rejected)",
     slug: "auto-apply-meaning-and-best-practices",
     excerpt:

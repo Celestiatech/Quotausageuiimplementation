@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { HR_OUTREACH_EXTENSION_STORE_URL } from "src/lib/extension-providers";
 import {
   Search,
   Mail,
@@ -569,7 +570,17 @@ export default function ColdEmails() {
                   <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="font-medium">Extension not detected</p>
-                    <p className="text-xs text-amber-600 mt-1">Install and enable the HR Outreach extension, then refresh this page.</p>
+                    <p className="text-xs text-amber-600 mt-1">
+                      Install and enable the HR Outreach extension, then refresh this page.{" "}
+                      <a
+                        href={HR_OUTREACH_EXTENSION_STORE_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-800"
+                      >
+                        Install from Chrome Web Store
+                      </a>
+                    </p>
                   </div>
                 </div>
               )}

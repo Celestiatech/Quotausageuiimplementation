@@ -15,11 +15,11 @@ import {
   Download,
   ExternalLink,
   Link2,
-  Copy,
 } from "lucide-react";
 import { useParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
+import { getExtensionProviderConfig } from "src/lib/extension-providers";
 import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
 import { syncProfileToExtension as syncProfileToExtensionBase } from "src/lib/sync-profile";
 import {
@@ -604,7 +604,9 @@ export default function Jobs() {
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
   const linkedInExtensionZipUrl = `${extensionZipUrl}?provider=linkedin`;
   const indeedExtensionZipUrl = `${extensionZipUrl}?provider=indeed`;
-  const extensionStoreUrl = String(process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || "").trim();
+  const extensionStoreUrl = String(
+    process.env.NEXT_PUBLIC_EXTENSION_STORE_URL || getExtensionProviderConfig("linkedin").storeUrl || "",
+  ).trim();
   const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
     version: "1.1.3",
     displayName: "AutoApply CV LinkedIn Copilot",
@@ -637,8 +639,7 @@ export default function Jobs() {
   const versionBadgeRef = useRef<HTMLSpanElement | null>(null);
   const checkExtensionButtonRef = useRef<HTMLButtonElement | null>(null);
   const openLinkedInJobsButtonRef = useRef<HTMLAnchorElement | null>(null);
-  const downloadOpenButtonRef = useRef<HTMLButtonElement | null>(null);
-  const downloadZipButtonRef = useRef<HTMLAnchorElement | null>(null);
+  const storeLinkButtonRef = useRef<HTMLAnchorElement | null>(null);
   const syncProfileButtonRef = useRef<HTMLButtonElement | null>(null);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const [installGuideStepIndex, setInstallGuideStepIndex] = useState(0);
@@ -709,29 +710,14 @@ export default function Jobs() {
   const installGuideSteps = useMemo<ExtensionInstallGuideStep[]>(
     () => [
       {
-        id: "download-zip",
-        title: "Download extension",
-        body: `Download ${currentPackageFileName} from this page.`,
-        note: "This is the ZIP file you will extract in the next step.",
-        actionLabel: "Download current ZIP",
-        targetRef: downloadZipButtonRef,
-      },
-      {
-        id: "extract-folder",
-        title: "Extract folder",
-        body: "Right-click the downloaded ZIP and select Extract All. Open the extracted folder.",
-        note: `The extracted folder should look like ${currentPackageBaseName} and contain manifest.json.`,
-        targetRef: versionBadgeRef,
-      },
-      {
-        id: "open-chrome-extensions",
-        title: "Load unpacked",
-        body: "Open Chrome menu (three dots) > Extensions > Manage Extensions. Turn on Developer mode on the top-right, then click Load unpacked on the top-left. Select the extracted folder.",
-        note: `Select the extracted folder ${currentPackageBaseName}. This matches the screenshot: Developer mode on the right, Load unpacked on the left.`,
-        image: "/Install guide/Load unpacked.png",
-        imageAlt: "Chrome Extensions page showing Developer mode enabled and Load unpacked button",
-        actionLabel: "Download + Open Extensions",
-        targetRef: downloadOpenButtonRef,
+        id: "install-store",
+        title: "Install from Chrome Web Store",
+        body: "Open the AutoApply CV LinkedIn Copilot page on the Chrome Web Store and click Add to Chrome.",
+        note: extensionStoreUrl
+          ? "The extension installs automatically after you confirm the permission prompt."
+          : "You can also search for 'AutoApply CV LinkedIn Copilot' on the Chrome Web Store.",
+        actionLabel: "Open Chrome Web Store",
+        targetRef: storeLinkButtonRef,
       },
       {
         id: "pin-extension",
@@ -744,7 +730,7 @@ export default function Jobs() {
       {
         id: "verify-install",
         title: "Check extension",
-        body: "After the extension card appears in Chrome, click the extension icon, make sure you are signed in to LinkedIn, then come back here and click Check Extension.",
+        body: "After the extension is installed, click the extension icon, make sure you are signed in to LinkedIn, then come back here and click Check Extension.",
         note: installedPackageName
           ? `Detected right now: ${installedPackageName}. If this is the new version, click Step done.`
           : "If detection still fails, refresh this page and click Check Extension again, then click Step done.",
@@ -753,7 +739,7 @@ export default function Jobs() {
         targetRef: checkExtensionButtonRef,
       },
     ],
-    [checkingExtension, currentPackageBaseName, currentPackageFileName, installedPackageName],
+    [checkingExtension, extensionStoreUrl, installedPackageName],
   );
 
   const saveAnswerToSite = async (
@@ -1540,70 +1526,19 @@ export default function Jobs() {
     }
   };
 
-  const onInstallOrReloadExtension = async () => {
+  const openExtensionStore = () => {
     if (typeof window === "undefined") return;
     setError("");
     setInstallMessage("");
-    const downloadFileName = currentPackageFileName;
-    try {
-      const res = await fetch(`${linkedInExtensionZipUrl}&ts=${Date.now()}`, {
-        method: "GET",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = downloadFileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch {
-      const anchor = document.createElement("a");
-      anchor.href = `${linkedInExtensionZipUrl}&ts=${Date.now()}`;
-      anchor.download = downloadFileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+    if (!extensionStoreUrl) {
+      setError("Chrome Web Store URL is not configured yet.");
+      return;
     }
-    setInstallMessage(
-      `ZIP downloaded: ${downloadFileName}. Extract it, open Manage Extensions, turn on Developer mode, then click Load unpacked and choose the extracted folder.`,
-    );
-    window.setTimeout(() => {
-      window.open("chrome://extensions/", "_blank");
-    }, 160);
-  };
-
-  const downloadCurrentZipOnly = async () => {
-    if (typeof window === "undefined") return;
-    setError("");
-    const downloadFileName = currentPackageFileName;
-    try {
-      const res = await fetch(`${linkedInExtensionZipUrl}&ts=${Date.now()}`, {
-        method: "GET",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = downloadFileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch {
-      const anchor = document.createElement("a");
-      anchor.href = `${linkedInExtensionZipUrl}&ts=${Date.now()}`;
-      anchor.download = downloadFileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+    const opened = window.open(extensionStoreUrl, "_blank", "noopener,noreferrer");
+    if (opened) {
+      opened.opener = null;
     }
-    setInstallMessage(`ZIP downloaded: ${downloadFileName}. Unzip it before the next step.`);
+    setInstallMessage("Opening the Chrome Web Store. Click Add to Chrome to install the extension.");
   };
 
   const openLinkedInJobsTab = () => {
@@ -1611,28 +1546,6 @@ export default function Jobs() {
     const opened = window.open("https://www.linkedin.com/jobs/", "_blank", "noopener,noreferrer");
     if (opened) {
       opened.opener = null;
-    }
-  };
-
-  const copyLoadUnpackedSteps = async () => {
-    if (typeof window === "undefined" || !window.navigator?.clipboard) {
-      setError("Clipboard is not available in this browser.");
-      return;
-    }
-    const downloadFileName = currentPackageFileName;
-    try {
-      await window.navigator.clipboard.writeText(
-        [
-          "AutoApply CV Extension Setup (Load Unpacked)",
-          `1) Download ${downloadFileName}.`,
-          `2) Extract it. The folder should look like ${currentPackageBaseName} and contain manifest.json.`,
-          "3) In Chrome click three dots > Extensions > Manage Extensions. Turn ON Developer mode on the top-right, then click Load unpacked on the top-left.",
-          `4) Select the extracted folder, make sure LinkedIn is signed in, then return here and click Check Extension.`,
-        ].join("\n"),
-      );
-      setInstallMessage("Install steps copied. Share them with users directly.");
-    } catch (copyError) {
-      setError(copyError instanceof Error ? copyError.message : "Failed to copy install steps");
     }
   };
 
@@ -1672,7 +1585,7 @@ export default function Jobs() {
 
     if (installGuideStepIndex >= installGuideSteps.length - 1) {
       setInstallGuideOpen(false);
-      setInstallMessage("Guided install completed. If the version still looks old, reload the unpacked extension once in chrome://extensions.");
+      setInstallMessage("Guided install completed. If the extension does not appear yet, refresh this page and check again.");
       return;
     }
 
@@ -1680,12 +1593,8 @@ export default function Jobs() {
   };
 
   const runInstallGuideStepAction = (step: ExtensionInstallGuideStep) => {
-    if (step.id === "download-zip") {
-      void downloadCurrentZipOnly();
-      return;
-    }
-    if (step.id === "open-chrome-extensions") {
-      void onInstallOrReloadExtension();
+    if (step.id === "install-store") {
+      openExtensionStore();
       return;
     }
     if (step.id === "verify-install") {
@@ -1889,13 +1798,14 @@ export default function Jobs() {
               {/* Quick Actions */}
               <div className="flex flex-wrap gap-2">
                 <a
-                  ref={downloadZipButtonRef}
-                  href={linkedInExtensionZipUrl}
-                  download={currentPackageFileName || undefined}
+                  ref={storeLinkButtonRef}
+                  href={extensionStoreUrl || "#"}
+                  target="_blank"
+                  rel="noreferrer"
                   className="px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 transition-all inline-flex items-center gap-2 shadow-sm"
                 >
                   <Download className="w-4 h-4" />
-                  Download ZIP
+                  Install from Chrome Web Store
                 </a>
                 <a
                   ref={openLinkedInJobsButtonRef}
@@ -1907,23 +1817,6 @@ export default function Jobs() {
                   <ExternalLink className="w-4 h-4" />
                   Open LinkedIn Jobs
                 </a>
-                <button
-                  ref={downloadOpenButtonRef}
-                  type="button"
-                  onClick={onInstallOrReloadExtension}
-                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Open Extensions
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void copyLoadUnpackedSteps()}
-                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm"
-                >
-                  <Copy className="w-4 h-4" />
-                  Copy Steps
-                </button>
                 <button
                   ref={syncProfileButtonRef}
                   onClick={() => void syncProfileToExtension()}
@@ -1940,9 +1833,8 @@ export default function Jobs() {
                 <h4 className="text-sm font-semibold text-gray-900 mb-3">Quick Setup</h4>
                 <ol className="space-y-2">
                   {[
-                    { num: 1, text: <>Download <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">{currentPackageFileName}</code> and extract it</> },
-                    { num: 2, text: <>Open <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">chrome://extensions</code>, enable Developer mode, click <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">Load unpacked</code></> },
-                    { num: 3, text: <>Select the extracted folder, open LinkedIn Jobs, then click <strong>Check Status</strong></> },
+                    { num: 1, text: <>Open the <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">AutoApply CV LinkedIn Copilot</code> page on the Chrome Web Store and click <strong>Add to Chrome</strong></> },
+                    { num: 2, text: <>Pin the extension, open LinkedIn Jobs, then click <strong>Check Status</strong></> },
                   ].map((step) => (
                     <li key={step.num} className="flex items-start gap-3 text-sm text-gray-700">
                       <span className="flex-shrink-0 w-5 h-5 rounded-full bg-sky-100 text-sky-700 text-xs font-bold flex items-center justify-center mt-0.5">{step.num}</span>
