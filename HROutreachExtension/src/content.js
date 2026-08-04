@@ -11,10 +11,20 @@
   if (window.__hroContentInjected) return;
   window.__hroContentInjected = true;
 
+  const CONTENT_START_TS = Date.now();
+
+  function cLog(label, detail) {
+    const elapsed = ((Date.now() - CONTENT_START_TS) / 1000).toFixed(1);
+    console.log(`[HRO CS] ${elapsed}s | ${label}`, detail || '');
+  }
+
+  cLog('CONTENT_INIT', `url=${window.location.href}`);
+
   let isScraping = false;
   let stopFlag = false;
   let collectedCount = 0;
   let scrapeTimeoutId = null;
+  let scrapeSessionId = 0;
   let panelEl = null;
   let toggleEl = null;
   let panelVisible = true;
@@ -111,20 +121,17 @@
       searchDate: '',
     };
 
-    // 1. Email from mailto: link (most reliable)
     const mailtoLink = card.querySelector('a[href^="mailto:"]');
     if (mailtoLink) {
       const email = mailtoLink.getAttribute('href').replace('mailto:', '').split('?')[0].trim();
       if (email && email.includes('@')) contact.email = email;
     }
 
-    // 2. LinkedIn profile URL + name from aria-label on profile links
     const profileLinks = card.querySelectorAll('a[href*="/in/"]');
     for (const link of profileLinks) {
       const href = link.getAttribute('href') || '';
       if (href.includes('/in/')) {
         contact.linkedinUrl = href.startsWith('http') ? href : `https://www.linkedin.com${href.split('?')[0]}`;
-        // aria-label format: "Name  3rd+" or "Name   2nd+"
         const ariaLabel = link.getAttribute('aria-label') || '';
         if (ariaLabel && !contact.name) {
           contact.name = ariaLabel.replace(/\s*\d+\w*\+?\s*$/, '').trim();
@@ -133,15 +140,12 @@
       }
     }
 
-    // 3. Title/Company from innerText structure
     const text = card.innerText || '';
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
     const bulletIdx = lines.findIndex((l) => l.startsWith('•') || l === '•');
-    // If aria-label didn't give us a name, try first line
     if (!contact.name && bulletIdx > 0) {
       contact.name = lines[bulletIdx - 1] || '';
     }
-    // Find title/company line
     for (let i = Math.max(0, bulletIdx); i < Math.min(lines.length, bulletIdx + 5); i++) {
       const line = lines[i];
       const atMatch = line.match(/(.+?)\s+at\s+(.+)/i);
@@ -152,11 +156,9 @@
       }
     }
 
-    // 4. Phone from post text
     const phone = extractPhoneFromText(text);
     if (phone) contact.phone = phone;
 
-    // 5. Hashtags
     const hashtagEls = card.querySelectorAll('a[href*="/feed/hashtag/"]');
     const hashtags = [...hashtagEls].map((a) => a.innerText.replace('#', '').trim()).filter(Boolean);
     if (hashtags.length > 0) {
@@ -169,6 +171,88 @@
   // ── Expand a post "see more" button ──────────────────────────────────────────
 
   let highlightedCard = null;
+  let scanEls = [];
+  let scanStyleInjected = false;
+
+  function ensureScanStyle() {
+    if (scanStyleInjected) return;
+    const style = document.createElement('style');
+    style.id = 'hro-scan-style';
+    style.textContent = `
+      @keyframes hro-flash{0%{opacity:0.7}50%{opacity:0.1}100%{opacity:0.7}}
+      @keyframes hro-pulse{0%,100%{box-shadow:0 0 4px #6366f1}50%{box-shadow:0 0 14px #a78bfa}}
+    `;
+    document.head.appendChild(style);
+    scanStyleInjected = true;
+  }
+
+  function clearScanElements() {
+    for (const el of scanEls) {
+      try { if (el.isConnected) el.remove(); } catch {}
+    }
+    scanEls = [];
+  }
+
+  async function animateScan(card) {
+    const rect = card.getBoundingClientRect();
+    if (rect.height < 60 || rect.width < 100) return;
+
+    ensureScanStyle();
+    clearScanElements();
+    const origPosition = card.style.position;
+    const origOverflow = card.style.overflow;
+    card.style.position = card.style.position || 'relative';
+    card.style.overflow = 'hidden';
+
+    function addEl(className, cssText) {
+      const el = document.createElement('div');
+      el.className = className;
+      el.style.cssText = `position:absolute;pointer-events:none;${cssText}`;
+      card.appendChild(el);
+      scanEls.push(el);
+      return el;
+    }
+
+    const w = rect.width; const h = rect.height;
+
+    console.log(`[HRO] 🔬 SCAN | ${Math.round(w)}x${Math.round(h)}px`);
+
+    addEl('', `top:0;left:0;width:100%;height:100%;
+      background-image:linear-gradient(rgba(99,102,241,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.07) 1px,transparent 1px);
+      background-size:24px 24px;z-index:1;`);
+    addEl('', `top:0;left:0;width:28px;height:28px;border-left:2px solid #6366f1;border-top:2px solid #6366f1;z-index:2;animation:hro-pulse 0.4s ease-in-out alternate 2;`);
+    addEl('', `top:0;right:0;width:28px;height:28px;border-right:2px solid #6366f1;border-top:2px solid #6366f1;z-index:2;animation:hro-pulse 0.4s ease-in-out alternate 2;`);
+    addEl('', `bottom:0;left:0;width:28px;height:28px;border-left:2px solid #6366f1;border-bottom:2px solid #6366f1;z-index:2;animation:hro-pulse 0.4s ease-in-out alternate 2;`);
+    addEl('', `bottom:0;right:0;width:28px;height:28px;border-right:2px solid #6366f1;border-bottom:2px solid #6366f1;z-index:2;animation:hro-pulse 0.4s ease-in-out alternate 2;`);
+    await sleep(200);
+
+    const line = addEl('', `top:0;left:0;width:100%;height:3px;z-index:3;
+      background:linear-gradient(90deg,transparent,#6366f1 20%,#a78bfa 50%,#6366f1 80%,transparent);
+      filter:blur(1px);`);
+    const startLine = performance.now();
+    await new Promise(resolve => {
+      function tick() {
+        const elapsed = performance.now() - startLine;
+        const pct = Math.min(1, elapsed / 600);
+        line.style.top = `${pct * 100}%`;
+        if (pct < 1) { requestAnimationFrame(tick); } else { resolve(); }
+      }
+      requestAnimationFrame(tick);
+    });
+    try { line.remove(); } catch {}
+
+    if (savedThisPost === undefined || savedThisPost > 0) {
+      const g = addEl('', `top:0;left:0;width:100%;height:100%;z-index:3;
+        background:radial-gradient(ellipse at center,rgba(16,185,129,0.12) 0%,transparent 70%);`);
+      g.style.animation = 'hro-flash 0.3s ease-out';
+      await sleep(300);
+      try { g.remove(); } catch {}
+    }
+
+    card.style.position = origPosition;
+    card.style.overflow = origOverflow;
+    clearScanElements();
+  }
 
   function highlightCard(card) {
     if (highlightedCard) {
@@ -192,17 +276,133 @@
     }
   }
 
+  function extractFromCard(el) {
+    const text = (el.innerText || '').trim();
+    const emails = (text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [])
+      .filter(e => !e.includes('example.com') && !e.includes('sentry.io') && !e.includes('placeholder') && !e.includes('linkedin.com') && !e.includes('noreply'));
+    const phones = (text.match(/\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) || []);
+    return { emails: [...new Set(emails)], phones: [...new Set(phones.map(p => p.trim()))], textLen: text.length };
+  }
+
   async function expandPost(card) {
     try {
-      const btn = card.querySelector('[data-testid="expandable-text-button"]') ||
-        card.querySelector('button[aria-label*="more"]');
-      if (btn) {
-        btn.click();
-        await sleep(250);
-        return true;
+      card.scrollIntoView({ block: 'center', behavior: 'instant' });
+      await sleep(500);
+
+      const beforeText = (card.innerText || '').trim();
+      const beforeLen = beforeText.length;
+      const beforeLines = beforeText.split('\n').filter(Boolean).length;
+
+      if (beforeLen < 10) return null;
+
+      const textLower = beforeText.toLowerCase();
+      const hasSeeMore = textLower.includes('more') || textLower.includes('\u2026') || textLower.includes('...');
+
+      if (!hasSeeMore) return null;
+
+      console.log(`[HRO] 🔍 expandPost: ${beforeLen} chars, ${beforeLines} lines`);
+
+      function tryClick(clickTarget, label) {
+        const events = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'];
+        for (const evt of events) {
+          clickTarget.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, button: 0 }));
+        }
+        clickTarget.click();
+        console.log(`[HRO] 👆 ${label} — waiting...`);
       }
-    } catch {}
-    return false;
+
+      async function attemptClick(clickTarget, strategyLabel) {
+        clickTarget.style.outline = '3px solid #10b981';
+        clickTarget.style.boxShadow = '0 0 12px #10b981';
+        clickTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.2)';
+        clickTarget.style.borderRadius = '4px';
+        clickTarget.style.padding = '3px 8px';
+        await sleep(300);
+
+        tryClick(clickTarget, strategyLabel);
+        await sleep(2000);
+
+        let liveCard = card;
+        if (!card.isConnected) {
+          const cr = card.getBoundingClientRect();
+          const els = document.elementsFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
+          for (const el of els) {
+            const wrapper = el.closest('[data-feed-id], .occludable-update, .feed-shared-update-v2, [role="listitem"], article');
+            if (wrapper) { liveCard = wrapper; break; }
+          }
+          if (!liveCard || !liveCard.isConnected) liveCard = card;
+        }
+
+        const extracted = extractFromCard(liveCard);
+        const diff = extracted.textLen - beforeLen;
+
+        clickTarget.style.outline = '';
+        clickTarget.style.boxShadow = '';
+        clickTarget.style.backgroundColor = '';
+        clickTarget.style.padding = '';
+
+        if (diff > 20) {
+          console.log(`[HRO] ✅ ${strategyLabel} SUCCESS! +${diff} chars | ${extracted.emails.length}📧 ${extracted.phones.length}📞`);
+          return extracted;
+        }
+        console.log(`[HRO] ⚠️ ${strategyLabel}: no effect (+${diff} chars)`);
+        return null;
+      }
+
+      // ── Strategy 1: data-testid button ──
+      const testIdBtn = card.querySelector('[data-testid="expandable-text-button"]');
+      if (testIdBtn) {
+        console.log(`[HRO] 🎯 S1: [data-testid="expandable-text-button"]`);
+        const clickTarget = testIdBtn.querySelector('span[style*="pointer-events: auto"]') || testIdBtn;
+        const result = await attemptClick(clickTarget, 'S1');
+        if (result && (result.emails.length || result.phones.length)) return result;
+        if (result && result.textLen > beforeLen + 20) return result;
+      }
+
+      // ── Strategy 2: any clickable with "more" ──
+      const allClickables = card.querySelectorAll('button, [role="button"], [tabindex="0"], span[style*="pointer-events"], a');
+      for (const el of allClickables) {
+        if (el.offsetParent === null && getComputedStyle(el).display === 'none') continue;
+        const txt = (el.textContent || '').trim();
+        const txtLower = txt.toLowerCase();
+        if ((txtLower.includes('more') || txtLower.includes('\u2026')) && txtLower.length <= 30 &&
+            (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || el.closest('button'))) {
+          const actualTarget = el.querySelector('[style*="pointer-events: auto"]') || el;
+          console.log(`[HRO] 🎯 S2: <${el.tagName}> "${txt.slice(0, 30)}"`);
+          const result = await attemptClick(actualTarget, 'S2');
+          if (result && (result.emails.length || result.phones.length)) return result;
+          if (result && result.textLen > beforeLen + 20) return result;
+        }
+      }
+
+      // ── Strategy 3: elementsFromPoint ──
+      const rect = card.getBoundingClientRect();
+      const points = [
+        { x: rect.left + rect.width * 0.5, y: rect.top + rect.height * 0.75 },
+        { x: rect.left + rect.width * 0.3, y: rect.bottom - 15 },
+        { x: rect.left + rect.width * 0.7, y: rect.bottom - 15 },
+      ];
+      for (const pt of points) {
+        const els = document.elementsFromPoint(pt.x, pt.y);
+        for (const el of els) {
+          const txt = (el.textContent || '').trim().toLowerCase();
+          if ((txt.includes('more') || txt.includes('\u2026')) && !txt.includes('share') && !txt.includes('comment')) {
+            const clickable = el.closest('button, [role="button"]') || el;
+            const target = clickable.querySelector('[style*="pointer-events: auto"]') || clickable;
+            console.log(`[HRO] 🎯 S3: elementsFromPoint <${clickable.tagName}> "${txt.slice(0, 30)}"`);
+            const result = await attemptClick(target, 'S3');
+            if (result && (result.emails.length || result.phones.length)) return result;
+            if (result && result.textLen > beforeLen + 20) return result;
+          }
+        }
+      }
+
+      console.log(`[HRO] 🤷 expandPost: ALL strategies failed. Text unchanged: ${beforeLen} chars`);
+      return null;
+    } catch (e) {
+      console.log(`[HRO] 💥 expandPost error: ${e.message}`);
+    }
+    return null;
   }
 
   // ── Extract emails/phones from expanded post text ────────────────────────────
@@ -214,16 +414,62 @@
         .filter((e) => !e.includes('example.com') && !e.includes('sentry.io') && !e.includes('placeholder') && !e.includes('linkedin.com') && !e.includes('noreply'));
       const phones = (pageText.match(/\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) || []);
 
-      return {
+      const result = {
         emails: [...new Set(emails)],
         phones: [...new Set(phones.map((p) => p.trim()))],
       };
+      if (result.emails.length || result.phones.length) {
+        console.log(`[HRO] 📬 scrapePostDetail: found ${result.emails.length} email(s), ${result.phones.length} phone(s) in ${pageText.length} chars`);
+        if (result.emails.length) console.log(`[HRO]    📧 ${result.emails.join(', ')}`);
+        if (result.phones.length) console.log(`[HRO]    📞 ${result.phones.join(', ')}`);
+      }
+      return result;
     } catch {
       return { emails: [], phones: [] };
     }
   }
 
   // ── Post deduplication ────────────────────────────────────────────────────────
+
+  function removePostWrapper(card) {
+    if (!card || !card.isConnected) return;
+    try {
+      const topWrappers = [
+        '.occludable-update',
+        'div[data-feed-id]',
+        '.feed-shared-update-v2',
+        'li[data-feed-id]',
+      ];
+      let best = card;
+      for (const sel of topWrappers) {
+        const found = card.closest(sel);
+        if (found && found.isConnected && found.contains(card)) {
+          best = found;
+          break;
+        }
+      }
+      if (best !== card && best.isConnected) {
+        try { best.remove(); } catch {}
+      } else {
+        try { card.remove(); } catch {}
+      }
+
+      let parent = best.parentElement;
+      while (parent && parent !== document.body && parent !== document.documentElement) {
+        const children = [...parent.children].filter(c => {
+          const tag = c.tagName || '';
+          return tag !== 'SCRIPT' && tag !== 'STYLE' && tag !== 'LINK' && tag !== 'META';
+        });
+        if (children.length === 0) {
+          const grandparent = parent.parentElement;
+          try { parent.remove(); } catch {}
+          parent = grandparent;
+        } else {
+          break;
+        }
+      }
+    } catch {}
+  }
 
   function getPostKey(card) {
     const profileLink = card.querySelector('a[href*="/in/"]');
@@ -233,6 +479,91 @@
   }
 
   // ── Scrape visible posts ─────────────────────────────────────────────────────
+
+  async function moveToCard(card) {
+    card.scrollIntoView({ block: 'center', behavior: 'instant' });
+    await sleep(150);
+  }
+
+  async function clickExpandBtn(card) {
+    try {
+      const beforeText = (card.innerText || '').trim();
+      const beforeLen = beforeText.length;
+      if (beforeLen < 10) return null;
+
+      function tryClick(target) {
+        const events = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'];
+        for (const evt of events) {
+          target.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, button: 0 }));
+        }
+        target.click();
+      }
+
+      // Strategy 1: data-testid button
+      const testIdBtn = card.querySelector('[data-testid="expandable-text-button"]');
+      if (testIdBtn) {
+        console.log('[HRO] 🎯 S1: [data-testid="expandable-text-button"]');
+        const clickTarget = testIdBtn.querySelector('span[style*="pointer-events: auto"]') || testIdBtn;
+        tryClick(clickTarget);
+        await sleep(1200);
+        const text = (card.innerText || '').trim();
+        const emails = (text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [])
+          .filter(e => !e.includes('example.com') && !e.includes('sentry.io') && !e.includes('placeholder') && !e.includes('linkedin.com') && !e.includes('noreply'));
+        const phones = (text.match(/\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) || []);
+        if (text.length > beforeLen + 20) {
+          console.log(`[HRO] ✅ Expanded! +${text.length - beforeLen} chars`);
+          return { emails: [...new Set(emails)], phones: [...new Set(phones.map(p => p.trim()))], textLen: text.length };
+        }
+        console.log('[HRO] ⚠️ S1 no effect');
+      }
+
+      // Strategy 2: fallback — any clickable with "more"
+      const allClickables = card.querySelectorAll('button, [role="button"], [tabindex="0"]');
+      for (const el of allClickables) {
+        const txt = (el.textContent || '').trim().toLowerCase();
+        if ((txt.includes('more') || txt.includes('\u2026')) && txt.length <= 30) {
+          const actual = el.querySelector('[style*="pointer-events: auto"]') || el;
+          console.log(`[HRO] 🎯 S2: <${el.tagName}> "${txt.slice(0, 30)}"`);
+          tryClick(actual);
+          await sleep(2200);
+          const text = (card.innerText || '').trim();
+          if (text.length > beforeLen + 20) {
+            const emails = (text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [])
+              .filter(e => !e.includes('example.com') && !e.includes('sentry.io'));
+            const phones = (text.match(/\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) || []);
+            return { emails: [...new Set(emails)], phones: [...new Set(phones.map(p => p.trim()))], textLen: text.length };
+          }
+        }
+      }
+
+      // Strategy 3: elementsFromPoint
+      const rect = card.getBoundingClientRect();
+      for (const py of [rect.top + rect.height * 0.75, rect.bottom - 15]) {
+        const els = document.elementsFromPoint(rect.left + rect.width * 0.5, py);
+        for (const el of els) {
+          const txt = (el.textContent || '').trim().toLowerCase();
+          if ((txt.includes('more') || txt.includes('\u2026')) && !txt.includes('share') && !txt.includes('comment')) {
+            const clickable = el.closest('button, [role="button"]') || el;
+            const target = clickable.querySelector('[style*="pointer-events: auto"]') || clickable;
+            console.log(`[HRO] 🎯 S3: elementsFromPoint <${clickable.tagName}> "${txt.slice(0, 30)}"`);
+            tryClick(target);
+            await sleep(2200);
+            const text = (card.innerText || '').trim();
+            if (text.length > beforeLen + 20) {
+              const emails = (text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [])
+                .filter(e => !e.includes('example.com'));
+              const phones = (text.match(/\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) || []);
+              return { emails: [...new Set(emails)], phones: [...new Set(phones.map(p => p.trim()))], textLen: text.length };
+            }
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      console.log('[HRO] 💥 clickExpandBtn error:', e.message);
+    }
+    return null;
+  }
 
   async function scrapeVisiblePosts() {
     const cardSelectors = [
@@ -260,14 +591,17 @@
     console.log(`[HRO] scrapeVisiblePosts: ${cards.length} cards, ${seenPostKeys.size} seen, scanning...`);
     let scannedCount = 0;
     let skippedDupes = 0;
+    let removedCount = 0;
     for (let i = 0; i < cards.length; i++) {
       if (stopFlag) break;
 
       const card = cards[i];
+      if (!card || !card.isConnected) { removedCount++; continue; }
 
       const postKey = getPostKey(card);
       if (seenPostKeys.has(postKey)) {
         skippedDupes++;
+        try { removePostWrapper(card); removedCount++; } catch {}
         continue;
       }
       seenPostKeys.add(postKey);
@@ -275,47 +609,94 @@
 
       highlightCard(card);
 
-      const contact = parsePostCard(card);
-      contact.searchKeyword = currentKeyword;
-      contact.searchDate = currentSearchDate;
-      if (!contact.name && !contact.email) continue;
+      // ═══════════════════════════════════════════════════════════
+      // LAYER 1: Quick filter — skip only obvious junk
+      // ═══════════════════════════════════════════════════════════
 
-      if (isJobSeekerPost(card, contact.category)) continue;
+      const l1Text = (card.innerText || '').trim();
 
-      // Only expand if we don't already have email/phone
-      if (contact.email || contact.phone) {
-        const result = await chrome.runtime.sendMessage({
-          type: 'HRO_ADD_CONTACT',
-          contact,
-        });
-        if (result?.added) {
-          collectedCount++;
-          if (collectedCount % 3 === 0) updatePanelProgress(collectedCount);
-        }
-      } else {
-        await expandPost(card);
-        const detail = await scrapePostDetail(card);
-        const emailsToUse = detail.emails.length > 0 ? detail.emails : [];
-        const phonesToUse = detail.phones.length > 0 ? detail.phones : [];
+      if (l1Text.length < 30) {
+        console.log(`[HRO] ❌ L1 SKIP: tiny post (${l1Text.length} chars)`);
+        try { removePostWrapper(card); removedCount++; } catch {}
+        continue;
+      }
+      if (isJobSeekerPost(card, '')) {
+        console.log('[HRO] ❌ L1 SKIP: job seeker (open to work)');
+        try { removePostWrapper(card); removedCount++; } catch {}
+        continue;
+      }
+      console.log(`[HRO] ✅ L1 PASS | ${l1Text.length} chars`);
 
-        if (emailsToUse.length > 0 || phonesToUse.length > 0) {
-          const contactWithEmail = {
-            ...contact,
-            email: emailsToUse[0] || '',
-            phone: phonesToUse[0] || contact.phone,
-          };
-          const result = await chrome.runtime.sendMessage({
-            type: 'HRO_ADD_CONTACT',
-            contact: contactWithEmail,
-          });
-          if (result?.added) {
-            collectedCount++;
-            if (collectedCount % 3 === 0) updatePanelProgress(collectedCount);
+      // ═══════════════════════════════════════════════════════════
+      // LAYER 2: Expand & extract ALL contact data
+      // ═══════════════════════════════════════════════════════════
+
+      await moveToCard(card);
+      await clickExpandBtn(card);
+
+      let cardToUse = card;
+      if (!card.isConnected) {
+        const cr = card.getBoundingClientRect();
+        if (cr.width > 0) {
+          const els = document.elementsFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
+          for (const el of els) {
+            const wrapper = el.closest('[data-feed-id], .occludable-update, .feed-shared-update-v2, [role="listitem"], article');
+            if (wrapper) { cardToUse = wrapper; break; }
           }
         }
+        if (!cardToUse || !cardToUse.isConnected) cardToUse = card;
       }
 
+      const fullText = (cardToUse.innerText || '').trim();
+      const allEmails = [...new Set((fullText.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [])
+        .filter(e => !e.includes('example.com') && !e.includes('sentry.io') && !e.includes('placeholder') && !e.includes('linkedin.com') && !e.includes('noreply')))];
+      const allPhones = [...new Set((fullText.match(/\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) || []).map(p => p.trim()))];
+
+      console.log(`[HRO] ✅ L2 DONE | ${fullText.length} chars | ${allEmails.length} emails | ${allPhones.length} phones`);
+
+      // ═══════════════════════════════════════════════════════════
+      // LAYER 3: Parse + validate + save EVERY contact found
+      // ═══════════════════════════════════════════════════════════
+
+      const baseContact = parsePostCard(cardToUse);
+      baseContact.searchKeyword = currentKeyword;
+      baseContact.searchDate = currentSearchDate;
+
+      let savedThisPost = 0;
+
+      if (allEmails.length === 0 && allPhones.length === 0) {
+        console.log('[HRO] ❌ L3 SKIP: no emails or phones in full text');
+        try { removePostWrapper(cardToUse); removedCount++; } catch {}
+        continue;
+      }
+
+      // Save one entry per email found
+      for (const email of allEmails) {
+        if (!email || email.length < 6 || !email.includes('@') || !email.includes('.')) continue;
+
+        const contact = { ...baseContact, email, phone: allPhones[0] || baseContact.phone || '' };
+        console.log(`[HRO] 📧 L3: "${contact.name}" <${contact.email}>`);
+
+        const result = await chrome.runtime.sendMessage({ type: 'HRO_ADD_CONTACT', contact });
+        if (result?.added) { collectedCount++; savedThisPost++; if (collectedCount % 3 === 0) updatePanelProgress(collectedCount); }
+      }
+
+      // If only phone found, save phone entry
+      if (allEmails.length === 0 && allPhones.length > 0) {
+        const contact = { ...baseContact, phone: allPhones[0] };
+        const result = await chrome.runtime.sendMessage({ type: 'HRO_ADD_CONTACT', contact });
+        if (result?.added) { collectedCount++; savedThisPost++; if (collectedCount % 3 === 0) updatePanelProgress(collectedCount); }
+      }
+
+      if (savedThisPost > 0) await animateScan(cardToUse);
+
+      console.log(`[HRO] 📊 Post: ${allEmails.length}e + ${allPhones.length}p → ${savedThisPost} saved, ${fullText.length} chars`);
+      try { removePostWrapper(cardToUse); removedCount++; } catch {}
+
       await sleep(50);
+    }
+    if (removedCount > 0) {
+      console.log(`[HRO] scrapeVisiblePosts: removed ${removedCount} cards from DOM`);
     }
   }
 
@@ -356,11 +737,13 @@
 
   // ── Auto-scroll and scrape ───────────────────────────────────────────────────
 
-  async function autoScrollAndScrape(maxScrolls = 30) {
+  async function autoScrollAndScrape(maxScrolls = 40, sessionId = 0) {
     const startMs = Date.now();
-    console.log('[HRO] ═══ SCRAPE START ═══ maxScrolls:', maxScrolls, 'seen:', seenPostKeys.size, 'saved:', collectedCount);
+    cLog('SCRAPE_START', `session#${sessionId} maxScrolls=${maxScrolls} seen=${seenPostKeys.size} saved=${collectedCount}`);
+    console.log('[HRO] ═══ SCRAPE START ═══ session:', sessionId, 'maxScrolls:', maxScrolls);
 
     const feedReady = await waitForFeedReady(8000);
+    cLog('FEED_READY', `result=${feedReady} bodyH=${document.body.scrollHeight} textLen=${(document.body.innerText || '').length}`);
     console.log('[HRO] feedReady:', feedReady, 'bodyHeight:', document.body.scrollHeight, 'textLen:', (document.body.innerText || '').length);
 
     let previousCardCount = 0;
@@ -439,8 +822,10 @@
 
     const totalElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
     if (stopFlag) {
+      cLog('SCRAPE_END', `STOPPED stopFlag set | saved=${collectedCount} seen=${seenPostKeys.size} time=${totalElapsed}s`);
       console.log(`[HRO] ═══ SCRAPE STOPPED ═══ stopFlag set | saved:${collectedCount} | seen:${seenPostKeys.size} | time:${totalElapsed}s`);
     } else {
+      cLog('SCRAPE_END', `DONE saved=${collectedCount} seen=${seenPostKeys.size} time=${totalElapsed}s`);
       console.log(`[HRO] ═══ SCRAPE DONE ═══ saved:${collectedCount} | seen:${seenPostKeys.size} | time:${totalElapsed}s`);
     }
     clearHighlight();
@@ -490,7 +875,6 @@
       badgeEl.textContent = 'Idle';
       badgeEl.className = 'hro-badge';
     }
-    // Reset button
     const startBtn = document.getElementById('hro-start-btn');
     if (startBtn) {
       startBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
@@ -565,8 +949,6 @@
       document.body.appendChild(panelEl);
       panelVisible = true;
 
-      // ── Event listeners ──
-
       document.getElementById('hro-start-btn').addEventListener('click', () => {
         if (isScraping) {
           chrome.runtime.sendMessage({ type: 'HRO_STOP_COLLECTING' });
@@ -606,10 +988,8 @@
         if (toggleEl) toggleEl.style.display = 'flex';
       });
 
-      // ── Dragging ──
       enableDragging();
 
-      // If collecting was active, update UI
       if (collecting) {
         const btn = document.getElementById('hro-start-btn');
         if (btn) {
@@ -688,9 +1068,18 @@
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'HRO_START_SCRAPE') {
-      if (isScraping) { sendResponse({ ok: false, reason: 'already_running' }); return true; }
+      const mySession = ++scrapeSessionId;
+      cLog('HRO_START_SCRAPE', `session#${mySession} keyword="${msg.keyword}"`);
 
-      console.log('[HRO] FRESH START — keyword:', msg.keyword, 'timeRange:', msg.timeRange);
+      // Kill any running scrape (auto-resume or previous)
+      if (isScraping) {
+        cLog('HRO_START_SCRAPE', `stopping session#${scrapeSessionId - 1} to restart fresh`);
+        stopFlag = true;
+        isScraping = false;
+        if (scrapeTimeoutId !== null) { clearTimeout(scrapeTimeoutId); scrapeTimeoutId = null; }
+      }
+
+      console.log('[HRO] FRESH START — keyword:', msg.keyword, 'session:', mySession);
       isScraping = true;
       stopFlag = false;
       collectedCount = 0;
@@ -698,30 +1087,37 @@
       currentKeyword = msg.keyword || '';
       currentSearchDate = msg.searchDate || new Date().toISOString();
 
-      // Increase timeout: 30 scrolls × ~7s each ≈ 3.5 min
       if (scrapeTimeoutId !== null) clearTimeout(scrapeTimeoutId);
+      const safetyTimeoutMs = 300000;
       scrapeTimeoutId = setTimeout(() => {
-        if (isScraping) {
+        if (isScraping && scrapeSessionId === mySession) {
+          cLog('SAFETY_TIMEOUT', `session#${mySession} FIRE! Forcing stop`);
           console.log('[HRO] ⏰ SAFETY TIMEOUT fired — forcing stop');
           isScraping = false;
           stopFlag = true;
           chrome.runtime.sendMessage({ type: 'HRO_SCRAPE_DONE', count: collectedCount }).catch(() => {});
         }
-      }, 120000);
+      }, safetyTimeoutMs);
 
       if (window.location.href.includes('linkedin.com/search') || window.location.href.includes('linkedin.com/feed')) {
         sendResponse({ ok: true });
-        autoScrollAndScrape(30).then(() => {
+        cLog('HRO_START_SCRAPE', `session#${mySession} calling autoScrollAndScrape`);
+        autoScrollAndScrape(40, mySession).then(() => {
+          if (scrapeSessionId !== mySession) return;
+          cLog('HRO_START_SCRAPE', `session#${mySession} autoScrollAndScrape COMPLETED`);
           if (scrapeTimeoutId !== null) clearTimeout(scrapeTimeoutId);
           isScraping = false;
           chrome.runtime.sendMessage({ type: 'HRO_SCRAPE_DONE', count: collectedCount }).catch(() => {});
-        }).catch(() => {
+        }).catch((e) => {
+          if (scrapeSessionId !== mySession) return;
+          cLog('HRO_START_SCRAPE', `session#${mySession} autoScrollAndScrape ERROR: ${e.message}`);
           if (scrapeTimeoutId !== null) clearTimeout(scrapeTimeoutId);
           isScraping = false;
           chrome.runtime.sendMessage({ type: 'HRO_SCRAPE_DONE', count: collectedCount }).catch(() => {});
         });
       } else {
         const searchUrl = buildContentSearchUrl(msg.keyword, msg.timeRange);
+        cLog('HRO_START_SCRAPE', `redirecting to searchUrl: ${searchUrl}`);
         chrome.storage.local.set({
           hro_is_collecting: true,
           hro_keyword: msg.keyword,
@@ -735,6 +1131,7 @@
     }
 
     if (msg.type === 'HRO_STOP_SCRAPE') {
+      cLog('HRO_STOP_SCRAPE', `stopFlag set, isScraping was ${isScraping}, collectedCount=${collectedCount}`);
       stopFlag = true;
       isScraping = false;
       if (scrapeTimeoutId !== null) { clearTimeout(scrapeTimeoutId); scrapeTimeoutId = null; }
@@ -742,15 +1139,20 @@
         [SAVED_KEYS_KEY]: [...seenPostKeys],
         [SAVED_SCROLL_KEY]: window.scrollY,
         [SAVED_COUNT_KEY]: collectedCount,
+      }, () => {
+        cLog('HRO_STOP_SCRAPE', `state saved: seenKeys=${seenPostKeys.size} scrollY=${window.scrollY} collected=${collectedCount}`);
       });
       sendResponse({ ok: true });
     }
 
     if (msg.type === 'HRO_RESUME_SCRAPE') {
       if (isScraping) { sendResponse({ ok: false, reason: 'already_running' }); return true; }
+      const mySession = ++scrapeSessionId;
+      cLog('HRO_RESUME_SCRAPE', `session#${mySession} keyword="${msg.keyword}"`);
       chrome.storage.local.get([SAVED_KEYS_KEY, SAVED_SCROLL_KEY, SAVED_COUNT_KEY], (saved) => {
         const keysLen = saved[SAVED_KEYS_KEY]?.length || 0;
         const savedCount = saved[SAVED_COUNT_KEY] || 0;
+        cLog('HRO_RESUME_SCRAPE', `restored seenKeys=${keysLen} collected=${savedCount}`);
         console.log('[HRO] RESUME — restoring seenKeys:', keysLen, 'collected:', savedCount);
         if (saved[SAVED_KEYS_KEY] && saved[SAVED_KEYS_KEY].length > 0) {
           seenPostKeys = new Set(saved[SAVED_KEYS_KEY]);
@@ -763,20 +1165,27 @@
         currentKeyword = msg.keyword || currentKeyword;
         currentSearchDate = msg.searchDate || new Date().toISOString();
         if (scrapeTimeoutId !== null) clearTimeout(scrapeTimeoutId);
+        const resumeTimeoutMs = 300000;
+        cLog('HRO_RESUME_SCRAPE', `session#${mySession} timeout set to ${resumeTimeoutMs}ms`);
         scrapeTimeoutId = setTimeout(() => {
-          if (isScraping) {
+          if (isScraping && scrapeSessionId === mySession) {
+            cLog('RESUME_TIMEOUT', `session#${mySession} FIRE!! Forcing stop`);
             isScraping = false;
             stopFlag = true;
             chrome.runtime.sendMessage({ type: 'HRO_SCRAPE_DONE', count: collectedCount }).catch(() => {});
           }
-        }, 210000);
+        }, resumeTimeoutMs);
         sendResponse({ ok: true });
         updatePanelProgress(collectedCount);
-        autoScrollAndScrape(30).then(() => {
+        autoScrollAndScrape(40, mySession).then(() => {
+          if (scrapeSessionId !== mySession) return;
+          cLog('HRO_RESUME_SCRAPE', `session#${mySession} COMPLETED`);
           if (scrapeTimeoutId !== null) clearTimeout(scrapeTimeoutId);
           isScraping = false;
           chrome.runtime.sendMessage({ type: 'HRO_SCRAPE_DONE', count: collectedCount }).catch(() => {});
-        }).catch(() => {
+        }).catch((e) => {
+          if (scrapeSessionId !== mySession) return;
+          cLog('HRO_RESUME_SCRAPE', `session#${mySession} ERROR: ${e.message}`);
           if (scrapeTimeoutId !== null) clearTimeout(scrapeTimeoutId);
           isScraping = false;
           chrome.runtime.sendMessage({ type: 'HRO_SCRAPE_DONE', count: collectedCount }).catch(() => {});
@@ -791,10 +1200,13 @@
   // ── Auto-resume if navigated during collection ───────────────────────────────
 
   chrome.storage.local.get(['hro_is_collecting', 'hro_keyword', 'hro_time_range', SAVED_KEYS_KEY, SAVED_COUNT_KEY], (data) => {
+    cLog('AUTO_RESUME_CHECK', `isCollecting=${data.hro_is_collecting} onPage=${window.location.href.includes('/search/results/content') || window.location.href.includes('/feed')}`);
     if (
       data.hro_is_collecting &&
       (window.location.href.includes('/search/results/content') || window.location.href.includes('/feed'))
     ) {
+      const mySession = ++scrapeSessionId;
+      cLog('AUTO_RESUME', `session#${mySession} TRIGGERED`);
       isScraping = true;
       stopFlag = false;
       const keysLen = data[SAVED_KEYS_KEY]?.length || 0;
@@ -809,14 +1221,18 @@
       currentKeyword = data.hro_keyword || '';
       currentSearchDate = new Date().toISOString();
 
-      autoScrollAndScrape(30).then(() => {
+      autoScrollAndScrape(40, mySession).then(() => {
+        if (scrapeSessionId !== mySession) return;
+        cLog('AUTO_RESUME', `session#${mySession} COMPLETED`);
         isScraping = false;
         chrome.runtime.sendMessage({ type: 'HRO_SCRAPE_DONE', count: collectedCount }).catch(() => {});
         chrome.storage.local.remove('hro_is_collecting');
         chrome.storage.local.remove(SAVED_KEYS_KEY);
         chrome.storage.local.remove(SAVED_COUNT_KEY);
         chrome.storage.local.remove(SAVED_SCROLL_KEY);
-      }).catch(() => {
+      }).catch((e) => {
+        if (scrapeSessionId !== mySession) return;
+        cLog('AUTO_RESUME', `session#${mySession} ERROR: ${e.message}`);
         isScraping = false;
         chrome.runtime.sendMessage({ type: 'HRO_SCRAPE_DONE', count: collectedCount }).catch(() => {});
         chrome.storage.local.remove('hro_is_collecting');
@@ -828,15 +1244,17 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'HRO_COLLECTING_STATUS') {
+      cLog('PUSH_STATUS', `count=${msg.count}`);
       updatePanelProgress(msg.count);
     }
     if (msg.type === 'HRO_COLLECTING_DONE') {
+      cLog('PUSH_DONE', `count=${msg.count}`);
       setPanelIdle(msg.count);
       isScraping = false;
     }
 
-    // ── Panel on/off toggle ──
     if (msg.type === 'HRO_PANEL_VISIBILITY') {
+      cLog('PANEL_VISIBILITY', `enabled=${msg.enabled}`);
       if (msg.enabled) {
         if (!panelEl) {
           createPanel();
@@ -855,8 +1273,10 @@
   // ── Show panel only if enabled in settings ───────────────────────────────────
 
   if (window.location.href.includes('linkedin.com')) {
+    cLog('PANEL_INIT', 'linkedin.com detected, checking panel enabled');
     const initPanel = () => {
       chrome.storage.local.get('hro_panel_enabled', (data) => {
+        cLog('PANEL_CHECK', `panel_enabled=${data.hro_panel_enabled}`);
         if (data.hro_panel_enabled) {
           createPanel();
           createToggle();

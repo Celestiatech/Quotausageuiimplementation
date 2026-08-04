@@ -6,6 +6,16 @@
 (function () {
   'use strict';
 
+  const POPUP_START_TS = Date.now();
+  let POLL_COUNT = 0;
+
+  function pLog(label, detail) {
+    const elapsed = ((Date.now() - POPUP_START_TS) / 1000).toFixed(1);
+    console.log(`[HRO Popup] ${elapsed}s | ${label}`, detail || '');
+  }
+
+  pLog('POPUP_INIT', 'Popup opened');
+
   const ringFill = document.getElementById('ringFill');
   const ringCount = document.getElementById('ringCount');
   const ringMax = document.getElementById('ringMax');
@@ -71,7 +81,10 @@
 
   async function init() {
     try {
+      const t0 = Date.now();
+      pLog('INIT', 'sending HRO_GET_STATUS');
       const status = await chrome.runtime.sendMessage({ type: 'HRO_GET_STATUS' });
+      pLog('INIT', `HRO_GET_STATUS done in ${Date.now() - t0}ms count=${status.count} collecting=${status.isCollecting}`);
       updateRing(status.count);
       updateNowCard(status.count, status.isCollecting);
       updateStatusBadge(status.isCollecting);
@@ -89,7 +102,8 @@
       }
 
       if (status.keyword) keywordInput.value = status.keyword;
-    } catch {
+    } catch (e) {
+      pLog('INIT_ERROR', e.message);
       setStatus('Extension not ready. Refresh the page.', 'error');
       nowTitle.textContent = 'Extension unavailable';
       nowDetail.textContent = 'Refresh the page or reinstall the extension.';
@@ -100,9 +114,16 @@
 
   // ── Polling ──
 
+  pLog('POLLING', 'Starting 2s interval');
   setInterval(async () => {
+    POLL_COUNT++;
     try {
+      const t0 = Date.now();
       const status = await chrome.runtime.sendMessage({ type: 'HRO_GET_STATUS' });
+      const elapsed = Date.now() - t0;
+      if (POLL_COUNT <= 5 || POLL_COUNT % 10 === 0) {
+        pLog(`POLL#${POLL_COUNT}`, `done in ${elapsed}ms count=${status.count} collecting=${status.isCollecting}`);
+      }
       updateRing(status.count);
       updateNowCard(status.count, status.isCollecting);
       updateStatusBadge(status.isCollecting);
@@ -112,19 +133,25 @@
       } else {
         setButtons('idle');
       }
-    } catch {}
+    } catch (e) {
+      if (POLL_COUNT <= 5 || POLL_COUNT % 10 === 0) {
+        pLog(`POLL#${POLL_COUNT}`, `ERROR: ${e.message}`);
+      }
+    }
   }, 2000);
 
   // ── Message listener ──
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'HRO_COLLECTING_STATUS') {
+      pLog('PUSH', `COLLECTING_STATUS count=${msg.count}`);
       updateRing(msg.count);
       updateNowCard(msg.count, true);
       updateStatusBadge(true);
       setButtons('collecting');
     }
     if (msg.type === 'HRO_COLLECTING_DONE') {
+      pLog('PUSH', `COLLECTING_DONE count=${msg.count}`);
       updateRing(msg.count);
       updateNowCard(msg.count, false);
       updateStatusBadge(false);
