@@ -176,6 +176,25 @@ export async function revokeByRefreshToken(rawRefreshToken: string) {
 }
 
 export async function getAuthUserFromRequest() {
+  const h = await headers();
+  const authHeader = h.get("authorization") || "";
+  const [scheme, rawToken] = authHeader.split(" ");
+  if (scheme?.toLowerCase() === "bearer" && rawToken) {
+    try {
+      const payload = verifyAccessToken(rawToken);
+      return {
+        sessionId: payload.sessionId,
+        user: {
+          id: payload.id,
+          email: payload.email,
+          role: payload.role,
+        } as AuthUser,
+      };
+    } catch {
+      // Invalid/expired bearer token — fall through to cookie auth.
+    }
+  }
+
   const store = await cookies();
   const accessToken = store.get(ACCESS_COOKIE)?.value;
 

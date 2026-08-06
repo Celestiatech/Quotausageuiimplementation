@@ -19,7 +19,6 @@ import {
   Zap,
   PlayCircle,
   Mail,
-  Send,
   MailCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -115,6 +114,7 @@ export default function DashboardLayout() {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,rgba(15,23,42,0.15)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.15)_1px,transparent_1px)] [background-size:48px_48px]"
       />
+
       {/* Mobile Blocker — visible < 768px only */}
       <div className="md:hidden">
         <MobileBlocker />
@@ -122,222 +122,225 @@ export default function DashboardLayout() {
 
       {/* Dashboard — visible ≥ 768px only */}
       <div className="hidden md:block">
-      {/* Mobile Sidebar Backdrop */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+        {/* Mobile Sidebar Backdrop */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-      {/* Sidebar */}
-      <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-white/70 backdrop-blur-xl border-r border-white/50 shadow-[0_16px_40px_rgba(15,23,42,0.10)] z-50 transform transition-transform duration-300 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } lg:translate-x-0`}
-      >
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200">
-            <Link to="/" className="flex items-center gap-2">
-              <img
-                src="/logos/android-chrome-192x192.png"
-                alt="AutoApply CV"
-                className="w-8 h-8 rounded-lg"
-                loading="eager"
-                decoding="async"
-              />
-              <span className="font-bold text-gradient">AutoApply CV</span>
-            </Link>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
-              const hasChildren = Array.isArray((item as any).children) && (item as any).children.length > 0;
-              const groupActive = location.pathname === item.href || location.pathname.startsWith('/dashboard/jobs') || location.pathname.startsWith('/dashboard/marketing') || ((item as any).children as Array<{ href: string }> | undefined)?.some((child) => location.pathname === child.href) || false;
-              const isActive = location.pathname === item.href;
-
-              if (!hasChildren) {
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                      isActive
-                        ? 'gradient-primary text-white shadow-md'
-                        : 'text-gray-700 hover:bg-purple-50'
-                    }`}
-                  >
-                    <item.icon className="w-5 h-5" />
-                    {item.name}
-                  </Link>
-                );
-              }
-
-              const children = (item as any).children as Array<{ name: string; href: string }>;
-              return (
-                <div key={item.name} className="space-y-1">
-                  <Link
-                    to={item.href}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                      groupActive
-                        ? 'bg-purple-50 text-gray-900'
-                        : 'text-gray-700 hover:bg-purple-50'
-                    }`}
-                  >
-                    <item.icon className="w-5 h-5" />
-                    <span className="flex-1">{item.name}</span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 ${groupActive ? 'rotate-180' : ''}`} />
-                  </Link>
-                  {groupActive ? (
-                    <div className="pl-4 space-y-1">
-                      {children.map((child) => {
-                        const childActive = location.pathname === child.href;
-                        return (
-                          <Link
-                            key={child.name}
-                            to={child.href}
-                            className={`flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
-                              childActive
-                                ? 'bg-white text-purple-700 border border-purple-100'
-                                : 'text-gray-600 hover:bg-purple-50'
-                            }`}
-                          >
-                            {child.name}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </nav>
-
-          {/* User Card */}
-          <div className="p-4 border-t border-gray-200">
-            <div className="relative">
-              <button
-                onClick={() => setProfileOpen(!profileOpen)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/60 transition-colors"
-              >
+        {/* Glass Sidebar */}
+        <aside
+          className={`fixed left-4 top-4 bottom-4 w-64 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/60 shadow-[0_16px_40px_rgba(15,23,42,0.10)] z-50 transform transition-transform duration-300 ${
+            sidebarOpen ? 'translate-x-0' : '-translate-x-[calc(100%+2rem)]'
+          } lg:translate-x-0`}
+        >
+          <div className="flex flex-col h-full">
+            {/* Logo */}
+            <div className="flex items-center justify-between px-5 py-5 border-b border-white/60">
+              <Link to="/" className="flex items-center gap-2.5">
                 <img
-                  src={user?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400'}
-                  alt={user?.name}
-                  className="w-10 h-10 rounded-full border border-white/60 shadow-sm"
+                  src="/logos/android-chrome-192x192.png"
+                  alt="AutoApply CV"
+                  className="w-8 h-8 rounded-lg"
+                  loading="eager"
+                  decoding="async"
                 />
-                <div className="flex-1 text-left">
-                  <div className="text-sm font-semibold text-gray-900">{user?.name}</div>
-                  <div className="text-xs text-gray-500 capitalize">{user?.plan} Plan</div>
-                </div>
-                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
+                <span className="font-bold text-gradient text-lg">AutoApply CV</span>
+              </Link>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden p-1.5 hover:bg-white/60 rounded-lg text-gray-500"
+              >
+                <X className="w-5 h-5" />
               </button>
-
-              {/* Profile Dropdown */}
-              {profileOpen && (
-                <div className="absolute bottom-full left-0 right-0 mb-2 bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl shadow-[0_20px_40px_rgba(15,23,42,0.12)] overflow-hidden">
-                  <Link
-                    to="/dashboard/profile"
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                    onClick={() => setProfileOpen(false)}
-                  >
-                    <User className="w-5 h-5 text-gray-400" />
-                    <span className="text-sm font-medium text-gray-700">Profile</span>
-                  </Link>
-                  <Link
-                    to="/dashboard/billing"
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                    onClick={() => setProfileOpen(false)}
-                  >
-                    <CreditCard className="w-5 h-5 text-gray-400" />
-                    <span className="text-sm font-medium text-gray-700">Billing</span>
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition-colors border-t border-gray-200"
-                  >
-                    <LogOut className="w-5 h-5 text-red-500" />
-                    <span className="text-sm font-medium text-red-600">Logout</span>
-                  </button>
-                </div>
-              )}
             </div>
-          </div>
-        </div>
-      </aside>
 
-      {/* Main Content */}
-      <div className="lg:pl-64 relative z-10">
-        {/* Top Bar */}
-        <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-white/60 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
+            {/* Navigation */}
+            <nav className="flex-1 px-4 py-5 space-y-1 overflow-y-auto">
+              <div className="px-3 pb-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                Main Menu
+              </div>
+              {navigation.map((item) => {
+                const hasChildren = Array.isArray((item as any).children) && (item as any).children.length > 0;
+                const groupActive = location.pathname === item.href || location.pathname.startsWith('/dashboard/jobs') || location.pathname.startsWith('/dashboard/marketing') || ((item as any).children as Array<{ href: string }> | undefined)?.some((child) => location.pathname === child.href) || false;
+                const isActive = location.pathname === item.href;
 
-            <div className="flex-1 max-w-2xl mx-auto px-4">
+                if (!hasChildren) {
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all duration-200 ${
+                        isActive
+                          ? 'gradient-primary text-white shadow-md'
+                          : 'text-gray-700 hover:bg-purple-50'
+                      }`}
+                    >
+                      <item.icon className="w-5 h-5" />
+                      {item.name}
+                    </Link>
+                  );
+                }
+
+                const children = (item as any).children as Array<{ name: string; href: string }>;
+                return (
+                  <div key={item.name} className="space-y-1">
+                    <Link
+                      to={item.href}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all duration-200 ${
+                        groupActive
+                          ? 'bg-purple-50 text-gray-900'
+                          : 'text-gray-700 hover:bg-purple-50'
+                      }`}
+                    >
+                      <item.icon className="w-5 h-5" />
+                      <span className="flex-1">{item.name}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${groupActive ? 'rotate-180' : ''}`} />
+                    </Link>
+                    {groupActive ? (
+                      <div className="ml-5 border-l border-purple-100 pl-3 space-y-1">
+                        {children.map((child) => {
+                          const childActive = location.pathname === child.href;
+                          return (
+                            <Link
+                              key={child.name}
+                              to={child.href}
+                              className={`block px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                                childActive
+                                  ? 'bg-white text-purple-700 border border-purple-100 shadow-sm'
+                                  : 'text-gray-600 hover:bg-purple-50'
+                              }`}
+                            >
+                              {child.name}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </nav>
+
+            {/* User Card */}
+            <div className="p-4 border-t border-white/60">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search jobs, companies, or skills..."
-                  className="w-full pl-12 pr-4 py-2.5 rounded-xl border border-white/60 bg-white/70 backdrop-blur focus:bg-white focus:border-purple-300 focus:ring-4 focus:ring-purple-100 transition-all outline-none shadow-sm"
-                />
+                <button
+                  onClick={() => setProfileOpen(!profileOpen)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/60 transition-colors"
+                >
+                  <img
+                    src={user?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400'}
+                    alt={user?.name}
+                    className="w-10 h-10 rounded-full border border-white/60 shadow-sm object-cover"
+                  />
+                  <div className="flex-1 text-left">
+                    <div className="text-sm font-semibold text-gray-900 truncate">{user?.name}</div>
+                    <div className="text-xs text-gray-500 capitalize">{user?.plan} Plan</div>
+                  </div>
+                  <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Profile Dropdown */}
+                {profileOpen && (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-white/80 backdrop-blur-xl border border-white/60 rounded-xl shadow-[0_20px_40px_rgba(15,23,42,0.12)] overflow-hidden">
+                    <Link
+                      to="/dashboard/profile"
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      <User className="w-5 h-5 text-gray-400" />
+                      <span className="text-sm font-medium text-gray-700">Profile</span>
+                    </Link>
+                    <Link
+                      to="/dashboard/billing"
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      <CreditCard className="w-5 h-5 text-gray-400" />
+                      <span className="text-sm font-medium text-gray-700">Billing</span>
+                    </Link>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition-colors border-t border-gray-200"
+                    >
+                      <LogOut className="w-5 h-5 text-red-500" />
+                      <span className="text-sm font-medium text-red-600">Logout</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+          </div>
+        </aside>
 
-            <div className="flex items-center gap-4">
+        {/* Main Content */}
+        <div className="lg:pl-[19rem]">
+          {/* Glass Top Bar */}
+          <header className="sticky top-0 z-30">
+            <div className="flex items-center justify-between px-5 py-3">
               <button
-                type="button"
-                onClick={handleStartTour}
-                className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100"
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
               >
-                <PlayCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">Start Tour</span>
-                <span className="sm:hidden">Tour</span>
+                <Menu className="w-6 h-6" />
               </button>
-              <Link
-                to="/dashboard/billing"
-                className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg hover:shadow-md transition-all"
-              >
-                <Zap className="w-4 h-4 text-purple-600" />
-                <span className="text-sm font-semibold text-purple-700">
-                  {user?.plan === 'pro' ? 'Unlimited' : `${hireBalance} Hires`}
-                </span>
-                <span className="text-xs text-purple-600">
-                  {user?.plan === 'pro' ? '$3/mo' : `${mergedDailyUsed}/${dailyCap} free today`}
-                </span>
-                {needsHires ? (
-                  <span className="ml-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
-                    Buy Hires
-                  </span>
-                ) : null}
-              </Link>
-              <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <Bell className="w-6 h-6 text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-            </div>
-          </div>
-        </header>
 
-        {/* Page Content */}
-        <main className="p-6">
-          <div className="mx-auto w-full max-w-7xl">
-            <Outlet />
-          </div>
-        </main>
-      </div>
+              <div className="flex-1 max-w-xl mx-auto px-4">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search jobs, companies, or skills..."
+                    className="w-full pl-12 pr-4 py-2.5 rounded-xl border border-white/60 bg-white/70 backdrop-blur focus:bg-white focus:border-purple-300 focus:ring-4 focus:ring-purple-100 transition-all outline-none shadow-sm text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleStartTour}
+                  className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100"
+                >
+                  <PlayCircle className="w-4 h-4" />
+                  <span className="hidden sm:inline">Start Tour</span>
+                  <span className="sm:hidden">Tour</span>
+                </button>
+                <Link
+                  to="/dashboard/billing"
+                  className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg hover:shadow-md transition-all"
+                >
+                  <Zap className="w-4 h-4 text-purple-600" />
+                  <span className="text-sm font-semibold text-purple-700">
+                    {user?.plan === 'pro' ? 'Unlimited' : `${hireBalance} Hires`}
+                  </span>
+                  <span className="text-xs text-purple-600">
+                    {user?.plan === 'pro' ? '$3/mo' : `${mergedDailyUsed}/${dailyCap} free today`}
+                  </span>
+                  {needsHires ? (
+                    <span className="ml-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                      Buy Hires
+                    </span>
+                  ) : null}
+                </Link>
+                <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <Bell className="w-6 h-6 text-gray-600" />
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Page Content */}
+          <main className="p-6">
+            <div className="mx-auto w-full max-w-7xl">
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   );

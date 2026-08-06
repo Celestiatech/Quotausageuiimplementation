@@ -48,6 +48,8 @@ const TermsOfService = lazy(() => import('./pages/TermsOfService'));
 const CookiePolicy = lazy(() => import('./pages/CookiePolicy'));
 const Blog = lazy(() => import('./pages/Blog'));
 const BlogPost = lazy(() => import('./pages/BlogPost'));
+const BlogLazyApplyAlternative = lazy(() => import('./pages/BlogLazyApplyAlternative'));
+const BlogLinkedInEasyApplyDoesItWork = lazy(() => import('./pages/BlogLinkedInEasyApplyDoesItWork'));
 const ExtensionDesign = lazy(() => import('./pages/ExtensionDesign'));
 const ThankYou = lazy(() => import('./pages/ThankYou'));
 
@@ -57,6 +59,7 @@ const Jobs = lazy(() => import('./pages/dashboard/Jobs'));
 const Applications = lazy(() => import('./pages/dashboard/Applications'));
 const Resume = lazy(() => import('./pages/dashboard/Resume'));
 const Interview = lazy(() => import('./pages/dashboard/Interview'));
+const InterviewAssistant = lazy(() => import('./pages/dashboard/InterviewAssistant'));
 const DashboardAnalytics = lazy(() => import('./pages/dashboard/Analytics'));
 const Settings = lazy(() => import('./pages/dashboard/Settings'));
 const Profile = lazy(() => import('./pages/dashboard/Profile'));
@@ -157,6 +160,8 @@ const routes = createRoutesFromElements(
       <Route path="cookie-policy" element={<Suspense fallback={<PageLoader />}><CookiePolicy /></Suspense>} />
       <Route path="extension-design" element={<Suspense fallback={<PageLoader />}><ExtensionDesign /></Suspense>} />
       <Route path="blog" element={<Suspense fallback={<PageLoader />}><Blog /></Suspense>} />
+      <Route path="blog/lazyapply-alternative" element={<Suspense fallback={<PageLoader />}><BlogLazyApplyAlternative /></Suspense>} />
+      <Route path="blog/linkedin-easy-apply-does-it-work" element={<Suspense fallback={<PageLoader />}><BlogLinkedInEasyApplyDoesItWork /></Suspense>} />
       <Route path="blog/:slug" element={<Suspense fallback={<PageLoader />}><BlogPost /></Suspense>} />
       <Route path="thank-you" element={<Suspense fallback={<PageLoader />}><ThankYou /></Suspense>} />
     </Route>
@@ -182,6 +187,7 @@ const routes = createRoutesFromElements(
       <Route path="applications" element={<Suspense fallback={<PageLoader />}><Applications /></Suspense>} />
       <Route path="resume" element={<Suspense fallback={<PageLoader />}><Resume /></Suspense>} />
       <Route path="interview" element={<Suspense fallback={<PageLoader />}><Interview /></Suspense>} />
+      <Route path="interview-assistant" element={<Suspense fallback={<PageLoader />}><InterviewAssistant /></Suspense>} />
       <Route path="analytics" element={<Suspense fallback={<PageLoader />}><DashboardAnalytics /></Suspense>} />
       <Route path="settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
       <Route path="profile" element={<Suspense fallback={<PageLoader />}><Profile /></Suspense>} />

@@ -85,6 +85,10 @@ keep_screen_awake = True            # True or False, Note: True or False are cas
 # Run in undetected mode to bypass anti-bot protections (Preview Feature, UNSTABLE. Recommended to leave it as False)
 stealth_mode = True                # True or False, Note: True or False are case-sensitive
 
+# Enable multi-platform job application support (Greenhouse, Lever, Workable)
+# When enabled, the bot will attempt to auto-apply to jobs on supported external platforms
+enable_multi_platform = True       # True or False, Note: True or False are case-sensitive
+
 # Do you want to get alerts on errors related to AI API connection?
 showAiErrorAlerts = False            # True or False, Note: True or False are case-sensitive
 

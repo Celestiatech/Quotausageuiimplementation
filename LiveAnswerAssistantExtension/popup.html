@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>Live Answer Assistant</title>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="logo">AA</div>
+      <div class="titles">
+        <div class="title">Live Answer Assistant</div>
+        <div class="status" id="connStatus">Checking connection…</div>
+      </div>
+    </header>
+
+    <main>
+      <label class="field">
+        <span class="label">Client / interview question</span>
+        <textarea id="question" rows="3" placeholder="Paste or type the question here…"></textarea>
+      </label>
+
+      <label class="field">
+        <span class="label">Answer style</span>
+        <select id="tone">
+          <option value="concise">Concise (fast, ~1 min)</option>
+          <option value="detailed" selected>Detailed (2–3 min)</option>
+          <option value="star">STAR method</option>
+        </select>
+      </label>
+
+      <div class="field">
+        <span class="label">Mode</span>
+        <div class="mode-row">
+          <button class="chip chip-active" data-mode="assist" id="modeAssist">Draft answer</button>
+          <button class="chip" data-mode="score" id="modeScore">Score my answer</button>
+        </div>
+      </div>
+
+      <div class="field hidden" id="userAnswerField">
+        <span class="label">Your spoken answer (for scoring)</span>
+        <textarea id="userAnswer" rows="3" placeholder="Type or paste the answer you actually gave…"></textarea>
+      </div>
+
+      <button class="primary" id="runBtn">
+        <span class="spinner hidden" id="spinner"></span>
+        <span id="runLabel">Generate answer</span>
+      </button>
+
+      <div class="result hidden" id="resultBox">
+        <div class="result-head">
+          <span id="resultLabel">Answer</span>
+          <button class="ghost" id="copyBtn">Copy</button>
+        </div>
+        <pre id="resultText"></pre>
+      </div>
+
+      <div class="error hidden" id="errorBox"></div>
+
+      <div class="meta" id="meta"></div>
+    </main>
+
+    <footer>
+      <button class="link" id="openDash">Open dashboard assistant ↗</button>
+      <button class="link" id="refreshBtn">Reconnect</button>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

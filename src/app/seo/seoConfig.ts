@@ -14,6 +14,15 @@ export const DEFAULT_SEO: SeoEntry = {
   index: true,
 };
 
+export const ORGANIZATION_SCHEMA = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "AutoApply CV",
+  url: "https://www.autoapplycv.in",
+  logo: "https://www.autoapplycv.in/favicon-96x96.png",
+  sameAs: [],
+};
+
 export function normalizeCanonicalBaseUrl(value?: string) {
   const fallback = "https://www.autoapplycv.in";
   const raw = value?.trim();
@@ -59,24 +68,28 @@ export const SEO_BY_PATH: Record<string, SeoEntry> = {
     description:
       "Explore job search automation features: LinkedIn easy apply bot workflows, AI resume tailoring, interview preparation AI, and application analytics.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/product": {
     title: "Product Overview | AutoApply CV",
     description:
       "See the complete AutoApply CV platform: LinkedIn automation workflows, AI resume optimization, and application tracking.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/how-it-works": {
     title: "How AutoApply CV Auto Apply Works | AutoApply CV",
     description:
       "See how to set up AutoApply CV with page-ready submission checks, dashboard answer sync, ATS resume optimization, and pipeline tracking.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/pricing": {
     title: "Pricing | LinkedIn Auto Apply Bot Plans | AutoApply CV",
     description:
       "Compare transparent AutoApply CV pricing with clear charged vs skipped outcomes, LinkedIn automation limits, and AI resume optimization tools.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/auto-apply": {
     title: "Auto Apply | Free Auto Apply Tool | AutoApply CV",
@@ -130,8 +143,10 @@ export const SEO_BY_PATH: Record<string, SeoEntry> = {
   },
   "/about": {
     title: "About | AutoApply CV",
-    description: "Learn about the AutoApply CV mission to help job seekers land better opportunities faster.",
+    description:
+      "Learn how AutoApply CV helps job seekers automate LinkedIn applications, optimize resumes for ATS, and track every job to land interviews faster.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/faq": {
     title: "FAQ | LinkedIn Auto Apply Bot Questions | AutoApply CV",
@@ -171,48 +186,66 @@ export const SEO_BY_PATH: Record<string, SeoEntry> = {
   },
   "/roadmap": {
     title: "Roadmap | AutoApply CV",
-    description: "Track upcoming AutoApply CV improvements across run reliability, automation quality, and reporting.",
+    description:
+      "See the AutoApply CV roadmap with upcoming improvements to run reliability, LinkedIn automation quality, reporting, and resume AI features.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/careers": {
     title: "Careers | AutoApply CV",
-    description: "Explore open roles and help build reliable job search automation workflows for modern candidates.",
+    description:
+      "Explore open roles at AutoApply CV and help build reliable LinkedIn automation, AI resume tools, and job search workflows that modern candidates trust.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/contact": {
     title: "Contact | AutoApply CV",
-    description: "Reach AutoApply CV support for product, billing, and automation troubleshooting questions.",
+    description:
+      "Get help from the AutoApply CV team for product questions, billing issues, and LinkedIn automation troubleshooting - we respond fast.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/press-kit": {
     title: "Press Kit | AutoApply CV",
-    description: "Press resources, company summary, and media contact details for AutoApply CV.",
+    description:
+      "Download the AutoApply CV press kit with company summary, product facts, screenshots, and media contact details for journalists and partners.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/help-center": {
     title: "Help Center | AutoApply CV",
-    description: "Guides for setup, extension sync, and troubleshooting LinkedIn automation workflows.",
+    description:
+      "Browse AutoApply CV help center guides for account setup, extension sync, LinkedIn auto apply troubleshooting, and dashboard how-tos.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/community": {
     title: "Community | AutoApply CV",
-    description: "Join the AutoApply CV community to share workflow strategies and improve application quality.",
+    description:
+      "Join the AutoApply CV community to share LinkedIn auto apply strategies, resume tips, and tracking workflows that improve application quality.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/privacy-policy": {
     title: "Privacy Policy | AutoApply CV",
-    description: "Read how AutoApply CV collects, uses, and protects user data.",
+    description:
+      "Read the AutoApply CV privacy policy to understand how we collect, use, and protect your data across the app and LinkedIn Chrome extension.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/terms-of-service": {
     title: "Terms of Service | AutoApply CV",
-    description: "Review the terms governing use of AutoApply CV services.",
+    description:
+      "Review the AutoApply CV terms of service covering account use, LinkedIn automation, paid plans, and acceptable use of the platform.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/cookie-policy": {
     title: "Cookie Policy | AutoApply CV",
-    description: "See how cookies and browser storage are used across AutoApply CV.",
+    description:
+      "Learn how cookies and browser storage are used across AutoApply CV, including analytics, consent settings, and how to manage your preferences.",
     index: true,
+    structuredData: ORGANIZATION_SCHEMA,
   },
   "/blog": {
     title: "Job Search Automation Blog | AutoApply CV",
@@ -268,12 +301,14 @@ export const SEO_BY_PATH: Record<string, SeoEntry> = {
   },
   "/login": {
     title: "Login | AutoApply CV",
-    description: "Login to your AutoApply CV account.",
+    description:
+      "Log in to your AutoApply CV account to run LinkedIn auto apply workflows, build AI-optimized resumes, and track your job applications.",
     index: true,
   },
   "/signup": {
     title: "Sign Up | AutoApply CV",
-    description: "Create your AutoApply CV account.",
+    description:
+      "Create your free AutoApply CV account to start automating LinkedIn applications, optimizing your resume for ATS, and tracking every job.",
     index: true,
   },
   "/admin/login": {
@@ -288,7 +323,7 @@ export function resolveSeo(pathname: string): SeoEntry {
     return {
       title: "Free Auto Apply Blog | AutoApply CV",
       description:
-        "Free auto apply guides, LinkedIn workflows, resume optimization, and job tracking tactics to get more interviews.",
+        "Free auto apply guides, LinkedIn Easy Apply workflows, AI resume optimization, ATS tips, and job tracking tactics that get more interviews.",
       index: true,
       structuredData: {
         "@context": "https://schema.org",

@@ -214,6 +214,7 @@ def validate_settings() -> None | ValueError | TypeError:
     check_boolean(smooth_scroll, "smooth_scroll")
     check_boolean(keep_screen_awake, "keep_screen_awake")
     check_boolean(stealth_mode, "stealth_mode")
+    check_boolean(enable_multi_platform, "enable_multi_platform")
 
 
 

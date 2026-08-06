@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, CalendarDays, User } from "lucide-react";
+import { STATIC_BLOG_POSTS_BY_SLUG } from "src/content/blogPosts";
 
 type PublicBlogPost = {
   id: string;
@@ -25,22 +26,32 @@ function toKeywordList(value: unknown) {
 export default function BlogPost() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const [post, setPost] = useState<PublicBlogPost | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cleanSlug = String(slug || "").trim().toLowerCase();
+  const [post, setPost] = useState<PublicBlogPost | null>(
+    () => STATIC_BLOG_POSTS_BY_SLUG[cleanSlug] ?? null,
+  );
+  const [loading, setLoading] = useState(() => !STATIC_BLOG_POSTS_BY_SLUG[cleanSlug]);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const load = async () => {
-      const cleanSlug = String(slug || "").trim();
-      if (!cleanSlug) {
+      const currentSlug = String(slug || "").trim().toLowerCase();
+      if (!currentSlug) {
         setError("Blog post not found.");
         setLoading(false);
+        return;
+      }
+      const staticPost = STATIC_BLOG_POSTS_BY_SLUG[currentSlug];
+      if (staticPost) {
+        setPost(staticPost);
+        setLoading(false);
+        setError("");
         return;
       }
       try {
         setLoading(true);
         setError("");
-        const res = await fetch(`/api/public/blogs/${encodeURIComponent(cleanSlug)}`);
+        const res = await fetch(`/api/public/blogs/${encodeURIComponent(currentSlug)}`);
         const data = await res.json();
         if (!res.ok || !data?.success) throw new Error(data?.message || "Blog post not found");
         const payload = data?.data?.post as PublicBlogPost;

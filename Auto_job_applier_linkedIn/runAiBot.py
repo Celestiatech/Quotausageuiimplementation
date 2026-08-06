@@ -46,6 +46,15 @@ from modules.helpers import *
 from modules.clickers_and_finders import *
 from modules.validator import validate_config
 from modules.helpers import random_delay
+from modules.linkedin_enhancements import LinkedInEnhancements
+from modules.multi_platform import (
+    detect_platform,
+    is_supported_platform,
+    apply_to_job as multi_platform_apply,
+    get_platform_info,
+    record_platform_application,
+    get_platform_summary,
+)
 
 if use_AI:
     from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_close_openai_client
@@ -809,7 +818,8 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
 
 def external_apply(pagination_element: WebElement, job_id: str, job_link: str, resume: str, date_listed, application_link: str, screenshot_name: str) -> tuple[bool, str, int]:
     '''
-    Function to open new tab and save external job application links
+    Function to open new tab and save external job application links.
+    Now with multi-platform automation support for Greenhouse, Lever, Workable.
     '''
     global tabs_count, dailyEasyApplyLimitReached
     if easy_apply_only:
@@ -826,6 +836,21 @@ def external_apply(pagination_element: WebElement, job_id: str, job_link: str, r
         driver.switch_to.window(windows[-1])
         application_link = driver.current_url
         print_lg('Got the external application link "{}"'.format(application_link))
+
+        # Check if this is a supported external platform for automation
+        if enable_multi_platform and is_supported_platform(driver):
+            print_lg(f"Detected supported external platform: {detect_platform(driver)}")
+            # Try automated application on the external platform
+            success, message = apply_to_external_platform(application_link, resume)
+            if success:
+                print_lg(f"Successfully applied via external platform: {message}")
+                if close_tabs and driver.current_window_handle != linkedIn_tab: driver.close()
+                driver.switch_to.window(linkedIn_tab)
+                return False, application_link, tabs_count
+            else:
+                print_lg(f"External platform automation failed: {message}")
+
+        # Fallback: just collect the link
         if close_tabs and driver.current_window_handle != linkedIn_tab: driver.close()
         driver.switch_to.window(linkedIn_tab)
         return False, application_link, tabs_count
@@ -839,7 +864,88 @@ def external_apply(pagination_element: WebElement, job_id: str, job_link: str, r
 
 
 
-def follow_company(modal: WebDriver = driver) -> None:
+def apply_to_external_platform(platform_url: str, resume: str) -> tuple[bool, str]:
+    """
+    Function to apply to jobs on external platforms (Greenhouse, Lever, Workable).
+    Opens the platform URL in a new tab and applies using platform-specific automation.
+    Returns (success, message).
+    """
+    global tabs_count
+    original_window = driver.current_window_handle
+
+    try:
+        # Open new tab for external platform
+        driver.switch_to.new_window('tab')
+        tabs_count = len(driver.window_handles)
+        driver.get(platform_url)
+        time.sleep(3)  # Wait for page to load
+
+        # Check if platform is supported
+        if not is_supported_platform(driver):
+            platform_info = get_platform_info(driver)
+            print_lg(f"Unsupported external platform: {platform_info.get('platform', 'unknown')}")
+            driver.close()
+            driver.switch_to.window(original_window)
+            return False, "Unsupported platform"
+
+        # Get platform info
+        platform_info = get_platform_info(driver)
+        platform_name = platform_info.get('platform', 'unknown')
+        print_lg(f"Detected platform: {platform_name}")
+
+        # Prepare answers from config (with safe defaults)
+        answers = {
+            "phone": phone_number if 'phone_number' in dir() else "",
+            "email": username if 'username' in dir() else "",
+            "name": full_name if 'full_name' in dir() else "",
+            "first_name": first_name if 'first_name' in dir() else "",
+            "last_name": last_name if 'last_name' in dir() else "",
+            "location": current_city if 'current_city' in dir() else "",
+            "linkedin": linkedIn if 'linkedIn' in dir() else "",
+            "website": website if 'website' in dir() else "",
+            "github": github if 'github' in dir() else "",
+        }
+
+        # Apply using platform-specific module
+        result = multi_platform_apply(
+            driver,
+            platform=platform_name,
+            resume_url=None,  # Will use LinkedIn's uploaded resume
+            resume_filename=os.path.basename(default_resume_path) if 'default_resume_path' in dir() and os.path.exists(default_resume_path) else "resume.pdf",
+            answers=answers,
+        )
+
+        print_lg(f"Platform apply result: {result.get('message', 'unknown')}")
+
+        # Record application stats
+        job_info = platform_info
+        record_platform_application(
+            platform=platform_name,
+            job_title=job_info.get('role', 'Unknown'),
+            company=job_info.get('company', 'Unknown'),
+            status='applied' if result.get('success') else 'failed',
+            details=result.get('message', '')
+        )
+
+        # Close tab and switch back
+        if close_tabs and driver.current_window_handle != original_window:
+            driver.close()
+        driver.switch_to.window(original_window)
+
+        return result.get('success', False), result.get('message', 'Unknown result')
+
+    except Exception as e:
+        print_lg(f"Failed to apply to external platform: {e}")
+        try:
+            # Try to switch back to original window
+            if original_window in driver.window_handles:
+                driver.switch_to.window(original_window)
+        except Exception:
+            pass
+        return False, str(e)
+
+
+def follow_company(modal=None) -> None:
     '''
     Function to follow or un-follow easy applied companies based om `follow_companies`
     '''
@@ -943,6 +1049,11 @@ def apply_to_jobs(search_terms: list[str]) -> None:
     if randomize_search_order:  shuffle(search_terms)
     for searchTerm in search_terms:
         driver.get(f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
+
+        # Inject Shadow DOM override on page load
+        if linkedin_enhancements:
+            linkedin_enhancements.on_page_load()
+
         print_lg("\n________________________________________________________________________________________________________________________\n")
         print_lg(f'\n>>>> Now searching for "{searchTerm}" <<<<\n\n')
 
@@ -977,7 +1088,28 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     except Exception as e:
                         print_lg(f'Trying to Apply to "{title} | {company}" job. Job ID: {job_id}')
 
+                    # Check URL deduplication (enhancement)
                     job_link = "https://www.linkedin.com/jobs/view/"+job_id
+                    if linkedin_enhancements and linkedin_enhancements.is_duplicate(job_link):
+                        print_lg(f'Skipping "{title} | {company}" - already submitted (URL dedup). Job ID: {job_id}!')
+                        skip_count += 1
+                        if linkedin_enhancements:
+                            linkedin_enhancements.update_stats(skipped=skip_count, current_job=f"{title} | {company}", message="Skipped: Already submitted")
+                        continue
+
+                    # Check for LinkedIn apply limits (enhancement)
+                    if linkedin_enhancements:
+                        limit_status = linkedin_enhancements.check_limits()
+                        if limit_status == 'daily':
+                            print_lg("Daily LinkedIn limit reached. Stopping.")
+                            if linkedin_enhancements:
+                                linkedin_enhancements.update_stats(message="Daily limit reached!")
+                            return
+                        elif limit_status == 'hourly':
+                            print_lg("Hourly LinkedIn limit detected. Waiting...")
+                            if linkedin_enhancements:
+                                linkedin_enhancements.update_stats(message="Hourly limit - waiting...")
+                            continue
                     application_link = "Easy Applied"
                     date_applied = "Pending"
                     hr_link = "Unknown"
@@ -996,6 +1128,8 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         print_lg(e, 'Skipping this job!\n')
                         failed_job(job_id, job_link, resume, date_listed, "Found Blacklisted words in About Company", e, "Skipped", screenshot_name)
                         skip_count += 1
+                        if linkedin_enhancements:
+                            linkedin_enhancements.update_stats(skipped=skip_count, message="Skipped: Blacklisted")
                         continue
                     except Exception as e:
                         print_lg("Failed to scroll to About Company!")
@@ -1049,6 +1183,8 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         failed_job(job_id, job_link, resume, date_listed, reason, message, "Skipped", screenshot_name)
                         rejected_jobs.add(job_id)
                         skip_count += 1
+                        if linkedin_enhancements:
+                            linkedin_enhancements.update_stats(skipped=skip_count, current_job=f"{title} | {company}", message=f"Skipped: {reason}")
                         continue
 
                     
@@ -1070,12 +1206,26 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         ##<
 
                     uploaded = False
+
+                    # Check for external apply link (enhancement)
+                    if linkedin_enhancements and linkedin_enhancements.is_external_link():
+                        print_lg(f'Skipping "{title} | {company}" - external apply link detected.')
+                        skip_count += 1
+                        if linkedin_enhancements:
+                            linkedin_enhancements.update_stats(skipped=skip_count, current_job=f"{title} | {company}", message="Skipped: External link")
+                        continue
+
                     # Case 1: Easy Apply Button
                     if try_xp(driver, ".//button[contains(@class,'jobs-apply-button') and contains(@class, 'artdeco-button--3') and contains(@aria-label, 'Easy')]"):
-                        try: 
+                        try:
                             try:
                                 errored = ""
                                 modal = find_by_class(driver, "jobs-easy-apply-modal")
+
+                                # Track progress for smart recovery (enhancement)
+                                if linkedin_enhancements:
+                                    linkedin_enhancements.previous_progress = linkedin_enhancements.get_progress()
+
                                 wait_span_click(modal, "Next", 1)
                                 # if description != "Unknown":
                                 #     resume = create_custom_resume(description)
@@ -1085,7 +1235,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                 next_counter = 0
                                 while next_button:
                                     next_counter += 1
-                                    if next_counter >= 15: 
+                                    if next_counter >= 15:
                                         if pause_at_failed_question:
                                             screenshot(driver, job_id, "Needed manual intervention for failed question")
                                             pyautogui.alert("Couldn't answer one or more questions.\nPlease click \"Continue\" once done.\nDO NOT CLICK Back, Next or Review button in LinkedIn.\n\n\n\n\nYou can turn off \"Pause at failed question\" setting in config.py", "Help Needed", "Continue")
@@ -1095,9 +1245,21 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                         screenshot_name = screenshot(driver, job_id, "Failed at questions")
                                         errored = "stuck"
                                         raise Exception("Seems like stuck in a continuous loop of next, probably because of new questions.")
+
+                                    # Smart error recovery: check for step changes (enhancement)
+                                    if linkedin_enhancements and next_counter > 1:
+                                        current_progress = linkedin_enhancements.get_progress()
+                                        if linkedin_enhancements.previous_progress:
+                                            prev_pct = linkedin_enhancements.previous_progress.get('percent', 0)
+                                            curr_pct = current_progress.get('percent', 0)
+                                            if curr_pct < prev_pct:
+                                                print_lg(f"Step moved backward ({prev_pct}% -> {curr_pct}%). Trying recovery...")
+                                                linkedin_enhancements.try_recover()
+                                        linkedin_enhancements.previous_progress = current_progress
+
                                     questions_list = answer_questions(modal, questions_list, work_location, job_description=description)
                                     if useNewResume and not uploaded: uploaded, resume = upload_resume(modal, default_resume_path)
-                                    try: next_button = modal.find_element(By.XPATH, './/span[normalize-space(.)="Review"]') 
+                                    try: next_button = modal.find_element(By.XPATH, './/span[normalize-space(.)="Review"]')
                                     except NoSuchElementException:  next_button = modal.find_element(By.XPATH, './/button[contains(span, "Next")]')
                                     try: next_button.click()
                                     except ElementClickInterceptedException: break    # Happens when it tries to click Next button in About Company photos section
@@ -1105,7 +1267,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
                             except NoSuchElementException: errored = "nose"
                             finally:
-                                if questions_list and errored != "stuck": 
+                                if questions_list and errored != "stuck":
                                     print_lg("Answered the following questions...", questions_list)
                                     print("\n\n" + "\n".join(str(question) for question in questions_list) + "\n\n")
                                 wait_span_click(driver, "Review", 1, scrollTop=True)
@@ -1116,7 +1278,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                     pause_before_submit = False if "Disable Pause" == decision else True
                                     # try_xp(modal, ".//span[normalize-space(.)='Review']")
                                 follow_company(modal)
-                                if wait_span_click(driver, "Submit application", 2, scrollTop=True): 
+                                if wait_span_click(driver, "Submit application", 2, scrollTop=True):
                                     date_applied = datetime.now()
                                     if not wait_span_click(driver, "Done", 2): actions.send_keys(Keys.ESCAPE).perform()
                                 elif errored != "stuck" and cur_pause_before_submit and "Yes" in pyautogui.confirm("You submitted the application, didn't you 😒?", "Failed to find Submit Application!", ["Yes", "No"]):
@@ -1128,25 +1290,42 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                     # else:   screenshot_name = [screenshot_name, screenshot(driver, job_id, "Failed to click Submit application")]
                                     if errored == "nose": raise Exception("Failed to click Submit application 😑")
 
-
                         except Exception as e:
                             print_lg("Failed to Easy apply!")
                             # print_lg(e)
                             critical_error_log("Somewhere in Easy Apply process",e)
                             failed_job(job_id, job_link, resume, date_listed, "Problem in Easy Applying", e, application_link, screenshot_name)
                             failed_count += 1
+                            if linkedin_enhancements:
+                                linkedin_enhancements.update_stats(failed=failed_count, message=f"Failed: {str(e)[:50]}")
                             discard_job()
                             continue
+
+                    # Case 2: Apply externally
                     else:
-                        # Case 2: Apply externally
                         skip, application_link, tabs_count = external_apply(pagination_element, job_id, job_link, resume, date_listed, application_link, screenshot_name)
                         if dailyEasyApplyLimitReached:
                             print_lg("\n###############  Daily application limit for Easy Apply is reached!  ###############\n")
+                            if linkedin_enhancements:
+                                linkedin_enhancements.update_stats(message="Daily limit reached!")
                             return
-                        if skip: continue
+                        if skip:
+                            if linkedin_enhancements:
+                                linkedin_enhancements.update_stats(message="External apply skipped")
+                            continue
 
                     submitted_jobs(job_id, title, company, work_location, work_style, description, experience_required, skills, hr_name, hr_link, resume, reposted, date_listed, date_applied, job_link, application_link, questions_list, connect_request)
                     if uploaded:   useNewResume = False
+
+                    # Mark as submitted for deduplication (enhancement)
+                    if linkedin_enhancements and date_applied != "Pending":
+                        linkedin_enhancements.mark_submitted(job_link)
+                        easy_applied_count += 1
+                        linkedin_enhancements.update_stats(
+                            applied=easy_applied_count,
+                            current_job=f"{title} | {company}",
+                            message=f"Applied to {company}"
+                        )
 
                     print_lg(f'Successfully saved "{title} | {company}" job. Job ID: {job_id} info')
                     current_count += 1
@@ -1202,6 +1381,7 @@ def run(total_runs: int) -> int:
 
 chatGPT_tab = False
 linkedIn_tab = False
+linkedin_enhancements = None  # Global reference to enhancements
 
 def main() -> None:
     pyautogui.alert("Please consider sponsoring this project at:\n\nhttps://github.com/sponsors/GodsScion\n\n", "Support the project", "Okay")
@@ -1221,6 +1401,11 @@ def main() -> None:
         if not is_logged_in_LN(): login_LN()
         
         linkedIn_tab = driver.current_window_handle
+
+        # Initialize LinkedIn enhancements
+        global linkedin_enhancements
+        linkedin_enhancements = LinkedInEnhancements(driver)
+        linkedin_enhancements.init_session()
 
         # # Login to ChatGPT in a new tab for resume customization
         # if use_resume_generator:
@@ -1283,6 +1468,14 @@ def main() -> None:
         print_lg("Total applied or collected:     {}".format(easy_applied_count + external_jobs_count))
         print_lg("\nFailed jobs:                    {}".format(failed_count))
         print_lg("Irrelevant jobs skipped:        {}\n".format(skip_count))
+        
+        # Print multi-platform summary
+        try:
+            platform_summary = get_platform_summary()
+            print_lg(platform_summary)
+        except Exception as e:
+            print_lg(f"Failed to get platform summary: {e}")
+        
         if randomly_answered_questions: print_lg("\n\nQuestions randomly answered:\n  {}  \n\n".format(";\n".join(str(question) for question in randomly_answered_questions)))
         quotes = choice([
             "Never quit. You're one step closer than before. - Sai Vignesh Golla", 

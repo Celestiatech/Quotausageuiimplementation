@@ -1,4 +1,4 @@
-import * as Dialog from '@radix-ui/react-dialog';
+﻿import * as Dialog from '@radix-ui/react-dialog';
 import { X, Zap, Check } from 'lucide-react';
 import { useNavigate } from 'react-router';
 

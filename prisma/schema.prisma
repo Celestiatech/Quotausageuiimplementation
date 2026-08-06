@@ -563,3 +563,36 @@ model HROutreachContact {
   @@index([userId])
   @@index([userId, email])
 }
+
+model AiProvider {
+  id        String   @id @default(cuid())
+  name      String   // display name, e.g. "Groq"
+  provider  String   // "groq" | "openai" | "custom"
+  baseUrl   String
+  model     String
+  enabled   Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  maxTokens Int      @default(2048)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  keys      AiKey[]
+
+  @@index([enabled])
+  @@index([isDefault])
+}
+
+model AiKey {
+  id         String     @id @default(cuid())
+  providerId String
+  label      String     // e.g. "Groq key 1"
+  keyValue   String
+  enabled    Boolean    @default(true)
+  priority   Int        @default(0)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  provider   AiProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, enabled, priority])
+}
