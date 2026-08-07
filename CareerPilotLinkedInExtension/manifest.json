@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AutoApply CV LinkedIn Copilot",
-  "version": "1.2.0",
-  "description": "LinkedIn auto-apply assistant with a live status panel for your job search.",
+  "name": "AutoApply CV LinkedIn Copilot + LiftMyCV",
+  "version": "2.5.0",
+  "description": "LinkedIn auto-apply assistant with a live status panel, plus LiftMyCV multi-board auto-apply (Lever, Greenhouse, Workday, Glassdoor, Monster, Workable, Recruitee, Ashby, Breezy, Wellfound, SmartRecruiters).",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -14,16 +14,64 @@
     "tabs",
     "scripting",
     "activeTab",
-    "alarms"
+    "alarms",
+    "power"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
     "https://autoapplycv.in/*",
     "https://www.autoapplycv.in/*",
-    "https://autoapplycv.vercel.app/*"
+    "https://autoapplycv.vercel.app/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3001/*",
+    "http://127.0.0.1:3001/*",
+    "https://app.liftmycv.com/*",
+    "https://dev.liftmycv.com/*",
+    "https://jobs.lever.co/*",
+    "https://jobs.eu.lever.co/*",
+    "https://jobs.smartrecruiters.com/*",
+    "https://*.workable.com/*",
+    "https://*.monster.com/*",
+    "https://*.monster.ca/*",
+    "https://*.recruitee.com/*",
+    "https://jobs.ashbyhq.com/*",
+    "https://*.breezy.hr/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://job-boards.eu.greenhouse.io/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://wellfound.com/*",
+    "https://smartapply.indeed.com/*",
+    "https://www.glassdoor.com.ar/*",
+    "https://www.glassdoor.com.au/*",
+    "https://nl.glassdoor.be/*",
+    "https://fr.glassdoor.be/*",
+    "https://www.glassdoor.com.br/*",
+    "https://www.glassdoor.ca/*",
+    "https://fr.glassdoor.ca/*",
+    "https://www.glassdoor.de/*",
+    "https://www.glassdoor.es/*",
+    "https://www.glassdoor.fr/*",
+    "https://www.glassdoor.com.hk/*",
+    "https://www.glassdoor.co.in/*",
+    "https://www.glassdoor.ie/*",
+    "https://www.glassdoor.it/*",
+    "https://www.glassdoor.com.mx/*",
+    "https://www.glassdoor.nl/*",
+    "https://www.glassdoor.co.nz/*",
+    "https://www.glassdoor.at/*",
+    "https://de.glassdoor.ch/*",
+    "https://www.glassdoor.com.sg/*",
+    "https://fr.glassdoor.ch/*",
+    "https://www.glassdoor.co.uk/*",
+    "https://www.glassdoor.com/*",
+    "https://mail.google.com/*",
+    "*://*.google.com/recaptcha/*",
+    "*://*.recaptcha.net/recaptcha/*",
+    "*://recaptcha.net/recaptcha/*"
   ],
   "background": {
-    "service_worker": "src/background.js"
+    "service_worker": "merged-background.js"
   },
   "web_accessible_resources": [
     {
@@ -32,6 +80,18 @@
       ],
       "matches": [
         "https://www.linkedin.com/*"
+      ]
+    },
+    {
+      "resources": [
+        "assets/inject/*",
+        "assets/config.js",
+        "assets/dom.js",
+        "assets/images/logo_solved.png",
+        "js/web_accessible_resources.js"
+      ],
+      "matches": [
+        "<all_urls>"
       ]
     }
   ],
@@ -52,14 +112,313 @@
       "matches": [
         "https://autoapplycv.in/*",
         "https://www.autoapplycv.in/*",
-        "https://autoapplycv.vercel.app/*"
+        "https://autoapplycv.vercel.app/*",
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*",
+        "http://localhost:3001/*",
+        "http://127.0.0.1:3001/*"
       ],
       "js": [
         "src/dashboard-bridge.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/liftmycv/queue.js"
+      ],
+      "matches": [
+        "https://app.liftmycv.com/auto-apply-queue",
+        "https://dev.liftmycv.com/auto-apply-queue"
+      ]
+    },
+    {
+      "exclude_matches": [
+        "https://app.liftmycv.com/auto-apply-queue",
+        "https://dev.liftmycv.com/auto-apply-queue"
+      ],
+      "js": [
+        "js/common.js",
+        "js/content/liftmycv/board.js"
+      ],
+      "matches": [
+        "https://app.liftmycv.com/*",
+        "https://dev.liftmycv.com/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/google/search.js"
+      ],
+      "matches": [
+        "https://www.google.com/search**"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/lever/apply.js"
+      ],
+      "matches": [
+        "https://jobs.lever.co/*",
+        "https://jobs.eu.lever.co/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/smartrecruiters/apply.js"
+      ],
+      "matches": [
+        "https://jobs.smartrecruiters.com/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/workable/apply.js"
+      ],
+      "matches": [
+        "https://*.workable.com/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/linkedin/search.js"
+      ],
+      "matches": [
+        "https://www.linkedin.com/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/monster/search.js"
+      ],
+      "matches": [
+        "https://www.monster.com/jobs/search**",
+        "https://www.monster.ca/jobs/search**",
+        "https://www.monster.com/job-openings**",
+        "https://www.monster.ca/job-openings**"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/monster/apply.js"
+      ],
+      "matches": [
+        "https://www.monster.com/jobs/apply-complete**",
+        "https://www.monster.com/profile/apply**",
+        "https://www.monster.com/apply**",
+        "https://www.monster.ca/jobs/apply-complete**",
+        "https://www.monster.ca/profile/apply**",
+        "https://www.monster.ca/apply**"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/recruitee/apply.js"
+      ],
+      "matches": [
+        "https://*.recruitee.com/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/ashbyhq/apply.js"
+      ],
+      "matches": [
+        "https://jobs.ashbyhq.com/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/breezy/apply.js"
+      ],
+      "matches": [
+        "https://*.breezy.hr/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/greenhouse/apply.js"
+      ],
+      "matches": [
+        "https://job-boards.greenhouse.io/*",
+        "https://job-boards.eu.greenhouse.io/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/myworkdayjobs/apply.js"
+      ],
+      "matches": [
+        "https://*.myworkdayjobs.com/*"
+      ]
+    },
+    {
+      "exclude_matches": [
+        "https://wellfound.com/jobs",
+        "https://wellfound.com/jobs/starred"
+      ],
+      "js": [
+        "js/common.js",
+        "js/content/wellfound/apply.js"
+      ],
+      "matches": [
+        "https://wellfound.com/jobs/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/wellfound/search.js"
+      ],
+      "matches": [
+        "https://wellfound.com/jobs",
+        "https://wellfound.com/jobs/starred"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/glassdoor/search.js"
+      ],
+      "matches": [
+        "https://www.glassdoor.com.ar/Job/*",
+        "https://www.glassdoor.com.au/Job/*",
+        "https://www.glassdoor.com.br/Job/*",
+        "https://www.glassdoor.ca/Job/*",
+        "https://www.glassdoor.de/Job/*",
+        "https://www.glassdoor.es/Job/*",
+        "https://www.glassdoor.fr/Job/*",
+        "https://www.glassdoor.ie/Job/*",
+        "https://www.glassdoor.com.co.in/*",
+        "https://www.glassdoor.co.in/Job/*",
+        "https://www.glassdoor.it/Job/*",
+        "https://www.glassdoor.com.mx/Job/*",
+        "https://www.glassdoor.nl/Job/*",
+        "https://www.glassdoor.co.nz/Job/*",
+        "https://www.glassdoor.at/Job/*",
+        "https://www.glassdoor.sg/Job/*",
+        "https://www.glassdoor.co.uk/Job/*",
+        "https://www.glassdoor.com/Job/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/glassdoor/bookmarks.js"
+      ],
+      "matches": [
+        "https://www.glassdoor.com.ar/member/profile/savedJobActivity",
+        "https://www.glassdoor.com.au/member/profile/savedJobActivity",
+        "https://www.glassdoor.com.br/member/profile/savedJobActivity",
+        "https://www.glassdoor.ca/member/profile/savedJobActivity",
+        "https://www.glassdoor.de/member/profile/savedJobActivity",
+        "https://www.glassdoor.es/member/profile/savedJobActivity",
+        "https://www.glassdoor.fr/member/profile/savedJobActivity",
+        "https://www.glassdoor.co.in/member/profile/savedJobActivity",
+        "https://www.glassdoor.ie/member/profile/savedJobActivity",
+        "https://www.glassdoor.it/member/profile/savedJobActivity",
+        "https://www.glassdoor.com.mx/member/profile/savedJobActivity",
+        "https://www.glassdoor.nl/member/profile/savedJobActivity",
+        "https://www.glassdoor.co.nz/member/profile/savedJobActivity",
+        "https://www.glassdoor.at/member/profile/savedJobActivity",
+        "https://www.glassdoor.sg/member/profile/savedJobActivity",
+        "https://www.glassdoor.co.uk/member/profile/savedJobActivity",
+        "https://www.glassdoor.com/member/profile/savedJobActivity"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/glassdoor/apply.js"
+      ],
+      "matches": [
+        "https://smartapply.indeed.com/beta/indeedapply/*",
+        "https://www.glassdoor.com.ar/job-listing/*",
+        "https://www.glassdoor.com.au/job-listing/*",
+        "https://www.glassdoor.com.br/job-listing/*",
+        "https://www.glassdoor.ca/job-listing/*",
+        "https://www.glassdoor.de/job-listing/*",
+        "https://www.glassdoor.es/job-listing/*",
+        "https://www.glassdoor.fr/job-listing/*",
+        "https://www.glassdoor.co.in/job-listing/*",
+        "https://www.glassdoor.ie/job-listing/*",
+        "https://www.glassdoor.it/job-listing/*",
+        "https://www.glassdoor.com.mx/job-listing/*",
+        "https://www.glassdoor.nl/job-listing/*",
+        "https://www.glassdoor.co.nz/job-listing/*",
+        "https://www.glassdoor.at/job-listing/*",
+        "https://www.glassdoor.sg/job-listing/*",
+        "https://www.glassdoor.co.uk/job-listing/*",
+        "https://www.glassdoor.com/job-listing/*"
+      ]
+    },
+    {
+      "js": [
+        "js/common.js",
+        "js/content/greenhouse/gmail.js"
+      ],
+      "matches": [
+        "https://mail.google.com/*"
+      ]
+    },
+    {
+      "all_frames": true,
+      "js": [
+        "assets/my-content-script.js"
+      ],
+      "matches": [
+        "https://*.workable.com/*",
+        "https://smartapply.indeed.com/beta/indeedapply/*",
+        "https://www.google.com/*"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "all_frames": true,
+      "js": [
+        "assets/recaptcha-recognition.js"
+      ],
+      "match_about_blank": true,
+      "matches": [
+        "*://*.google.com/recaptcha/*",
+        "*://*.recaptcha.net/recaptcha/*",
+        "*://recaptcha.net/recaptcha/*"
+      ],
+      "run_at": "document_end"
+    },
+    {
+      "all_frames": true,
+      "js": [
+        "assets/cloudflare-content.js"
+      ],
+      "matches": [
+        "https://*.workable.com/*"
+      ],
+      "run_at": "document_start"
     }
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://app.liftmycv.com/*",
+      "https://dev.liftmycv.com/*"
+    ]
+  },
   "options_page": "src/options.html",
   "action": {
     "default_title": "AutoApply CV Copilot",

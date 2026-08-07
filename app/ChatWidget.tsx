@@ -20,7 +20,8 @@ export default function ChatWidget() {
   useEffect(() => {
     setMounted(true);
   }, []);
-    
+
+  useEffect(() => {
     // Load Tawk.to script
     const script = document.createElement("script");
     script.async = true;

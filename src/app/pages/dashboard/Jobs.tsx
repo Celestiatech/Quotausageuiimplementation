@@ -1639,27 +1639,6 @@ export default function Jobs() {
             {showLinkedIn ? "LinkedIn Jobs Extension" : "Indeed Jobs Extension Beta"}
           </h1>
           <p className="text-gray-600">Showing {jobs.length} real jobs from your backend queue</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            {showLinkedIn ? (
-              <>
-                <span ref={versionBadgeRef} className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">
-                  LinkedIn ZIP: {currentPackageFileName || "loading..."}
-                </span>
-                <span className={`rounded-full px-2.5 py-1 font-semibold ${linkedInInstalled ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-700 ring-1 ring-amber-300"}`}>
-                  LinkedIn installed: {linkedInInstalled ? formatExtensionPackageName(linkedInInstalledVersion || "") : "not detected"}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="rounded-full bg-orange-50 px-2.5 py-1 font-semibold text-orange-700">
-                  Indeed ZIP: {indeedExtensionRelease.downloadFileName || "loading..."}
-                </span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
-                  Indeed installed: {indeedInstalled ? indeedInstalledVersion || "detected" : "not detected"}
-                </span>
-              </>
-            )}
-          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -1739,19 +1718,6 @@ export default function Jobs() {
           {/* Extension Info + Status */}
           {showLinkedIn ? (
             <div className="space-y-4">
-              {/* Version badge */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 border border-sky-200 px-3 py-1 font-semibold text-sky-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
-                  LinkedIn Extension
-                </span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
-                  v{linkedInInstalledVersion || "Not detected"}
-                </span>
-                <span className="text-gray-400">|</span>
-                <span className="text-gray-500">Package: <span className="font-semibold text-gray-700">{currentPackageBaseName}</span></span>
-              </div>
-
               {/* Status Cards */}
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className={`rounded-xl border p-4 transition-all ${linkedInInstalled ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
@@ -1827,48 +1793,11 @@ export default function Jobs() {
                   {syncingSettings ? "Syncing..." : "Sync Profile"}
                 </button>
               </div>
-
-              {/* Setup Steps - Compact */}
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">Quick Setup</h4>
-                <ol className="space-y-2">
-                  {[
-                    { num: 1, text: <>Open the <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">AutoApply CV LinkedIn Copilot</code> page on the Chrome Web Store and click <strong>Add to Chrome</strong></> },
-                    { num: 2, text: <>Pin the extension, open LinkedIn Jobs, then click <strong>Check Status</strong></> },
-                  ].map((step) => (
-                    <li key={step.num} className="flex items-start gap-3 text-sm text-gray-700">
-                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-sky-100 text-sky-700 text-xs font-bold flex items-center justify-center mt-0.5">{step.num}</span>
-                      <span>{step.text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              {/* Resume Note */}
-              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-start gap-3">
-                <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <span className="text-sm font-semibold text-blue-900">Resume Required?</span>
-                  <p className="text-xs text-blue-700 mt-0.5">
-                    Upload your resume in LinkedIn Easy Apply profile first. The copilot auto-selects the latest attached resume.
-                  </p>
-                </div>
-              </div>
             </div>
           ) : null}
 
           {showIndeed ? (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 border border-orange-200 px-3 py-1 font-semibold text-orange-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                  Indeed Beta
-                </span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
-                  v{indeedInstalledVersion || "Not detected"}
-                </span>
-              </div>
-
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className={`rounded-xl border p-4 transition-all ${indeedInstalled ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
                   <div className="flex items-center gap-2 mb-2">
@@ -1921,22 +1850,6 @@ export default function Jobs() {
                 <button type="button" onClick={() => void checkExtensionStatus()} disabled={checkingExtension} className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm disabled:opacity-60">
                   <RefreshCw className={`w-4 h-4 ${checkingExtension ? "animate-spin" : ""}`} /> Refresh Status
                 </button>
-              </div>
-
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">Quick Setup</h4>
-                <ol className="space-y-2">
-                  {[
-                    { num: 1, text: <>Download <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">{indeedExtensionRelease.downloadFileName}</code> and extract it</> },
-                    { num: 2, text: <>Open <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">chrome://extensions</code>, click <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">Load unpacked</code> for the Indeed folder</> },
-                    { num: 3, text: <>Open <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">indeed.com/jobs</code>, then click <strong>Refresh Status</strong></> },
-                  ].map((step) => (
-                    <li key={step.num} className="flex items-start gap-3 text-sm text-gray-700">
-                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold flex items-center justify-center mt-0.5">{step.num}</span>
-                      <span>{step.text}</span>
-                    </li>
-                  ))}
-                </ol>
               </div>
             </div>
           ) : null}
@@ -2205,17 +2118,15 @@ export default function Jobs() {
                   </div>
                 ) : null}
                 <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <MapPin className="w-4 h-4" />
-                    {location}
-                  </div>
+                  {location && location !== "N/A" ? (
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <MapPin className="w-4 h-4" />
+                      {location}
+                    </div>
+                  ) : null}
                   <div className="flex items-center gap-2 text-gray-600">
                     <Clock className="w-4 h-4" />
                     {formatDate(job.createdAt)}
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Briefcase className="w-4 h-4" />
-                    Attempts {job.attempts}/{job.maxAttempts}
                   </div>
                 </div>
               </motion.div>
@@ -2245,12 +2156,6 @@ export default function Jobs() {
                   <div className="text-xs uppercase text-purple-700 font-semibold mb-1">Created</div>
                   <div className="text-sm text-gray-900">{formatDate(selectedJob.createdAt)}</div>
                 </div>
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <div className="text-xs uppercase text-blue-700 font-semibold mb-1">Attempts</div>
-                  <div className="text-sm text-gray-900">
-                    {selectedJob.attempts} / {selectedJob.maxAttempts}
-                  </div>
-                </div>
               </div>
 
               {getJobReason(selectedJob) ? (
@@ -2262,32 +2167,6 @@ export default function Jobs() {
               {selectedJob.errorMessage ? (
                 <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{selectedJob.errorMessage}</div>
               ) : null}
-
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Criteria
-                </h3>
-                <pre className="text-xs bg-gray-50 border border-gray-200 rounded-xl p-4 overflow-auto">
-{JSON.stringify(selectedJob.criteriaJson || {}, null, 2)}
-                </pre>
-              </div>
-
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-900 mb-3">Recent Logs</h3>
-                <div className="space-y-2">
-                  {(selectedJob.logs || []).length === 0 ? (
-                    <div className="text-sm text-gray-500">No logs available.</div>
-                  ) : (
-                    (selectedJob.logs || []).map((log) => (
-                      <div key={log.id} className="border border-gray-200 rounded-lg px-3 py-2">
-                        <div className="text-xs text-gray-500">{formatDate(log.createdAt)} | {log.step} | {log.level}</div>
-                        <div className="text-sm text-gray-800">{log.message}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
 
               <div className="flex gap-4 mt-8 pt-6 border-t border-gray-200">
                 <button

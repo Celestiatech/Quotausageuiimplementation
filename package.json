@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:light": "cross-env NODE_OPTIONS=--max-old-space-size=4096 NEXT_TELEMETRY_DISABLED=1 next dev",
+    "dev:light:turbopack": "cross-env NODE_OPTIONS=--max-old-space-size=3072 NEXT_TELEMETRY_DISABLED=1 next dev --turbopack",
     "postinstall": "prisma generate",
     "build": "next build",
     "build:with-migrate": "prisma migrate deploy && next build",
@@ -98,6 +100,7 @@
     "@tailwindcss/postcss": "^4.1.12",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "25.3.2",
+    "cross-env": "^10.1.0",
     "tailwindcss": "4.1.12",
     "typescript": "5.9.3"
   },

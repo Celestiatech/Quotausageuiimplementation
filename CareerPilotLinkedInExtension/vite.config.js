@@ -15,6 +15,8 @@ function copyDir(src, dest) {
   }
 }
 
+const EXTRA_COPY_DIRS = ["js", "assets", "images"];
+
 function copyExtensionFiles() {
   return {
     name: "copy-extension-files",
@@ -30,6 +32,19 @@ function copyExtensionFiles() {
       if (existsSync(iconsDir)) {
         copyDir(iconsDir, resolve(distDir, "icons"));
       }
+      for (const dirName of EXTRA_COPY_DIRS) {
+        const dir = resolve(__dirname, dirName);
+        if (existsSync(dir)) {
+          copyDir(dir, resolve(distDir, dirName));
+        }
+      }
+      const extraFiles = ["merged-background.js", "lift-worker.js", "career-worker.js", "service-worker.js", "popup.html"];
+      for (const file of extraFiles) {
+        const srcFile = resolve(__dirname, file);
+        if (existsSync(srcFile)) {
+          copyFileSync(srcFile, resolve(distDir, file));
+        }
+      }
     },
   };
 }
@@ -40,7 +55,7 @@ export default defineConfig({
     emptyDir: true,
     rollupOptions: {
       input: {
-        background: resolve(__dirname, "src/background.js"),
+        background: resolve(__dirname, "src/noop.js"),
       },
       output: {
         entryFileNames: "[name].js",

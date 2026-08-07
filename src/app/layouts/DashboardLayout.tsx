@@ -132,7 +132,7 @@ export default function DashboardLayout() {
 
         {/* Glass Sidebar */}
         <aside
-          className={`fixed left-4 top-4 bottom-4 w-64 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/60 shadow-[0_16px_40px_rgba(15,23,42,0.10)] z-50 transform transition-transform duration-300 ${
+          className={`fixed left-4 top-4 bottom-4 w-64 rounded-2xl bg-gradient-to-b from-white/10 to-white/5 backdrop-blur-2xl ring-1 ring-white/40 shadow-[0_8px_32px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.4),0_0_50px_rgba(139,92,246,0.18)] z-50 transform transition-transform duration-300 ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-[calc(100%+2rem)]'
           } lg:translate-x-0`}
         >
@@ -172,10 +172,10 @@ export default function DashboardLayout() {
                     <Link
                       key={item.name}
                       to={item.href}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all duration-200 ${
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 ${
                         isActive
                           ? 'gradient-primary text-white shadow-md'
-                          : 'text-gray-700 hover:bg-purple-50'
+                          : 'text-gray-500 hover:bg-purple-50'
                       }`}
                     >
                       <item.icon className="w-5 h-5" />
@@ -189,10 +189,10 @@ export default function DashboardLayout() {
                   <div key={item.name} className="space-y-1">
                     <Link
                       to={item.href}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all duration-200 ${
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 ${
                         groupActive
                           ? 'bg-purple-50 text-gray-900'
-                          : 'text-gray-700 hover:bg-purple-50'
+                          : 'text-gray-500 hover:bg-purple-50'
                       }`}
                     >
                       <item.icon className="w-5 h-5" />
@@ -207,10 +207,10 @@ export default function DashboardLayout() {
                             <Link
                               key={child.name}
                               to={child.href}
-                              className={`block px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                              className={`block px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
                                 childActive
                                   ? 'bg-white text-purple-700 border border-purple-100 shadow-sm'
-                                  : 'text-gray-600 hover:bg-purple-50'
+                                  : 'text-gray-500 hover:bg-purple-50'
                               }`}
                             >
                               {child.name}
