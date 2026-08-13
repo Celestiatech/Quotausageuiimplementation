@@ -178,9 +178,7 @@ function clampNumber(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
 }
 
 function getSubmitPaceRangeMs(settings) {
-  const minSec = clampNumber(settings?.submitRateMinSec, 40, 5, 600);
-  const maxSec = clampNumber(settings?.submitRateMaxSec, 70, minSec, 900);
-  return { minMs: Math.floor(minSec * 1000), maxMs: Math.floor(maxSec * 1000) };
+  return { minMs: 10_000, maxMs: 10_000 };
 }
 
 function formatPaceLabel(range) {
@@ -918,7 +916,7 @@ function canonicalQuestionKey(label) {
   if (n === "phone" || n === "phone number" || n === "mobile phone" || n === "mobile phone number" || n === "contact number") {
     return "phone_number";
   }
-  if (n.includes("linkedin") && (n.includes("profile") || n.includes("url"))) return "linkedin_url";
+  if (n.includes("linkedin") && !n.includes("headline") && !n.includes("summary")) return "linkedin_url";
   if (n.includes("portfolio") && (n.includes("url") || n.includes("website") || n.includes("site") || n === "portfolio")) {
     return "portfolio_url";
   }
@@ -944,12 +942,15 @@ function canonicalQuestionKey(label) {
   if ((n.includes("salary") || n.includes("compensation") || n.includes("pay")) && n.includes("expect")) {
     return "expected_salary";
   }
-  if (n.includes("year") && n.includes("experience")) return "years_of_experience";
+  const expMatch = n.includes("experience") ? n.match(/experience(?:\s+\w+){0,6}\s+(with|in|on)\s+([a-z0-9 ]+)/) : null;
+  const experienceTech = expMatch ? expMatch[2].replace(/\s+/g, "").toLowerCase() : "";
+  if (n.includes("year") && n.includes("experience") && !experienceTech) return "years_of_experience";
   if (n.includes("bachelor") && n.includes("degree")) return "bachelors_degree_completed";
   if (n.includes("english") && n.includes("proficiency")) return "english_proficiency";
   if (n.includes("confidence") && n.includes("level")) return "cp_pref_confidence_level";
   if (n.includes("notice") && n.includes("period")) return "notice_period_days";
   if (n.includes("start") && n.includes("date")) return "start_date_availability";
+  if (experienceTech) return `what_is_your_experience_with_${experienceTech}`;
   return n.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
 }
 
@@ -1093,6 +1094,11 @@ function answerCommonQuestion(label, settings) {
   const manualByKey = settings?.screeningAnswers?.[key];
   const manualByLabel = settings?.screeningAnswers?.[l];
   const manualValue = manualByKey ? String(manualByKey) : manualByLabel ? String(manualByLabel) : "";
+  // Location *preference* questions (Preferred Locations / Primary Search Location) must never be
+  // auto-answered from profile data or captured answers — leave them pending for manual input.
+  if (isPreferenceLocationQuestion(label)) {
+    return "";
+  }
   // Prefer explicit profile fields over screeningAnswers for identity fields to avoid bad/stale overrides.
   if (manualValue && !identityKeys.has(String(key || "").trim())) return manualValue;
 
@@ -1114,6 +1120,7 @@ function answerCommonQuestion(label, settings) {
     return settings.marketingConsent || "Yes";
   }
   if (l.includes("experience") && l.includes("year")) return yearsValue;
+  if (key && key.startsWith("what_is_your_experience_with_")) return yearsValue;
   if (l.includes("notice")) {
     if (l.includes("month")) return noticeMonths;
     if (l.includes("week")) return noticeWeeks;
@@ -1122,29 +1129,41 @@ function answerCommonQuestion(label, settings) {
   if (l.includes("salary") || l.includes("compensation") || l.includes("ctc") || l.includes("pay")) {
     return getSalaryAnswer(l, settings);
   }
-  if (l.includes("location") || l.includes("city") || l.includes("address")) return currentCity || "";
+  if (l.includes("company name") || l.includes("current company") || l.includes("employer")) {
+    return settings.recentEmployer || "";
+  }
   if (l.includes("email")) return settings.contactEmail || "";
-  if (l.includes("phone number") || l === "phone" || l.includes("mobile")) return normalizePhoneForInput(settings.phoneNumber || "");
   if (l.includes("phone country code")) return settings.phoneCountryCode || "";
+  if (
+    l.includes("phone") ||
+    l.includes("mobile") ||
+    l.includes("cell") ||
+    l.includes("telephone") ||
+    l.includes("contact number") ||
+    l.includes("contact no")
+  ) {
+    return normalizePhoneForInput(settings.phoneNumber || "");
+  }
+  if (l.includes("street")) return settings.streetAddress || "";
+  if (l.includes("address")) return settings.streetAddress || currentCity || "";
+  if (l.includes("location") || l.includes("city")) return currentCity || "";
   if (l.includes("signature")) return fullName;
   if (l.includes("name")) {
     if (l.includes("full")) return fullName;
     if (l.includes("first") && !l.includes("last")) return settings.firstName || fullName;
     if (l.includes("middle") && !l.includes("last")) return settings.middleName || "";
     if (l.includes("last") && !l.includes("first")) return settings.lastName || fullName;
-    if (l.includes("employer")) return settings.recentEmployer || "";
     return fullName;
-  }
-  if (l.includes("linkedin")) return settings.linkedinUrl || "";
-  if (l.includes("website") || l.includes("blog") || l.includes("portfolio") || l.includes("link")) return settings.websiteUrl || "";
-  if (l.includes("scale of 1-10") || l.includes("confidence level")) return settings.confidenceLevel || "";
-  if ((l.includes("hear") || l.includes("come across")) && l.includes("this") && (l.includes("job") || l.includes("position"))) {
-    return settings.websiteUrl || settings.linkedinUrl || "https://github.com/GodsScion/Auto_job_applier_linkedIn";
   }
   if (l.includes("headline")) return settings.linkedinHeadline || "";
   if (l.includes("summary")) return settings.linkedinSummary || "";
+  if (l.includes("linkedin")) return settings.linkedinUrl || manualValue || "";
   if (l.includes("cover")) return settings.coverLetter || "";
-  if (l.includes("street")) return settings.streetAddress || "";
+  if (l.includes("website") || l.includes("blog") || l.includes("portfolio") || l.includes("link")) return settings.websiteUrl || "";
+  if (l.includes("scale of 1-10") || l.includes("confidence level")) return settings.confidenceLevel || "";
+  if ((l.includes("hear") || l.includes("come across")) && l.includes("this") && (l.includes("job") || l.includes("position"))) {
+    return "LinkedIn";
+  }
   if (l.includes("state") || l.includes("province")) return settings.stateRegion || "";
   if (l.includes("zip") || l.includes("postal")) return settings.postalCode || "";
   if (l.includes("country")) return settings.country || "";
@@ -1825,6 +1844,54 @@ function optionFingerprint(value) {
   return normalizeLabel(value).replace(/[^a-z0-9]/g, "");
 }
 
+function parseYearRangeFromText(text) {
+  const t = normalizeLabel(text);
+  if (!/\d/.test(t)) return null;
+  const pureNumeric = /^\s*\d[\d\s,\-–]*\s*$/.test(t);
+  if (!pureNumeric && !t.includes("year")) return null;
+  const nums = (t.match(/\d+/g) || []).map(Number);
+  if (!nums.length) return null;
+  const hasDash = /[-–]|to|through/.test(t);
+  const hasPlus = /\+|\bmore\b|or more|above/.test(t);
+  const hasLess = /less than|under|below|at most|up to/.test(t);
+  let min = null;
+  let max = null;
+  if (hasDash && nums.length >= 2) {
+    min = nums[0];
+    max = nums[1];
+  } else if (hasPlus) {
+    min = nums[nums.length - 1];
+    max = Infinity;
+  } else if (hasLess) {
+    min = -Infinity;
+    max = nums[0];
+  } else if (nums.length === 1) {
+    min = nums[0];
+    max = nums[0];
+  }
+  if (min === null || max === null) return null;
+  return { min, max, span: max === Infinity ? Infinity : max - min, hasPlus, hasLess };
+}
+
+function matchNumericRangeOption(options, answer) {
+  const m = String(answer || "").trim().match(/^\s*(\d{1,2})\s*(?:years?|yrs?|exp(?:erience)?)?\.?\s*$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  let best = null;
+  let bestScore = Infinity;
+  for (const option of options) {
+    const parsed = parseYearRangeFromText(String(option?.text || ""));
+    if (!parsed) continue;
+    if (!(n >= parsed.min && n <= parsed.max)) continue;
+    const score = parsed.hasPlus ? 100000 + parsed.min : parsed.span;
+    if (score < bestScore) {
+      bestScore = score;
+      best = option;
+    }
+  }
+  return best || null;
+}
+
 function isConsentLikeQuestion(label) {
   const l = normalizeLabel(label);
   return (
@@ -1856,6 +1923,8 @@ function selectBestOption(options, answer) {
       options.find((o) => phraseFp.includes(optionFingerprint(o.text || "")));
     if (target) return target;
   }
+  const rangeTarget = matchNumericRangeOption(options, answer);
+  if (rangeTarget) return rangeTarget;
   return null;
 }
 
@@ -2637,14 +2706,27 @@ async function gotoNextResultsPage(settings) {
 
 async function setSearchLocationIfNeeded(settings, locationOverride = "") {
   const location = getEffectiveSearchLocation(settings, locationOverride);
+  await logLine(
+    `[CP-LOC] source check: searchLocation='${String(settings?.searchLocation || "").trim()}' filterLocations=[${parseListSetting(settings?.filterLocations).join(", ")}] onSite=[${parseListSetting(settings?.onSite).join(", ")}] override='${locationOverride}' currentCity='${String(settings?.currentCity || "").trim()}' resolved='${location}'`,
+    "info",
+    { settings },
+  );
   await debugLog(settings, "Search location decision", buildSearchLocationDecisionMeta(settings, locationOverride, location));
   if (!location) return;
   if (!locationOverride) {
     try {
       const currentUrl = new URL(window.location.href);
       if (hasSearchLocationQueryParams(currentUrl) && !shouldClearStaleLocationQueryParams(settings, currentUrl)) {
-        await debugLog(settings, "Search location already represented in URL", { location, url: currentUrl.toString() });
-        return;
+        const input = getJobsSearchLocationInput();
+        if (!input || normalizeLabel(input.value || "") === normalizeLabel(location)) {
+          await debugLog(settings, "Search location already represented in URL", { location, url: currentUrl.toString() });
+          return;
+        }
+        await debugLog(settings, "URL has a stale search location geoId; re-applying preferred location", {
+          preferred: location,
+          inputValue: String(input?.value || ""),
+          url: currentUrl.toString()
+        });
       }
     } catch {
       // ignore URL parsing issues and fall through to input-based location setting
@@ -3291,6 +3373,28 @@ async function handleChatCommand(input) {
     await botChat("Cleared preferred locations (filterLocations) + search location. Runs will rely on LinkedIn UI filters.", "info");
     return;
   }
+  if (cmd === "clear" || cmd === "clear logs" || cmd === "/clear") {
+    const res = await sendMessage({ type: "CP_CLEAR_LOGS" });
+    if (res?.ok) {
+      lastLogRenderSignature = "";
+      const boot = await getBootstrap();
+      if (boot?.state) renderState(boot.state);
+      await botChat("All logs cleared.", "info");
+    } else {
+      await botChat("Failed to clear logs.", "error");
+    }
+    return;
+  }
+  if (cmd === "debug on" || cmd === "debug mode on" || cmd === "debug") {
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { debugMode: true } });
+    await botChat("Debug logging enabled. Run start will print preferences sync details.", "info");
+    return;
+  }
+  if (cmd === "debug off" || cmd === "debug mode off") {
+    await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { debugMode: false } });
+    await botChat("Debug logging disabled.", "info");
+    return;
+  }
   if (cmd.startsWith("set pace ")) {
     const rawValue = raw.slice(9).trim();
     const parts = rawValue.split(/\s+/).filter(Boolean);
@@ -3522,6 +3626,7 @@ function ensurePanel() {
   panel.querySelector(".cp-head-right").insertAdjacentHTML(
     "beforeend",
     `<button id="cp-copy-logs-mini" class="cp-icon-btn" title="Copy logs">\u29c9</button>
+     <button id="cp-clear-logs-mini" class="cp-icon-btn" title="Clear all logs">\u2327</button>
      <button id="cp-download-debug" class="cp-icon-btn" title="Download detailed debug log">\u2b07</button>`
   );
   panel.querySelector("#cp-copy-logs-mini").addEventListener("click", async () => {
@@ -3535,6 +3640,17 @@ function ensurePanel() {
       await botChat("Logs copied to clipboard.");
     } catch {
       await botChat("Clipboard write failed.", "warn");
+    }
+  });
+  panel.querySelector("#cp-clear-logs-mini").addEventListener("click", async () => {
+    const res = await sendMessage({ type: "CP_CLEAR_LOGS" });
+    if (res?.ok) {
+      lastLogRenderSignature = "";
+      const boot = await getBootstrap();
+      if (boot?.state) renderState(boot.state);
+      await botChat("All logs cleared.");
+    } else {
+      await botChat("Failed to clear logs.", "error");
     }
   });
   panel.querySelector("#cp-download-debug").addEventListener("click", () => {
@@ -4728,7 +4844,7 @@ function getYearsFallback(settings) {
   if (configured) return configured;
   const fromExperience = Number(settings.currentExperience);
   if (Number.isFinite(fromExperience) && fromExperience >= 0) return String(fromExperience);
-  return "1";
+  return "";
 }
 
 function isYearsExperienceQuestion(label) {
@@ -4787,9 +4903,19 @@ function getStructuredTextFallback(label, settings) {
 }
 
 function shouldUseNumericFallbackForTextInput(label, textInput) {
+  const l = normalizeLabel(label);
+  if (
+    l.includes("phone") ||
+    l.includes("mobile") ||
+    l.includes("cell") ||
+    l.includes("telephone") ||
+    l.includes("contact number") ||
+    l.includes("contact no")
+  ) {
+    return false;
+  }
   const inputType = normalizeLabel(textInput?.getAttribute?.("type") || "");
   if (inputType === "number") return true;
-  const l = normalizeLabel(label);
   return (
     l.includes("year") ||
     l.includes("how many") ||
@@ -4799,8 +4925,25 @@ function shouldUseNumericFallbackForTextInput(label, textInput) {
   );
 }
 
+function isPreferenceLocationQuestion(label) {
+  const l = normalizeLabel(label);
+  const key = questionKeyFromLabel(l);
+  const preferenceLocationKeys = new Set(["cp_pref_search_locations", "cp_pref_search_location", "preferred_locations"]);
+  return (
+    preferenceLocationKeys.has(String(key || "").trim()) ||
+    (l.includes("preferred") && l.includes("location")) ||
+    l.includes("search location")
+  );
+}
+
 function getSelectRuleAnswer(label, settings, optionsForMatch, currentOptionText = "") {
   const l = normalizeLabel(label);
+  // Location *preference* questions (Preferred Locations / Primary Search Location) must never be
+  // auto-answered — not even from the job's work location (e.g. a captured "Mohali"). Leave them
+  // pending for manual input. Mirrors the guard in answerCommonQuestion.
+  if (isPreferenceLocationQuestion(l)) {
+    return "";
+  }
   if (l.includes("email") && !isMarketingConsentQuestion(l)) {
     return optionsForMatch.find((o) => String(o.text || "").includes("@"))?.text || "";
   }
@@ -4837,6 +4980,67 @@ function getSelectRuleAnswer(label, settings, optionsForMatch, currentOptionText
     return String(currentJobContext.workLocation || "").trim() || normalizeCityAnswer(settings.currentCity, currentJobContext.workLocation);
   }
   return "";
+}
+
+async function retypeComboboxSelection(block, trigger, answer, settings) {
+  const target = String(answer || "").trim();
+  if (!target) return false;
+  const input =
+    getBySelectorList(["input[role='combobox']", "input[type='text']", "input:not([type='hidden'])", "textarea"], block) ||
+    (trigger && trigger.tagName?.toLowerCase() === "input" ? trigger : null);
+  if (!input) return false;
+  try {
+    input.focus();
+    const proto = input.tagName?.toLowerCase() === "textarea" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set || ((v) => { input.value = v; });
+    setter.call(input, "");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await sleep(120);
+    for (let i = 0; i < target.length; i++) {
+      setter.call(input, target.slice(0, i + 1));
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: target[i] }));
+      await sleep(35);
+    }
+    await sleep(750);
+  } catch (err) {
+    await logLine(`Retype failed: ${String(err).slice(0, 120)}`, "warn");
+    return false;
+  }
+
+  async function waitForSuggestions() {
+    const deadline = Date.now() + 2500;
+    let options = [];
+    while (Date.now() < deadline) {
+      options = Array.from(
+        document.querySelectorAll("[role='listbox'] [role='option'], [role='option'], .artdeco-typeahead__result, li[role='option']")
+      ).filter((el) => isVisibleElement(el));
+      if (options.length) return options;
+      await sleep(200);
+    }
+    return options;
+  }
+
+  const optionEls = await waitForSuggestions();
+  const optionsForMatch = optionEls
+    .map((el) => ({ text: String(el.textContent || "").trim(), value: String(el.getAttribute("data-value") || ""), el }))
+    .filter((o) => Boolean(o.text));
+  const suggestion = selectBestOption(optionsForMatch, target) || optionsForMatch[0];
+  if (!suggestion) return false;
+  const currentText = normalizeLabel(String(trigger?.textContent || trigger?.value || "").trim());
+  if (currentText && normalizeLabel(suggestion.text || "") === currentText) return false;
+  try {
+    suggestion.el.scrollIntoView({ behavior: "smooth", block: "center" });
+    await sleep(120);
+    suggestion.el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+    await sleep(60);
+    suggestion.el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+    await sleep(60);
+    suggestion.el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+    await sleep(350);
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 async function applyComboboxOption(block, label, answer, settings) {
@@ -4899,8 +5103,18 @@ async function applyComboboxOption(block, label, answer, settings) {
   if (!resolvedAnswer) {
     resolvedAnswer = await requestAiAnswer(label, "select", optionsForMatch.map((o) => o.text), getModalValidationMessage(getActiveModal()));
   }
+  const isYearsQuestion = isYearsExperienceQuestion(label);
+  if (isYearsQuestion && !resolvedAnswer) {
+    if (!warnedDefaultYearsFallback) {
+      warnedDefaultYearsFallback = true;
+      await logLine(
+        "Years of experience not configured. Leaving the field unanswered — add Years of Experience on the dashboard or use 'set years 4'.",
+        "warn"
+      );
+    }
+  }
   const matchedTarget = selectBestOption(optionsForMatch, resolvedAnswer);
-  const target = matchedTarget || selectFallbackOption(optionsForMatch, label);
+  const target = matchedTarget || (!isYearsQuestion ? selectFallbackOption(optionsForMatch, label) : null);
   if (!target?.el) return false;
   if (normalizeLabel(target.text || "") === normalizeLabel(triggerText || "")) return false;
 
@@ -4923,6 +5137,11 @@ async function applyComboboxOption(block, label, answer, settings) {
   const selectionConfirmed = normalizeLabel(triggerAfterText || "") === normalizeLabel(target.text || "");
 
   if (!selectionConfirmed) {
+    const retyped = await retypeComboboxSelection(block, triggerAfter || trigger, target?.text || resolvedAnswer, settings);
+    if (retyped) {
+      await logLine(`Retyped and selected combobox suggestion for: ${label.slice(0, 60)}`);
+      return true;
+    }
     try {
       const fallbackTarget = triggerAfter || trigger;
       fallbackTarget.focus();
@@ -5045,6 +5264,7 @@ async function fillUnlabeledQuestionBlock(block, settings) {
   }
 
   const checkbox = block.querySelector("input[type='checkbox']");
+  if (checkbox && isFollowCompanyCheckbox(checkbox)) return changed;
   if (!changed && checkbox && !checkbox.checked) {
     checkbox.click();
     await logLine("Checkbox selected for unlabeled required field");
@@ -5060,6 +5280,15 @@ async function fillQuestionBlock(block, settings) {
   const label = normalizeLabel(labelRaw);
   if (!label) {
     return fillUnlabeledQuestionBlock(block, settings);
+  }
+  // Location *preference* questions (Preferred Locations / Primary Search Location) must never be
+  // auto-answered via rule, AI, or fallback — leave them pending for manual input.
+  if (isPreferenceLocationQuestion(label)) {
+    await debugLog(settings, "Skipping preference-location question (manual input required)", {
+      questionLabel: labelRaw || label,
+      questionKey: questionKeyFromLabel(label) || ""
+    });
+    return false;
   }
   if (label.includes("date") || label.includes("start date") || label.includes("available start")) {
     const dateChanged = await selectTodayDateIfPresent(block);
@@ -5109,17 +5338,21 @@ async function fillQuestionBlock(block, settings) {
     textInput.tagName.toLowerCase() !== "textarea" &&
     shouldUseNumericFallbackForTextInput(label, textInput)
   ) {
+    const isYearsQuestion = isYearsExperienceQuestion(label);
     const yearsFallback = getYearsFallback(settings);
-    if (isYearsExperienceQuestion(label) && yearsFallback === "1") {
-      const configured = String(settings?.yearsOfExperienceAnswer || "").trim();
-      const fromExperience = Number(settings?.currentExperience);
-      const isConfigured = Boolean(configured) || (Number.isFinite(fromExperience) && fromExperience >= 0);
-      if (!isConfigured && !warnedDefaultYearsFallback) {
+    if (isYearsQuestion && !yearsFallback) {
+      if (!warnedDefaultYearsFallback) {
         warnedDefaultYearsFallback = true;
-        await logLine("Years of experience not configured in extension settings. Defaulting to 1 year.", "warn");
+        await logLine(
+          "Years of experience not configured. Leaving the field unanswered — add Years of Experience on the dashboard or use 'set years 4'.",
+          "warn"
+        );
       }
+    } else if (isYearsQuestion) {
+      answer = yearsFallback;
+    } else {
+      answer = yearsFallback || "1";
     }
-    answer = yearsFallback;
   }
   if (textInput && answer) {
     const prev = String(textInput.value || "").trim();
@@ -5165,8 +5398,18 @@ async function fillQuestionBlock(block, settings) {
       answer = await requestAiAnswer(aiQuestionLabel, "select", optionsForMatch.map((o) => o.text), validationMessage);
     }
 
+    const isYearsQuestion = isYearsExperienceQuestion(label);
+    if (isYearsQuestion && !answer) {
+      if (!warnedDefaultYearsFallback) {
+        warnedDefaultYearsFallback = true;
+        await logLine(
+          "Years of experience not configured. Leaving the field unanswered — add Years of Experience on the dashboard or use 'set years 4'.",
+          "warn"
+        );
+      }
+    }
     const matchedTarget = selectBestOption(optionsForMatch, answer);
-    const target = matchedTarget || selectFallbackOption(optionsForMatch, label);
+    const target = matchedTarget || (!isYearsQuestion ? selectFallbackOption(optionsForMatch, label) : null);
     if (target) {
       if (select.value === target.value) return false;
       select.value = target.value;
@@ -5250,6 +5493,7 @@ async function fillQuestionBlock(block, settings) {
   }
 
   const checkbox = block.querySelector("input[type='checkbox']");
+  if (checkbox && isFollowCompanyCheckbox(checkbox)) return false;
   if (checkbox && !checkbox.checked) {
     checkbox.click();
     await logLine(`Checkbox selected for: ${label.slice(0, 60)}`);
@@ -5531,6 +5775,27 @@ async function processEasyApplyModal(settings) {
           waitedMs: Number(activeSettings.manualAnswerWaitMs || MANUAL_ANSWER_WAIT_MS)
         });
         if (shouldPauseForInput) {
+          // With Auto-start on, pausing here loops forever (auto-start immediately relaunches the
+          // run onto the same job). Skip the job instead so unattended runs keep progressing.
+          if (activeSettings.autoStartOnJobsPage !== false) {
+            await logLine(
+              `Skipping job: ${unresolvedAfter.length} required field(s) have no saved answer. Add them under Screening Answers on the dashboard to auto-fill.`,
+              "warn",
+            );
+            captureDebugEvent("modal", "SKIP_FOR_INPUT_AUTOSTART", {
+              stepAttempt: safety,
+              unresolvedRequired: unresolvedAfter.length,
+              unresolvedFields: unresolvedAfter.slice(0, 8).map((d) => summarizeQuestionBlockState(d)),
+              durationMs: endTimer("processEasyApplyModal")
+            });
+            await closePostSubmitUi(activeSettings, { discardDraft: true });
+            return {
+              submitted: false,
+              skipped: true,
+              reachedSubmit: false,
+              reason: "Waiting for required custom field answers"
+            };
+          }
           await logLine("Need your input for required fields. Open dashboard Jobs to answer, then resume run.", "warn");
           captureDebugEvent("modal", "PAUSE_FOR_INPUT", {
             stepAttempt: safety,
@@ -6760,6 +7025,7 @@ async function runAutomationLoop() {
 }
 
 async function startStatePolling() {
+  let autoStartAttempted = false;
   while (true) {
     if (!extensionContextAlive) break;
     const boot = await getBootstrap();
@@ -6777,6 +7043,16 @@ async function startStatePolling() {
       clearSeenJobsForRun();
       resumeChoiceCache.clear();
       aiAnswerCache.clear();
+      if (!autoStartAttempted && boot.settings?.autoStartOnJobsPage && isJobsPage()) {
+        autoStartAttempted = true;
+        await logLine("Auto-start enabled. Launching run on jobs page...", "info");
+        const started = await sendMessage({ type: "CP_START", forceRestart: false });
+        if (started?.ok) {
+          await botChat("Auto-started. AI Copilot is scanning for opportunities...");
+        } else {
+          await logLine(`Auto-start skipped: ${started?.error || "could not start"}`, "warn");
+        }
+      }
     }
     if (boot.state.running && !runningLoop) {
       runAutomationLoop().catch((err) => {

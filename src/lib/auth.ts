@@ -85,6 +85,48 @@ export function clearAuthCookies() {
   })();
 }
 
+// The AI Interview Copilot browser extension reads an "auth-token" cookie from
+// the site and uses it as a Bearer token against /api/v1/*. It shares the same
+// JWT secret and payload shape as the short-lived access token, but lives for
+// 30 days so interviews aren't interrupted mid-session.
+const EXTENSION_COOKIE = "auth-token";
+const EXTENSION_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+export function signExtensionToken(user: AuthUser, sessionId: string) {
+  return jwt.sign(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      sessionId,
+      tokenType: "access",
+    },
+    getJwtSecret(),
+    { expiresIn: EXTENSION_TOKEN_TTL_SECONDS }
+  );
+}
+
+export function setExtensionAuthCookie(user: AuthUser, sessionId: string) {
+  return (async () => {
+    const token = signExtensionToken(user, sessionId);
+    const store = await cookies();
+    store.set(EXTENSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProd(),
+      path: "/",
+      maxAge: EXTENSION_TOKEN_TTL_SECONDS,
+    });
+  })();
+}
+
+export function clearExtensionAuthCookie() {
+  return (async () => {
+    const store = await cookies();
+    store.delete(EXTENSION_COOKIE);
+  })();
+}
+
 export async function createSessionAndTokens(user: AuthUser) {
   const refreshToken = createRefreshToken();
   const family = randomBytes(16).toString("hex");

@@ -1992,6 +1992,50 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                 break;
 
+            case 'GET-VACANCY-FIELD-VALUES':
+                (async () => {
+                    try {
+                        const origin = await getDashboardOrigin();
+                        const payload = (data && typeof data === 'object') ? data : {};
+                        const hd = (STORE && STORE.historyDetails && typeof STORE.historyDetails === 'object') ? STORE.historyDetails : {};
+                        const requestBody = {
+                            ...payload,
+                            company: String(payload.company || hd.company || "").trim(),
+                            role: String(payload.role || hd.role || "").trim(),
+                            description: String(payload.description || hd.description || "").trim(),
+                            url: String(payload.url || hd.url || "").trim(),
+                        };
+                        const res = await fetch(`${origin}/api/extension/vacancy-fields-values`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(requestBody)
+                        });
+                        let body = null;
+                        try { body = await res.json(); } catch {}
+                        if (!res.ok || !body || body.success !== true) {
+                            throw new Error(body?.message || `Dashboard API error (${res.status})`);
+                        }
+                        sendResponse({
+                            type: 'SUCCESS',
+                            data: {
+                                answers: Array.isArray(body.data?.answers) ? body.data.answers : [],
+                                resolvedFromSaved: body.data?.resolvedFromSaved || 0,
+                                resolvedFromAi: body.data?.resolvedFromAi || 0,
+                                unresolved: body.data?.unresolved || []
+                            }
+                        });
+                    } catch (error) {
+                        console.error('[GET-VACANCY-FIELD-VALUES]', error);
+                        sendResponse({
+                            type: 'ERROR',
+                            data: error.message || 'Failed to fetch vacancy field values'
+                        });
+                    }
+                })();
+
+                break;
+
             case 'EMAIL-ACCESS-ENABLED':
                 fetchWithRetry(`${buildServerUrl()}/email-access-enabled`, {
                     method: 'GET',

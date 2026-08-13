@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "src/lib/prisma";
 import { adminLoginSchema } from "src/lib/schemas";
-import { createSessionAndTokens, setAuthCookies, toClientUser } from "src/lib/auth";
+import { createSessionAndTokens, setAuthCookies, setExtensionAuthCookie, toClientUser } from "src/lib/auth";
 import { fail, handleApiError } from "src/lib/api";
 import { writeAuditLog } from "src/lib/audit";
 import { enforceRateLimit, rateLimitKey } from "src/lib/rate-limit";
@@ -66,12 +66,13 @@ export async function POST(req: NextRequest) {
     const validPassword = await bcrypt.compare(password, admin.passwordHash);
     if (!validPassword) return fail("Invalid admin credentials", 401, "INVALID_ADMIN_CREDENTIALS");
 
-    const { accessToken, refreshToken } = await createSessionAndTokens({
+    const { accessToken, refreshToken, sessionId } = await createSessionAndTokens({
       id: admin.id,
       email: admin.email,
       role: admin.role,
     });
     await setAuthCookies(accessToken, refreshToken);
+    await setExtensionAuthCookie({ id: admin.id, email: admin.email, role: admin.role }, sessionId);
 
     await writeAuditLog({
       actorUserId: admin.id,

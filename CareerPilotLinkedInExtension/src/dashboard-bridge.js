@@ -79,6 +79,52 @@ function safePost(message) {
   }
 }
 
+function isRuntimeContextValid() {
+  try {
+    return Boolean(chrome?.runtime?.id) && !chrome.runtime.lastError;
+  } catch {
+    return false;
+  }
+}
+
+function getRuntimeMeta() {
+  if (!isRuntimeContextValid()) return { runtimeId: "", extensionVersion: "" };
+  try {
+    return {
+      runtimeId: chrome?.runtime?.id || "",
+      extensionVersion: chrome?.runtime?.getManifest?.()?.version || "",
+    };
+  } catch {
+    return { runtimeId: "", extensionVersion: "" };
+  }
+}
+
+function runtimeSendMessage(message) {
+  return new Promise((resolve) => {
+    let error = null;
+    try {
+      chrome.runtime.sendMessage(message, (res) => {
+        let lastError = null;
+        try {
+          lastError = chrome.runtime.lastError ? chrome.runtime.lastError.message : null;
+        } catch {
+          lastError = "Extension context invalidated";
+        }
+        if (lastError) {
+          resolve({ ok: false, error: lastError });
+          return;
+        }
+        resolve(res || { ok: false });
+      });
+    } catch (caught) {
+      error = String(caught?.message || caught) || "Extension context invalidated";
+    }
+    if (error) {
+      resolve({ ok: false, error });
+    }
+  });
+}
+
 function markDomBridgeReady() {
   if (!BRIDGE_ENABLED) return;
   try {
@@ -86,7 +132,7 @@ function markDomBridgeReady() {
     if (!root) return;
     root.setAttribute("data-cp-bridge-ready", "1");
     root.setAttribute("data-cp-bridge-version", BRIDGE_VERSION);
-    root.setAttribute("data-cp-bridge-runtime-id", chrome?.runtime?.id || "");
+    root.setAttribute("data-cp-bridge-runtime-id", getRuntimeMeta().runtimeId);
     root.setAttribute("data-cp-bridge-ts", nowIso());
   } catch (error) {
     logBridge("failed to mark dom bridge ready", String(error?.message || error));
@@ -100,11 +146,11 @@ function announceBridgeReady() {
     type: "CP_WEB_BRIDGE_READY",
     provider: EXTENSION_PROVIDER,
     installed: true,
-    runtimeId: chrome?.runtime?.id || "",
+    runtimeId: getRuntimeMeta().runtimeId,
     bridge: bridgeMeta(),
     ts: nowIso(),
   });
-  logBridge("bridge ready", bridgeMeta(), "runtimeId=", chrome?.runtime?.id || "");
+  logBridge("bridge ready", bridgeMeta(), "runtimeId=", getRuntimeMeta().runtimeId);
 }
 
 function ensureBridgeHeartbeat() {
@@ -117,7 +163,7 @@ function ensureBridgeHeartbeat() {
       type: "CP_WEB_BRIDGE_HEARTBEAT",
       provider: EXTENSION_PROVIDER,
       installed: true,
-      runtimeId: chrome?.runtime?.id || "",
+      runtimeId: getRuntimeMeta().runtimeId,
       bridge: bridgeMeta(),
       ts: nowIso(),
     });
@@ -174,16 +220,10 @@ async function fetchPortalQuota() {
 
 async function pushQuotaToExtension() {
   if (!BRIDGE_ENABLED) return;
+  if (!isRuntimeContextValid()) return;
   const quota = await fetchPortalQuota();
   if (!quota) return;
-  try {
-    chrome.runtime.sendMessage(
-      { type: "CP_SET_PORTAL_QUOTA", data: { ...quota, _origin: window.location.origin } },
-      () => void 0,
-    );
-  } catch {
-    // ignore
-  }
+  void runtimeSendMessage({ type: "CP_SET_PORTAL_QUOTA", data: { ...quota, _origin: window.location.origin } });
 }
 
 if (BRIDGE_ENABLED) {
@@ -275,13 +315,17 @@ window.addEventListener("message", async (event) => {
     hasLinkedInTab: false,
     hasJobsTab: false,
   };
+
+  const runtimeAvailable = isRuntimeContextValid();
+  const runtimeError = runtimeAvailable ? null : "Extension context invalidated";
+
   const response = {
     type: "CP_WEB_PONG",
     provider: EXTENSION_PROVIDER,
     requestId,
-    installed: false,
-    runtimeId: chrome?.runtime?.id || "",
-    extensionVersion: chrome?.runtime?.getManifest?.()?.version || "",
+    installed: runtimeAvailable,
+    runtimeId: runtimeAvailable ? getRuntimeMeta().runtimeId : "",
+    extensionVersion: runtimeAvailable ? getRuntimeMeta().extensionVersion : "",
     state: null,
     dailyCap: null,
     historySummary: null,
@@ -296,23 +340,20 @@ window.addEventListener("message", async (event) => {
     },
     runtimeBootstrapOk: false,
     screeningAnswers: {},
-    error: null,
+    error: runtimeError,
     bridge: {
       ...bridgeMeta(),
       ts: nowIso(),
     },
   };
 
+  if (!runtimeAvailable) {
+    safePost(response);
+    return;
+  }
+
   try {
-    const bootstrap = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "CP_GET_BOOTSTRAP" }, (res) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-        resolve(res || { ok: false });
-      });
-    });
+    const bootstrap = await runtimeSendMessage({ type: "CP_GET_BOOTSTRAP" });
     if (bootstrap && bootstrap.ok) {
       response.state = bootstrap.state || null;
       response.dailyCap = bootstrap.dailyCap || null;
@@ -339,41 +380,17 @@ window.addEventListener("message", async (event) => {
     if (response.installed) {
       // Best-effort update of portal quota cache inside the extension.
       await pushQuotaToExtension();
-      const pending = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: "CP_GET_PENDING_QUESTIONS" }, (res) => {
-          if (chrome.runtime.lastError) {
-            resolve({ ok: false });
-            return;
-          }
-          resolve(res || { ok: false });
-        });
-      });
+      const pending = await runtimeSendMessage({ type: "CP_GET_PENDING_QUESTIONS" });
       if (pending && pending.ok) {
         response.pendingQuestions = Array.isArray(pending.questions) ? pending.questions : [];
       }
 
-      const settingsRes = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: "CP_LOAD_SETTINGS" }, (res) => {
-          if (chrome.runtime.lastError) {
-            resolve({ ok: false });
-            return;
-          }
-          resolve(res || { ok: false });
-        });
-      });
+      const settingsRes = await runtimeSendMessage({ type: "CP_LOAD_SETTINGS" });
       if (settingsRes && settingsRes.ok) {
         response.screeningAnswers = settingsRes.settings?.screeningAnswers || {};
       }
 
-      const historyRes = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: "CP_GET_RUN_HISTORY" }, (res) => {
-          if (chrome.runtime.lastError) {
-            resolve({ ok: false });
-            return;
-          }
-          resolve(res || { ok: false });
-        });
-      });
+      const historyRes = await runtimeSendMessage({ type: "CP_GET_RUN_HISTORY" });
       if (historyRes && historyRes.ok) {
         response.history = historyRes.history || response.history;
       }
@@ -387,15 +404,7 @@ window.addEventListener("message", async (event) => {
       safePost(response);
       return;
     }
-    const linkedInStatus = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: PLATFORM_STATUS_MESSAGE }, (res) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false });
-          return;
-        }
-        resolve(res || { ok: false });
-      });
-    });
+    const linkedInStatus = await runtimeSendMessage({ type: PLATFORM_STATUS_MESSAGE });
     if (linkedInStatus && linkedInStatus.ok) {
       response[PLATFORM_STATUS_KEY] = linkedInStatus.data || response[PLATFORM_STATUS_KEY];
     }
@@ -427,22 +436,11 @@ window.addEventListener("message", async (event) => {
   const requestId = data.requestId || "";
 
   try {
-    const saved = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          type: "CP_SAVE_QUESTION_ANSWER",
-          questionKey: data.questionKey,
-          questionLabel: data.questionLabel,
-          answer: data.answer,
-        },
-        (res) => {
-          if (chrome.runtime.lastError) {
-            resolve({ ok: false, error: chrome.runtime.lastError.message });
-            return;
-          }
-          resolve(res || { ok: false });
-        },
-      );
+    const saved = await runtimeSendMessage({
+      type: "CP_SAVE_QUESTION_ANSWER",
+      questionKey: data.questionKey,
+      questionLabel: data.questionLabel,
+      answer: data.answer,
     });
     safePost({
       type: "CP_WEB_SAVE_ANSWER_ACK",
@@ -470,15 +468,7 @@ window.addEventListener("message", async (event) => {
   const requestId = data.requestId || "";
   try {
     const incoming = data.settings && typeof data.settings === "object" ? data.settings : {};
-    const loaded = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "CP_LOAD_SETTINGS" }, (res) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-        resolve(res || { ok: false });
-      });
-    });
+    const loaded = await runtimeSendMessage({ type: "CP_LOAD_SETTINGS" });
     if (!loaded || !loaded.ok) {
       safePost({
         type: "CP_WEB_SYNC_SETTINGS_ACK",
@@ -497,15 +487,7 @@ window.addEventListener("message", async (event) => {
         ...(incoming.screeningAnswers || {}),
       },
     };
-    const saved = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "CP_SAVE_SETTINGS", settings: merged }, (res) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-        resolve(res || { ok: false });
-      });
-    });
+    const saved = await runtimeSendMessage({ type: "CP_SAVE_SETTINGS", settings: merged });
     safePost({
       type: "CP_WEB_SYNC_SETTINGS_ACK",
       requestId,

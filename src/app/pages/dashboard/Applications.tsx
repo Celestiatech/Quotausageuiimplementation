@@ -321,7 +321,7 @@ export default function Applications() {
         className="flex flex-wrap items-center justify-between gap-3"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Applications</h1>
+          <h1 className="text-xs font-bold text-gray-900">Applications</h1>
           <p className="text-gray-600 mt-1">Real application pipeline from your auto-apply jobs.</p>
           {extensionStats.loaded ? (
             <div className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600">
@@ -387,19 +387,19 @@ export default function Applications() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="text-xs uppercase tracking-wide text-gray-500">Total Tracked</div>
-          <div className="text-2xl font-bold text-gray-900 mt-1">{summary.total}</div>
+          <div className="text-base font-bold text-gray-900 mt-1">{summary.total}</div>
         </div>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div className="text-xs uppercase tracking-wide text-emerald-700">Submitted</div>
-          <div className="text-2xl font-bold text-emerald-800 mt-1">{summary.submitted}</div>
+          <div className="text-base font-bold text-emerald-800 mt-1">{summary.submitted}</div>
         </div>
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
           <div className="text-xs uppercase tracking-wide text-rose-700">Failed</div>
-          <div className="text-2xl font-bold text-rose-800 mt-1">{summary.failed}</div>
+          <div className="text-base font-bold text-rose-800 mt-1">{summary.failed}</div>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="text-xs uppercase tracking-wide text-amber-700">Skipped</div>
-          <div className="text-2xl font-bold text-amber-800 mt-1">{summary.skipped}</div>
+          <div className="text-base font-bold text-amber-800 mt-1">{summary.skipped}</div>
         </div>
       </div>
 

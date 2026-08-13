@@ -16,7 +16,7 @@ export default function Analytics() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Analytics</h1>
+          <h1 className="text-xs font-bold text-gray-900 mb-2">Analytics</h1>
           <p className="text-gray-600">Real job funnel analytics from your backend pipeline.</p>
         </div>
         <button
@@ -34,23 +34,23 @@ export default function Analytics() {
       <div className="grid md:grid-cols-5 gap-4">
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Total Jobs</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.jobs.total}</div>
+          <div className="text-xs font-bold text-gray-900 mt-1">{summary.jobs.total}</div>
         </div>
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Submitted</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.submitted}</div>
+          <div className="text-xs font-bold text-gray-900 mt-1">{summary.applications.submitted}</div>
         </div>
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Failed</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.failed}</div>
+          <div className="text-xs font-bold text-gray-900 mt-1">{summary.applications.failed}</div>
         </div>
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Success Rate</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.metrics.responseRate}%</div>
+          <div className="text-xs font-bold text-gray-900 mt-1">{summary.metrics.responseRate}%</div>
         </div>
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
           <div className="text-sm text-gray-600">Completion</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.metrics.completionRate}%</div>
+          <div className="text-xs font-bold text-gray-900 mt-1">{summary.metrics.completionRate}%</div>
         </div>
       </div>
 

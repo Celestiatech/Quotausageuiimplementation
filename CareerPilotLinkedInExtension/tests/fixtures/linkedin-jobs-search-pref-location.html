@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mock LinkedIn Jobs Search - Preferred Location Capture Replica</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #f4f6f8;
+        color: #1d2329;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 420px 1fr;
+        min-height: 100vh;
+      }
+      .left {
+        background: #fff;
+        border-right: 1px solid #d0d7de;
+        padding: 14px;
+      }
+      .right {
+        padding: 16px 18px;
+      }
+      .jobs-search-results__list-item {
+        border: 1px solid #d0d7de;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
+        background: #fff;
+      }
+      .jobs-search-results__list-item.active {
+        border-color: #0a66c2;
+        box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.15);
+      }
+      .job-card-container__primary-description {
+        color: #445;
+        font-size: 13px;
+        margin-top: 4px;
+      }
+      .jobs-search-box__filters-bar {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .job-card-container__metadata-item {
+        color: #667;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .jobs-search__job-details {
+        background: #fff;
+        border: 1px solid #d0d7de;
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .jobs-unified-top-card__company-name {
+        display: inline-block;
+        margin-bottom: 8px;
+        color: #0a66c2;
+      }
+      .jobs-box__html-content,
+      .jobs-company__company-description {
+        margin-top: 8px;
+        line-height: 1.35;
+      }
+      .jobs-apply-button {
+        margin-top: 14px;
+        padding: 9px 14px;
+        border-radius: 20px;
+        border: 1px solid #0a66c2;
+        background: #0a66c2;
+        color: #fff;
+        font-weight: 600;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .jobs-easy-apply-modal {
+        position: fixed;
+        top: 7%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(880px, 94vw);
+        max-height: 84vh;
+        overflow: auto;
+        background: #fff;
+        border: 1px solid #202a35;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(5, 10, 20, 0.35);
+        z-index: 9999;
+        padding: 14px;
+      }
+      .fb-dash-form-element {
+        border: 1px solid #d9e0e6;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .fb-dash-form-element > label,
+      .fb-dash-form-element > legend {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .fb-dash-form-element input[type="text"],
+      .fb-dash-form-element input[type="tel"],
+      .fb-dash-form-element select {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #c5ced7;
+        border-radius: 6px;
+        padding: 8px;
+      }
+      .radio-stack {
+        display: grid;
+        gap: 8px;
+      }
+      .artdeco-inline-feedback__message {
+        color: #b42318;
+        font-size: 13px;
+        min-height: 18px;
+        margin-bottom: 8px;
+        text-transform: lowercase;
+      }
+      .step {
+        margin-bottom: 12px;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .modal-actions .right-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .modal-btn {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #b7c2cc;
+        background: #f7fafc;
+      }
+      .modal-btn.primary {
+        background: #0a66c2;
+        border-color: #0a66c2;
+        color: #fff;
+      }
+      .meta-note {
+        font-size: 12px;
+        color: #5d6b79;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="left">
+        <div class="jobs-search-box__filters-bar">
+          <button
+            id="easy-filter-btn"
+            class="jobs-search-box__filter-pill-button"
+            aria-label="Easy Apply filter"
+            aria-pressed="true"
+            type="button"
+          >
+            Easy Apply
+          </button>
+          <button type="button" aria-label="All filters">All filters</button>
+        </div>
+
+        <ul>
+          <li class="jobs-search-results__list-item job-card-container" data-occludable-job-id="9000000002">
+            <a href="https://www.linkedin.com/jobs/view/9000000002/">
+              <span>Preferred Location Tester</span>
+            </a>
+            <div class="job-card-container__primary-description">Replica Labs</div>
+            <div class="job-card-container__metadata-item">Mohali, Punjab, India</div>
+          </li>
+        </ul>
+        <p class="meta-note">
+          Single job whose work location is "Mohali" — the apply form asks for the preferred work location.
+        </p>
+      </aside>
+
+      <main class="right">
+        <section class="jobs-search__job-details scaffold-layout__detail">
+          <h1 id="detail-title">Preferred Location Tester</h1>
+          <a class="jobs-unified-top-card__company-name" href="#">Replica Labs</a>
+          <div class="jobs-box__html-content" id="detail-description">
+            About the job: Verify a location-preference question is never auto-answered with the job location.
+          </div>
+          <div class="jobs-company__company-description" id="detail-about-company">
+            About company: Replica Labs builds deterministic UI replicas for automation hardening.
+          </div>
+          <button class="jobs-apply-button" id="detail-easy-apply-btn" aria-label="Easy Apply" type="button">
+            Easy Apply
+          </button>
+        </section>
+      </main>
+    </div>
+
+    <div class="jobs-easy-apply-modal hidden" id="apply-modal">
+      <h2 class="jobs-easy-apply-content__title">Easy Apply</h2>
+      <div class="artdeco-inline-feedback__message" role="alert" id="modal-validation"></div>
+
+      <section class="step" data-step="1">
+        <div class="fb-dash-form-element" data-required="true">
+          <label>Current city</label>
+          <input type="text" id="q-city" />
+        </div>
+        <div class="fb-dash-form-element" data-required="true">
+          <label>Phone number</label>
+          <input type="tel" id="q-phone" />
+        </div>
+        <div class="fb-dash-form-element">
+          <label>Preferred work location</label>
+          <select id="q-pref-location">
+            <option value="">Select an option</option>
+            <option value="Mohali">Mohali</option>
+            <option value="Delhi">Delhi</option>
+            <option value="Remote">Remote</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="step hidden" data-step="2">
+        <div class="fb-dash-form-element" data-required="true">
+          <label for="q-rights">
+            <input id="q-rights" type="checkbox" />
+            Notice of Employment Rights.
+          </label>
+        </div>
+        <div class="fb-dash-form-element" data-required="true">
+          <label for="q-privacy">
+            <input id="q-privacy" type="checkbox" />
+            We automatically save your answers and resume to improve LinkedIn.
+          </label>
+        </div>
+      </section>
+
+      <div class="modal-actions">
+        <button class="modal-btn" type="button" aria-label="Dismiss" id="modal-dismiss">Dismiss</button>
+        <div class="right-actions">
+          <button class="modal-btn" type="button" aria-label="continue to next step" id="modal-next">
+            <span>Next</span>
+          </button>
+          <button class="modal-btn primary hidden" type="button" aria-label="review your application" id="modal-review">
+            <span>Review</span>
+          </button>
+          <button class="modal-btn primary hidden" type="button" aria-label="submit application" id="modal-submit">
+            Submit application
+          </button>
+          <button class="modal-btn hidden" type="button" aria-label="Done" id="modal-done">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const jobs = [
+        {
+          id: "9000000002",
+          title: "Preferred Location Tester",
+          company: "Replica Labs",
+          location: "Mohali, Punjab, India",
+          easyApply: true,
+          description: "About the job: Verify a location-preference question is never auto-answered with the job location.",
+          aboutCompany: "About company: Replica Labs builds deterministic UI replicas for automation hardening."
+        }
+      ];
+
+      const cards = Array.from(document.querySelectorAll(".job-card-container"));
+      const detailTitle = document.getElementById("detail-title");
+      const detailCompany = document.querySelector(".jobs-unified-top-card__company-name");
+      const detailDescription = document.getElementById("detail-description");
+      const detailAboutCompany = document.getElementById("detail-about-company");
+      const detailEasyApplyBtn = document.getElementById("detail-easy-apply-btn");
+
+      const modal = document.getElementById("apply-modal");
+      const modalValidation = document.getElementById("modal-validation");
+      const steps = Array.from(document.querySelectorAll(".step"));
+      const nextBtn = document.getElementById("modal-next");
+      const reviewBtn = document.getElementById("modal-review");
+      const submitBtn = document.getElementById("modal-submit");
+      const doneBtn = document.getElementById("modal-done");
+      const dismissBtn = document.getElementById("modal-dismiss");
+
+      let activeJob = jobs[0];
+      let stepIndex = 0;
+
+      function setValidation(message) {
+        modalValidation.textContent = message ? String(message).toLowerCase() : "";
+      }
+
+      function showStep(index) {
+        stepIndex = index;
+        steps.forEach((step, i) => step.classList.toggle("hidden", i !== stepIndex));
+
+        nextBtn.classList.add("hidden");
+        reviewBtn.classList.add("hidden");
+        submitBtn.classList.add("hidden");
+        doneBtn.classList.add("hidden");
+
+        if (stepIndex === 0) {
+          nextBtn.classList.remove("hidden");
+          nextBtn.setAttribute("aria-label", "continue to next step");
+          nextBtn.querySelector("span").textContent = "Next";
+        } else if (stepIndex === 1) {
+          reviewBtn.classList.remove("hidden");
+          submitBtn.classList.remove("hidden");
+        }
+      }
+
+      function requiredCheckboxesFilled(root) {
+        const requiredBlocks = Array.from(root.querySelectorAll(".fb-dash-form-element[data-required='true']"));
+        for (const block of requiredBlocks) {
+          const checkboxes = Array.from(block.querySelectorAll("input[type='checkbox']"));
+          if (!checkboxes.length) continue;
+          for (const cb of checkboxes) {
+            if (!cb.checked) return false;
+          }
+        }
+        return true;
+      }
+
+      function validateStep(index) {
+        if (index === 0) {
+          const city = document.getElementById("q-city").value.trim();
+          const phone = document.getElementById("q-phone").value.trim();
+          if (!city || !phone) {
+            setValidation("Please make a selection");
+            return false;
+          }
+          setValidation("");
+          return true;
+        }
+
+        if (index === 1) {
+          if (!requiredCheckboxesFilled(steps[1])) {
+            setValidation("Please make a selection");
+            return false;
+          }
+          setValidation("");
+          return true;
+        }
+        return true;
+      }
+
+      function openModal() {
+        modal.classList.remove("hidden");
+        showStep(0);
+        setValidation("");
+      }
+
+      function closeModal() {
+        modal.classList.add("hidden");
+        doneBtn.classList.remove("hidden");
+      }
+
+      function selectJob(job) {
+        activeJob = job;
+        detailTitle.textContent = job.title;
+        detailCompany.textContent = job.company;
+        detailDescription.textContent = job.description;
+        detailAboutCompany.textContent = job.aboutCompany;
+        detailEasyApplyBtn.disabled = !job.easyApply;
+        detailEasyApplyBtn.setAttribute("aria-label", job.easyApply ? "Easy Apply" : "Apply");
+        detailEasyApplyBtn.classList.toggle("hidden", !job.easyApply);
+        cards.forEach((card) => {
+          card.classList.toggle("active", card.getAttribute("data-occludable-job-id") === job.id);
+        });
+      }
+
+      cards.forEach((card) => {
+        const jobId = card.getAttribute("data-occludable-job-id");
+        const job = jobs.find((j) => j.id === jobId);
+        card.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (job) selectJob(job);
+        });
+        const link = card.querySelector("a[href*='/jobs/view/']");
+        if (link) {
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            if (job) selectJob(job);
+          });
+        }
+      });
+
+      detailEasyApplyBtn.addEventListener("click", () => {
+        if (activeJob.easyApply) openModal();
+      });
+
+      nextBtn.addEventListener("click", () => {
+        if (!validateStep(stepIndex)) return;
+        if (stepIndex < 1) showStep(stepIndex + 1);
+      });
+
+      reviewBtn.addEventListener("click", () => {
+        if (!validateStep(stepIndex)) return;
+        showStep(1);
+      });
+
+      submitBtn.addEventListener("click", () => {
+        if (!validateStep(1)) return;
+        closeModal();
+      });
+
+      dismissBtn.addEventListener("click", () => {
+        closeModal();
+      });
+
+      doneBtn.addEventListener("click", () => {
+        closeModal();
+      });
+
+      document.getElementById("q-pref-location").addEventListener("change", () => {
+        setValidation("");
+      });
+
+      document.getElementById("easy-filter-btn").addEventListener("click", () => {
+        const pressed = document.getElementById("easy-filter-btn").getAttribute("aria-pressed") === "true";
+        document.getElementById("easy-filter-btn").setAttribute("aria-pressed", pressed ? "false" : "true");
+      });
+
+      selectJob(jobs[0]);
+    </script>
+  </body>
+</html>

@@ -442,9 +442,114 @@ async function detectPortalOriginFromTabs() {
   return "";
 }
 
-async function refreshPortalScreeningAnswersIntoSettings() {
+function withTimeoutMs(promise, ms, fallback) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      }
+    );
+  });
+}
+
+function derivePreferenceSettingsFromScreeningAnswers(settings) {
+  const answers =
+    settings?.screeningAnswers && typeof settings.screeningAnswers === "object"
+      ? settings.screeningAnswers
+      : {};
+  const pickFirstNonEmpty = (keys) => {
+    for (const key of keys) {
+      const direct = String(answers[key] || "").trim();
+      if (direct) return direct;
+      const normalized = normalizeLabel(key);
+      const viaNormalized = String(answers[normalized] || "").trim();
+      if (viaNormalized) return viaNormalized;
+    }
+    return "";
+  };
+  const parseList = (value) =>
+    String(value || "")
+      .split(/[,\n;|]+/g)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 25);
+  const isRemoteLikeValue = (value) => {
+    const normalized = normalizeLabel(value);
+    return (
+      normalized === "remote" ||
+      normalized === "work from home" ||
+      normalized === "wfh" ||
+      normalized === "anywhere" ||
+      normalized === "worldwide"
+    );
+  };
+  const sanitizeLocationFilterValues = (values) => {
+    const seen = new Set();
+    return values
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .filter((value) => !isRemoteLikeValue(value))
+      .filter((value) => {
+        const normalized = normalizeLabel(value);
+        if (!normalized || seen.has(normalized)) return false;
+        seen.add(normalized);
+        return true;
+      })
+      .slice(0, 25);
+  };
+
+  const preferredSearchLocation = pickFirstNonEmpty(["cp_pref_search_locations", "preferred_locations", "cp_pref_search_location", "careerpilot_preference_search_location"]);
+  const preferredSearchTerms = parseList(pickFirstNonEmpty(["cp_pref_search_terms", "preferred_job_titles", "careerpilot_preference_search_terms"]));
+  const preferredLocations = parseList(pickFirstNonEmpty(["preferred_locations", "cp_pref_search_locations", "cp_pref_search_location"]));
+  const preferredJobTypes = parseList(pickFirstNonEmpty(["cp_pref_job_types", "job_types"]));
+  const preferredCountries = parseList(pickFirstNonEmpty(["cp_pref_preferred_countries", "preferred_countries"]));
+  const preferredWorkMode = parseList(pickFirstNonEmpty(["cp_pref_work_mode", "remote_onsite_hybrid", "work_mode_preference"]));
+  const remoteModeSelected = preferredWorkMode.some((value) => normalizeLabel(value) === "remote");
+  const resolvedSearchLocation =
+    sanitizeLocationFilterValues(preferredLocations)[0] ||
+    preferredSearchLocation ||
+    (!remoteModeSelected ? preferredCountries[0] : "");
+  const filterLocations = sanitizeLocationFilterValues(
+    remoteModeSelected ? preferredLocations : [...preferredLocations, ...preferredCountries],
+  );
+  const preferredYearsOfExperience = pickFirstNonEmpty(["cp_pref_years_of_experience", "careerpilot_preference_years_of_experience", "years_of_experience"]);
+  const preferredConfidenceLevel = pickFirstNonEmpty(["cp_pref_confidence_level", "careerpilot_preference_confidence_level"]);
+  const preferredSalaryMin = pickFirstNonEmpty(["cp_pref_salary_min", "desired_salary"]);
+  const preferredSalaryMax = pickFirstNonEmpty(["cp_pref_salary_max", "cp_pref_desired_salary", "desired_salary"]);
+
+  const parsedYears = Number.parseInt(String(preferredYearsOfExperience || ""), 10);
+  const derived = {
+    searchLocation: resolvedSearchLocation || "",
+    searchTerms: preferredSearchTerms,
+    filterLocations,
+    jobType: preferredJobTypes,
+    onSite: preferredWorkMode,
+    yearsOfExperienceAnswer: preferredYearsOfExperience ? String(preferredYearsOfExperience).trim() : "",
+    currentExperience: Number.isFinite(parsedYears) ? parsedYears : -1,
+    confidenceLevel: preferredConfidenceLevel ? String(preferredConfidenceLevel).trim() : "",
+    salaryMin: preferredSalaryMin ? String(preferredSalaryMin).trim() : "",
+    salaryMax: preferredSalaryMax ? String(preferredSalaryMax).trim() : "",
+  };
+  return derived;
+}
+
+async function refreshPortalScreeningAnswersIntoSettings(opts = {}) {
+  if (!portalReadAllowed("screeningAnswers")) return false;
+  const verbose = Boolean(opts?.verbose);
   const preferred = getPortalOrigin();
   const candidates = preferred ? [preferred, ...(await detectPortalOriginsFromTabs()).filter((o) => o !== preferred)] : await detectPortalOriginsFromTabs();
+  if (!candidates.length) {
+    if (verbose) {
+      await pushLog("Preferences sync (auto): no dashboard origin reachable. Stored settings will be used.", "warn");
+    }
+    return false;
+  }
   for (const origin of candidates) {
     try {
       const res = await fetch(`${origin}/api/user/screening/answers?limit=500&scanLimit=2500`, {
@@ -457,34 +562,53 @@ async function refreshPortalScreeningAnswersIntoSettings() {
 
       const items = Array.isArray(body?.data?.answers) ? body.data.answers : [];
       const settings = await getSettings();
-      const merged = { ...(settings?.screeningAnswers && typeof settings.screeningAnswers === "object" ? settings.screeningAnswers : {}) };
+      const storedAnswers =
+        settings?.screeningAnswers && typeof settings.screeningAnswers === "object" ? settings.screeningAnswers : {};
+      const fetchedAnswers = {};
       for (const item of items) {
         const key = String(item?.questionKey || "").trim();
         const label = String(item?.questionLabel || "").trim();
         const answer = String(item?.answer || "").trim();
         if (!answer) continue;
-        if (key) merged[key] = answer;
-        if (label) merged[normalizeLabel(label)] = answer;
+        // Never trust auto-captured answers (source "extension_capture") for preference derivation —
+        // they can be stale values the bot picked up from a form (e.g. a captured "Mohali") and
+        // would otherwise get re-injected into the extension settings every run.
+        if (String(item?.source || "").trim() === "extension_capture") continue;
+        if (key) fetchedAnswers[key] = answer;
+        if (label) fetchedAnswers[normalizeLabel(label)] = answer;
       }
+      const merged = { ...storedAnswers, ...fetchedAnswers };
       await saveSettings({ screeningAnswers: merged });
+      const derivedPrefs = derivePreferenceSettingsFromScreeningAnswers({ screeningAnswers: merged });
+      const hasDerivedPrefs = Object.values(derivedPrefs).some((value) =>
+        Array.isArray(value) ? value.length > 0 : String(value || "").trim() !== ""
+      );
+      if (items.length && hasDerivedPrefs) {
+        await saveSettings(derivedPrefs);
+      }
       setPreferredPortalOrigin(origin, { resetFailures: true });
+      if (verbose) {
+        await pushLog(
+          `Preferences sync (auto): origin=${origin} answers=${items.length} searchLocation='${String(derivedPrefs.searchLocation || "").trim()}' filterLocations=[${(Array.isArray(derivedPrefs.filterLocations) ? derivedPrefs.filterLocations : []).join(", ")}] onSite=[${(Array.isArray(derivedPrefs.onSite) ? derivedPrefs.onSite : []).join(", ")}] searchTerms=[${(Array.isArray(derivedPrefs.searchTerms) ? derivedPrefs.searchTerms : []).join(", ")}]`,
+          "info",
+          {
+            origin,
+            answers: items.length,
+            derivedPrefs,
+            foundLocationKey: Boolean(String(fetchedAnswers.cp_pref_search_location || fetchedAnswers.cp_pref_search_locations || fetchedAnswers.preferred_locations || "").trim()),
+            rawLocationAnswer: String(fetchedAnswers.cp_pref_search_location || fetchedAnswers.cp_pref_search_locations || fetchedAnswers.preferred_locations || "").trim(),
+          },
+        );
+      }
       return true;
     } catch {
       // try next
     }
   }
-  return false;
-}
-
-let portalAnswerPollTimer = null;
-function ensurePortalAnswerPoller() {
-  if (portalAnswerPollTimer) return;
-  try {
-    chrome.alarms.create("cpPortalAnswerPoll", { periodInMinutes: 0.15 });
-    portalAnswerPollTimer = true;
-  } catch {
-    // fallback: ignore if alarms permission not available
+  if (verbose) {
+    await pushLog("Preferences sync (auto): all candidate origins failed. Stored settings will be used.", "warn");
   }
+  return false;
 }
 
 async function reportPendingQuestionsToPortal(questions) {
@@ -559,6 +683,16 @@ async function setPortalCooldown(ms, reason) {
 
 async function clearPortalCooldown() {
   await chrome.storage.local.set({ [PORTAL_SYNC_COOLDOWN_KEY]: { untilMs: 0, reason: "" } });
+}
+
+const PORTAL_READ_COOLDOWN_MS = 30 * 1000;
+const portalReadCooldowns = {};
+function portalReadAllowed(key) {
+  const now = Date.now();
+  const untilMs = Number(portalReadCooldowns[key] || 0);
+  if (untilMs > now) return false;
+  portalReadCooldowns[key] = now + PORTAL_READ_COOLDOWN_MS;
+  return true;
 }
 
 function buildPortalImportEntryId(entry) {
@@ -992,6 +1126,7 @@ const DEFAULT_SETTINGS = {
   autoSubmit: false,
   liveModeAcknowledged: true,
   autoResumeOnAnswer: true,
+  autoStartOnJobsPage: true,
   runNonStop: false,
   alternateSortBy: false,
   cycleDatePosted: false,
@@ -1166,7 +1301,7 @@ function canonicalScreeningKey(label) {
   if (n === "phone" || n === "phone number" || n === "mobile phone" || n === "mobile phone number" || n === "contact number") {
     return "phone_number";
   }
-  if (n.includes("linkedin") && (n.includes("profile") || n.includes("url"))) return "linkedin_url";
+  if (n.includes("linkedin") && !n.includes("headline") && !n.includes("summary")) return "linkedin_url";
   if (n.includes("portfolio") && (n.includes("url") || n.includes("website") || n.includes("site") || n === "portfolio")) {
     return "portfolio_url";
   }
@@ -1190,12 +1325,15 @@ function canonicalScreeningKey(label) {
   if ((n.includes("salary") || n.includes("compensation") || n.includes("pay")) && n.includes("expect")) {
     return "expected_salary";
   }
-  if (n.includes("year") && n.includes("experience")) return "years_of_experience";
+  const expMatch = n.includes("experience") ? n.match(/experience(?:\s+\w+){0,6}\s+(with|in|on)\s+([a-z0-9 ]+)/) : null;
+  const experienceTech = expMatch ? expMatch[2].replace(/\s+/g, "").toLowerCase() : "";
+  if (n.includes("year") && n.includes("experience") && !experienceTech) return "years_of_experience";
   if (n.includes("bachelor") && n.includes("degree")) return "bachelors_degree_completed";
   if (n.includes("english") && n.includes("proficiency")) return "english_proficiency";
   if (n.includes("confidence") && n.includes("level")) return "cp_pref_confidence_level";
   if (n.includes("notice") && n.includes("period")) return "notice_period_days";
   if (n.includes("start") && n.includes("date")) return "start_date_availability";
+  if (experienceTech) return `what_is_your_experience_with_${experienceTech}`;
   return n.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
 }
 
@@ -1693,6 +1831,7 @@ async function getAppliedJobIdsFromHistory(limit = 5000) {
 }
 
 async function getAppliedJobIdsFromPortal(limit = 400) {
+  if (!portalReadAllowed("appliedJobs")) return [];
   const set = new Set();
   const preferred = getPortalOrigin();
   const candidates = preferred
@@ -1917,22 +2056,6 @@ chrome.runtime.onInstalled.addListener(async () => {
   });
 });
 
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name !== "cpPortalAnswerPoll") return;
-  try {
-    const snap = await chrome.storage.local.get("cpPendingQuestions");
-    const pending = Array.isArray(snap?.cpPendingQuestions) ? snap.cpPendingQuestions : [];
-    if (!pending.length) {
-      chrome.alarms.clear("cpPortalAnswerPoll");
-      portalAnswerPollTimer = null;
-      return;
-    }
-    await refreshPortalScreeningAnswersIntoSettings();
-  } catch {
-    // ignore
-  }
-});
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (!message || !message.type) return;
@@ -1984,6 +2107,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "CP_START") {
       let settings = await getSettings();
+      // Auto-pull the latest dashboard preferences on every run start so the search
+      // location / work mode always reflect the user's saved preferences, even without
+      // an explicit "Sync Profile" click in the dashboard.
+      const refreshed = await withTimeoutMs(refreshPortalScreeningAnswersIntoSettings({ verbose: true }), 4000, false);
+      if (refreshed) {
+        settings = await getSettings();
+        await pushLog("Synced preferences from dashboard (auto).", "info");
+      }
       const dailyCap = await getDailyCapState();
       const remaining = Math.max(0, dailyCap.cap - dailyCap.used);
       let spendable = portalSpendable();
@@ -2137,6 +2268,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "CP_LOG") {
       await pushLog(message.message || "log", message.level || "info", message.meta);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === "CP_CLEAR_LOGS") {
+      const state = await getState();
+      await setState({ ...state, logs: [] });
       sendResponse({ ok: true });
       return;
     }
@@ -2391,10 +2529,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       await chrome.storage.local.set({ cpPendingQuestions: merged });
 
-      // Best effort: notify portal/admin about new unknown questions, and pull latest saved answers so the run can continue.
+      // Best effort: notify portal/admin about new unknown questions.
       void reportPendingQuestionsToPortal(merged);
-      void refreshPortalScreeningAnswersIntoSettings();
-      ensurePortalAnswerPoller();
 
       sendResponse({ ok: true, questions: merged });
       return;
@@ -2425,9 +2561,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       await chrome.storage.local.set({ cpSettings: nextSettings });
 
       const { cpPendingQuestions } = await chrome.storage.local.get("cpPendingQuestions");
-      const nextQuestions = (Array.isArray(cpPendingQuestions) ? cpPendingQuestions : []).filter(
-        (q) => String(q.questionKey || "") !== questionKey
-      );
+      const canonicalSavedKey = questionKeyFromLabel(questionLabel) || questionKey;
+      const nextQuestions = (Array.isArray(cpPendingQuestions) ? cpPendingQuestions : []).filter((q) => {
+        const pendingKey = String(q.questionKey || "").trim();
+        const pendingCanonical = questionKeyFromLabel(String(q.questionLabel || "").trim()) || pendingKey;
+        return (
+          pendingKey !== questionKey &&
+          pendingKey !== canonicalSavedKey &&
+          pendingCanonical !== questionKey &&
+          pendingCanonical !== canonicalSavedKey
+        );
+      });
       await chrome.storage.local.set({ cpPendingQuestions: nextQuestions });
 
       const state = await getState();

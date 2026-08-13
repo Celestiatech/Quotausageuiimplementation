@@ -37,7 +37,7 @@ export default function FAQ() {
         },
         {
           q: 'How many applications can I send with the free plan?',
-          a: 'Free ($0) includes 3 Auto-Apply actions per day, and new accounts get a free 300 Hires coins signup bonus. If you need more volume, you can upgrade to Pro ($3/month) for unlimited applications or use Custom Hires top-up (1 Hire = 1 Apply, minimum top-up $0.54).'
+          a: 'Free (₹0) includes 3 Auto-Apply actions per day, and new accounts get a free 300 Hires coins signup bonus. If you need more volume, you can upgrade to Pro (₹99/month) for unlimited applications, Coach (₹299/month) for teams, or use Pay-As-You-Go top-up (1 Hire = 1 Apply, minimum top-up ₹50).'
         },
         {
           q: 'Is AutoApply CV a LinkedIn auto apply bot?',

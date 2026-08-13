@@ -2,15 +2,24 @@ import crypto from "crypto";
 import Razorpay from "razorpay";
 
 export function getRazorpayClient() {
-  const keyId = process.env.RZP_KEY_ID;
-  const keySecret = process.env.RZP_KEY_SECRET;
-  if (!keyId || !keySecret) {
-    throw new Error("Razorpay is not configured");
+  const mode = process.env.RAZORPAY_MODE || "live";
+  const isLive = mode === "live";
+
+  const keyId = isLive ? process.env.RZP_KEY_ID : process.env.RZP_TEST_KEY_ID;
+  const keySecret = isLive ? process.env.RZP_KEY_SECRET : process.env.RZP_TEST_KEY_SECRET;
+
+  if (!keyId || !keySecret || keyId.includes("REPLACE")) {
+    throw new Error("Razorpay is not configured. Please set your API keys in .env");
   }
   return new Razorpay({
     key_id: keyId,
     key_secret: keySecret,
   });
+}
+
+export function getRazorpayKeyId() {
+  const mode = process.env.RAZORPAY_MODE || "live";
+  return mode === "live" ? process.env.RZP_KEY_ID : process.env.RZP_TEST_KEY_ID;
 }
 
 export function getPlanRazorpayId(plan: "pro" | "coach") {
@@ -24,8 +33,8 @@ export function getPlanRazorpayId(plan: "pro" | "coach") {
 }
 
 const PLAN_CONFIG: Record<"pro" | "coach", { amountPaise: number; name: string }> = {
-  pro: { amountPaise: 99900, name: "AutoApply CV Pro Monthly" },
-  coach: { amountPaise: 299900, name: "AutoApply CV Coach Monthly" },
+  pro: { amountPaise: 9900, name: "AutoApply CV Pro Monthly" },
+  coach: { amountPaise: 29900, name: "AutoApply CV Coach Monthly" },
 };
 
 export async function getOrCreatePlanRazorpayId(plan: "pro" | "coach") {
@@ -58,7 +67,7 @@ export async function getOrCreatePlanRazorpayId(plan: "pro" | "coach") {
 }
 
 export function verifyRazorpayWebhook(bodyRaw: string, signature: string) {
-  const secret = process.env.RZP_WEBHOOK_SECRET || process.env.RZP_KEY_SECRET;
+  const secret = process.env.RZP_WEBHOOK_SECRET || process.env.RZP_KEY_SECRET || process.env.RZP_TEST_KEY_SECRET;
   if (!secret) throw new Error("Razorpay webhook secret is not configured");
   const expected = crypto.createHmac("sha256", secret).update(bodyRaw).digest("hex");
   return expected === signature;
@@ -69,7 +78,8 @@ export function verifyRazorpaySubscriptionPaymentSignature(input: {
   subscriptionId: string;
   signature: string;
 }) {
-  const secret = process.env.RZP_KEY_SECRET;
+  const mode = process.env.RAZORPAY_MODE || "live";
+  const secret = mode === "live" ? process.env.RZP_KEY_SECRET : process.env.RZP_TEST_KEY_SECRET;
   if (!secret) throw new Error("Razorpay key secret is not configured");
   const payload = `${input.paymentId}|${input.subscriptionId}`;
   const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
@@ -81,7 +91,8 @@ export function verifyRazorpayOrderPaymentSignature(input: {
   paymentId: string;
   signature: string;
 }) {
-  const secret = process.env.RZP_KEY_SECRET;
+  const mode = process.env.RAZORPAY_MODE || "live";
+  const secret = mode === "live" ? process.env.RZP_KEY_SECRET : process.env.RZP_TEST_KEY_SECRET;
   if (!secret) throw new Error("Razorpay key secret is not configured");
   const payload = `${input.orderId}|${input.paymentId}`;
   const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");

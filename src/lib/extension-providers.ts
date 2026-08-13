@@ -15,7 +15,7 @@ const EXTENSION_PROVIDERS: Record<ExtensionProvider, ExtensionProviderConfig> = 
   linkedin: {
     provider: "linkedin",
     code: "li",
-    displayName: "AutoApply CV LinkedIn Copilot",
+    displayName: "AutoApply CV Copilot",
     shortLabel: "LinkedIn",
     rootDir: "CareerPilotLinkedInExtension",
     sourceKey: "linkedin_extension",
@@ -25,7 +25,7 @@ const EXTENSION_PROVIDERS: Record<ExtensionProvider, ExtensionProviderConfig> = 
   indeed: {
     provider: "indeed",
     code: "indeed",
-    displayName: "AutoApply CV Indeed Copilot",
+    displayName: "AutoApply CV Copilot",
     shortLabel: "Indeed",
     rootDir: "CareerPilotIndeedExtension",
     sourceKey: "indeed_extension",

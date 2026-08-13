@@ -1,0 +1,47 @@
+{
+   "action": {
+      "default_popup": "popup.html",
+      "default_title": "AutoApply CV Interview Copilot"
+   },
+   "background": {
+      "service_worker": "assets/background.js"
+   },
+   "commands": {
+      "_execute_action": {
+         "suggested_key": {
+            "default": "Ctrl+Shift+9",
+            "mac": "Command+Shift+9"
+         }
+      },
+       "run-murmurr": {
+          "description": "Run AutoApply CV on the current page.",
+          "suggested_key": {
+            "default": "Ctrl+Shift+0",
+            "mac": "Command+Shift+0"
+         }
+      }
+   },
+   "content_scripts": [ {
+      "all_frames": true,
+      "js": [ "assets/content.js" ],
+      "matches": [ "\u003Call_urls>" ],
+      "run_at": "document_idle"
+   } ],
+   "content_security_policy": {
+      "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';"
+   },
+   "default_locale": "en",
+   "description": "AutoApply CV AI Interview Copilot which supports Google Meet, Zoom, MS Teams and more.",
+   "host_permissions": [ "*://meet.google.com/*-*-*", "http://localhost:3000/", "https://autoapplycv.in/*", "*://leetcode.com/*", "*://*.hackerrank.com/*", "*://*.codesignal.com/*", "*://coderpad.io/*" ],
+   "icons": {
+      "128": "icon-128.png",
+      "16": "icon-16.png",
+      "48": "icon-48.png"
+   },
+   "manifest_version": 3,
+   "name": "AutoApply CV Interview Copilot",
+   "optional_host_permissions": [ "*://*/*", "\u003Call_urls>" ],
+   "permissions": [ "tabs", "activeTab", "storage", "scripting", "tabCapture", "contextMenus", "cookies" ],
+   "short_name": "CV Copilot",
+   "version": "0.3.0"
+}

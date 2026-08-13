@@ -473,7 +473,7 @@ export default function ColdEmails() {
       {/* ── Page Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-xs font-bold text-gray-900 flex items-center gap-2">
             <MailCheck className="w-7 h-7 text-indigo-600" />
             Cold Emails
           </h1>
@@ -714,7 +714,7 @@ export default function ColdEmails() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">{label}</p>
-                    <p className={`text-xl font-bold ${color}`}>{value}</p>
+                    <p className={`text-sm font-bold ${color}`}>{value}</p>
                   </div>
                 </div>
               ))}

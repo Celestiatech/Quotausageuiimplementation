@@ -79,7 +79,7 @@ export default function Profile() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
+          <h1 className="text-xs font-bold text-gray-900">Profile Settings</h1>
           <p className="text-gray-600 mt-1">Manage your personal information and preferences</p>
         </div>
         {!isEditing ? (
@@ -145,7 +145,7 @@ export default function Profile() {
                   </button>
                 )}
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-1">{user?.name}</h3>
+              <h3 className="text-sm font-bold text-gray-900 mb-1">{user?.name}</h3>
               <p className="text-gray-600 mb-4">{formData.currentCity || 'No city set'}</p>
               <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full">
                 <span className="text-sm font-semibold text-purple-700 capitalize">{user?.plan} Plan</span>

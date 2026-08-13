@@ -44,10 +44,19 @@
         <textarea id="userAnswer" rows="3" placeholder="Type or paste the answer you actually gave…"></textarea>
       </div>
 
-      <button class="primary" id="runBtn">
+      <button class="primary" id="listenOpenBtn">
+        <span class="spinner hidden" id="listenerSpinner"></span>
+        <span id="listenOpenLabel">Open floating listener</span>
+      </button>
+
+      <p class="kbd-hint">Shortcuts: Ctrl+Shift+L open · Ctrl+Shift+Space listen</p>
+
+      <button class="ghost-wide" id="runBtn">
         <span class="spinner hidden" id="spinner"></span>
         <span id="runLabel">Generate answer</span>
       </button>
+
+      <button class="ghost-wide" id="sendDashBtn">Send to dashboard page ↗</button>
 
       <div class="result hidden" id="resultBox">
         <div class="result-head">
@@ -63,7 +72,7 @@
     </main>
 
     <footer>
-      <button class="link" id="openDash">Open dashboard assistant ↗</button>
+      <button class="link" id="openDash">Open Client Assistant ↗</button>
       <button class="link" id="refreshBtn">Reconnect</button>
     </footer>
   </div>

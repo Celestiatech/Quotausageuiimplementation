@@ -432,7 +432,7 @@ export default function Resume() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Resume Builder</h1>
+          <h1 className="text-xs font-bold text-gray-900 mb-2">Resume Builder</h1>
           <p className="text-gray-600">Build ATS-friendly resumes with your profile data.</p>
         </div>
         <button
@@ -532,7 +532,7 @@ export default function Resume() {
         {/* Right Panel — Templates */}
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white rounded-2xl p-5 border-2 border-gray-200">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">ATS Templates</h2>
+            <h2 className="text-xs font-bold text-gray-900 mb-4">ATS Templates</h2>
             <ResumeTemplateCard
               selected={selectedTemplate}
               onSelect={setSelectedTemplate}

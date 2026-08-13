@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="listen.css" />
+  <title>Live Answer Assistant</title>
+</head>
+<body>
+  <!-- Pill mode: compact bar shown while collapsed -->
+  <div id="pillMode" class="pill-mode hidden">
+    <div class="pill-dot" id="pillDot"></div>
+    <div class="pill-text" id="pillText">Listening…</div>
+    <button class="pill-toggle" id="pillExpandBtn" title="Expand">^</button>
+  </div>
+
+  <!-- Expanded mode -->
+  <div id="fullMode" class="app">
+    <header>
+      <div class="drag-handle" id="dragHandle" title="Drag to move">
+        <div class="logo">AA</div>
+        <div class="titles">
+          <div class="title">Live Answer Assistant</div>
+          <div class="status" id="connStatus">Checking connection…</div>
+        </div>
+      </div>
+      <button class="pill-toggle" id="minimizeBtn" title="Minimize">_</button>
+      <button class="pill-toggle" id="closeBtn" title="Close and stop auto-open">×</button>
+    </header>
+
+    <div class="hint" id="hint">
+      Listens for the client's question and prints a polished answer after they
+      pause. Share only the Meet tab / browser window — this popup stays out of
+      the share. Drag the header to move it.
+    </div>
+
+    <main>
+      <div class="transcript-box">
+        <div class="box-head">
+          <span id="transcriptLabel">Client transcript</span>
+          <span class="speak-ind hidden" id="speakInd"><span class="speak-dot"></span>Speaking</span>
+          <button class="ghost hidden" id="clearBtn">Clear</button>
+        </div>
+        <div class="transcript" id="transcript"></div>
+      </div>
+
+      <div class="history hidden" id="historyBox">
+        <div class="box-head">
+          <span>Q&amp;A history</span>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </div>
+
+      <div class="error hidden" id="errorBox"></div>
+
+      <div class="controls">
+        <label class="tone-wrap">
+          <span class="label">Answer style</span>
+          <select id="tone">
+            <option value="concise" selected>Concise (fast)</option>
+            <option value="detailed">Detailed (2–3 min)</option>
+            <option value="star">STAR method</option>
+          </select>
+        </label>
+        <button class="primary" id="listenBtn">
+          <span class="dot" id="dot"></span>
+          <span id="listenLabel">Start listening</span>
+        </button>
+      </div>
+    </main>
+
+    <footer>
+      <button class="link" id="openDash">Open Client Assistant ↗</button>
+    </footer>
+  </div>
+  <script src="listen.js"></script>
+</body>
+</html>

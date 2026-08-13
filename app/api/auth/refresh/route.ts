@@ -1,4 +1,4 @@
-import { clearAuthCookies, readRefreshTokenFromCookies, rotateRefreshToken, setAuthCookies, toClientUser } from "src/lib/auth";
+import { clearAuthCookies, readRefreshTokenFromCookies, rotateRefreshToken, setAuthCookies, setExtensionAuthCookie, toClientUser } from "src/lib/auth";
 import { fail, handleApiError, ok } from "src/lib/api";
 import { writeAuditLog } from "src/lib/audit";
 
@@ -9,6 +9,10 @@ export async function POST() {
 
     const rotated = await rotateRefreshToken(refreshToken);
     await setAuthCookies(rotated.accessToken, rotated.refreshToken);
+    await setExtensionAuthCookie(
+      { id: rotated.user.id, email: rotated.user.email, role: rotated.user.role },
+      rotated.sessionId
+    );
     await writeAuditLog({
       actorUserId: rotated.user.id,
       action: "auth.refresh",

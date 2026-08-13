@@ -19,7 +19,9 @@ import {
   Zap,
   PlayCircle,
   Mail,
-  MailCheck
+  MailCheck,
+  MessagesSquare,
+  List
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
@@ -63,17 +65,18 @@ export default function DashboardLayout() {
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
     {
       name: 'Job Applier',
-      href: '/dashboard/jobs/linkedin',
+      href: '/dashboard/jobs',
       icon: Target,
       children: [
-        { name: 'LinkedIn', href: '/dashboard/jobs/linkedin' },
-        { name: 'Indeed Beta', href: '/dashboard/jobs/indeed' },
+        { name: 'All Job Boards', href: '/dashboard/jobs' },
         { name: 'HR Outreach', href: '/dashboard/hr-outreach' },
       ],
     },
     { name: 'Applications', href: '/dashboard/applications', icon: Briefcase },
+    { name: 'Screening Answers', href: '/dashboard/screening-answers', icon: List },
     { name: 'Resume Builder', href: '/dashboard/resume', icon: FileText },
     { name: 'Interview Prep', href: '/dashboard/interview', icon: MessageSquare },
+    { name: 'Client Assistant', href: '/dashboard/client-assistant', icon: MessagesSquare },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
     {
       name: 'Marketing',
@@ -315,10 +318,10 @@ export default function DashboardLayout() {
                 >
                   <Zap className="w-4 h-4 text-purple-600" />
                   <span className="text-sm font-semibold text-purple-700">
-                    {user?.plan === 'pro' ? 'Unlimited' : `${hireBalance} Hires`}
+                    {user?.plan === 'pro' ? 'Unlimited' : user?.plan === 'coach' ? '200/day' : `${hireBalance} Hires`}
                   </span>
                   <span className="text-xs text-purple-600">
-                    {user?.plan === 'pro' ? '$3/mo' : `${mergedDailyUsed}/${dailyCap} free today`}
+                    {user?.plan === 'pro' ? '₹99/mo' : user?.plan === 'coach' ? '₹299/mo' : `${mergedDailyUsed}/${dailyCap} free today`}
                   </span>
                   {needsHires ? (
                     <span className="ml-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">

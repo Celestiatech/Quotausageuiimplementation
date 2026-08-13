@@ -32,9 +32,11 @@ export function QuotaUsage({ quotaResetTime, onUpgradeClick }: QuotaUsageProps) 
   const totalLabel = user?.plan === 'pro' ? 'Unlimited' : String(total);
   const planLabel =
     user?.plan === 'pro'
-      ? 'Pro ($3/mo)'
+      ? 'Pro (₹99/mo)'
+      : user?.plan === 'coach'
+      ? 'Coach (₹299/mo)'
       : balance > 0
-      ? 'Custom (Top-up)'
+      ? 'Pay-As-You-Go'
       : 'Free';
 
   useEffect(() => {

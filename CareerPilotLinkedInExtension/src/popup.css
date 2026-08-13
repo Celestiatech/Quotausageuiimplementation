@@ -398,6 +398,29 @@ button:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
+/* ── Utility row (debug toggle + clear logs) ── */
+.utility-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+
+.btn-clear {
+  border-color: var(--cp-border);
+  background: var(--cp-surface);
+  color: var(--cp-muted);
+  padding: 6px 10px;
+  font-size: 10px;
+}
+
+.btn-clear:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
 /* ── Now card ── */
 .now-card {
   border: 1px solid var(--cp-border);

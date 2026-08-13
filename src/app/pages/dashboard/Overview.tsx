@@ -59,8 +59,8 @@ export default function Overview() {
   ];
 
   const quickActions = [
-    { icon: Target, label: "Find Jobs", color: "from-blue-500 to-cyan-500", href: "/dashboard/jobs/linkedin" },
-    { icon: Briefcase, label: "Apply Now", color: "from-purple-500 to-pink-500", href: "/dashboard/jobs/linkedin" },
+    { icon: Target, label: "Find Jobs", color: "from-blue-500 to-cyan-500", href: "/dashboard/jobs" },
+    { icon: Briefcase, label: "Apply Now", color: "from-purple-500 to-pink-500", href: "/dashboard/jobs" },
     { icon: Zap, label: "Resume Check", color: "from-green-500 to-emerald-500", href: "/dashboard/resume" },
     { icon: Users, label: "Interview Prep", color: "from-orange-500 to-red-500", href: "/dashboard/interview" },
   ];
@@ -82,7 +82,7 @@ export default function Overview() {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user?.name || "User"}!</h1>
+            <h1 className="text-xs font-bold text-gray-900">Welcome back, {user?.name || "User"}!</h1>
             <p className="text-gray-600 mt-1">Here is what is happening with your job search today.</p>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-white/70 backdrop-blur-xl border border-purple-100 rounded-full shadow-sm">
@@ -107,7 +107,7 @@ export default function Overview() {
               </div>
               <span className="text-xs text-emerald-600 font-semibold">{stat.change}</span>
             </div>
-            <div className="text-2xl font-bold text-gray-900 mb-0.5">{stat.value}</div>
+            <div className="text-base font-bold text-gray-900 mb-0.5">{stat.value}</div>
             <div className="text-[13px] text-gray-600">{stat.name}</div>
           </motion.div>
         ))}
@@ -122,7 +122,7 @@ export default function Overview() {
             className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/60 overflow-hidden"
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/60">
-              <h2 className="text-xl font-bold text-gray-900">Recent Applications</h2>
+              <h2 className="text-sm font-bold text-gray-900">Recent Applications</h2>
               <button
                 onClick={() => navigate("/dashboard/applications")}
                 className="text-purple-600 hover:text-purple-700 font-semibold text-sm flex items-center gap-1"

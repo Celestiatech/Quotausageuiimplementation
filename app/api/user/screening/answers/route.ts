@@ -75,16 +75,25 @@ export async function GET(req: Request) {
       const questionLabel = String(meta.questionLabel || "").trim();
       const answer = String(meta.answer || "").trim();
       if (!questionKey || !questionLabel || !answer) continue;
-      if (!latestByKey.has(questionKey)) {
-        latestByKey.set(questionKey, {
-          questionKey,
-          questionLabel,
-          answer,
-          answerType: parseAnswerType(meta.answerType),
-          source: parseSource(meta.source),
-          lastUsed: String(meta.lastUsed || "").trim() || log.createdAt.toISOString(),
-          updatedAt: log.createdAt.toISOString(),
-        });
+      const source = parseSource(meta.source);
+      const candidate = {
+        questionKey,
+        questionLabel,
+        answer,
+        answerType: parseAnswerType(meta.answerType),
+        source,
+        lastUsed: String(meta.lastUsed || "").trim() || log.createdAt.toISOString(),
+        updatedAt: log.createdAt.toISOString(),
+      };
+      const existing = latestByKey.get(questionKey);
+      // Never let an auto-captured answer (source "extension_capture") override a higher-priority
+      // value for the same key. Captures can be stale values the bot picked up from a form (e.g.
+      // a captured "Mohali") and would otherwise clobber manually saved answers. Mirror the
+      // extension's own read guard in background.js.
+      if (!existing) {
+        latestByKey.set(questionKey, candidate);
+      } else if (existing.source === "extension_capture" && source !== "extension_capture") {
+        latestByKey.set(questionKey, candidate);
       }
     }
 
@@ -109,20 +118,32 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await requireAuth();
     if ("error" in authResult) return authResult.error;
-    const payload = saveAnswerSchema.parse(await req.json());
+    const rawBody = await req.json();
+    const items = Array.isArray(rawBody) ? rawBody : [rawBody];
 
-    await writeAuditLog({
-      actorUserId: authResult.auth.user.id,
-      action: "user.screening_answer_saved",
-      targetType: "screening_answer",
-      targetId: payload.questionKey,
-      metadataJson: {
-        ...payload,
-        lastUsed: payload.lastUsed || new Date().toISOString(),
-      },
-    });
+    const parsed: Array<z.infer<typeof saveAnswerSchema>> = [];
+    for (const item of items) {
+      const result = saveAnswerSchema.safeParse(item);
+      if (result.success) parsed.push(result.data);
+    }
+    if (!parsed.length) {
+      return handleApiError(new Error("No valid answers provided"), "Failed to save screening answer");
+    }
 
-    return ok("Screening answer saved", { answer: payload });
+    for (const payload of parsed) {
+      await writeAuditLog({
+        actorUserId: authResult.auth.user.id,
+        action: "user.screening_answer_saved",
+        targetType: "screening_answer",
+        targetId: payload.questionKey,
+        metadataJson: {
+          ...payload,
+          lastUsed: payload.lastUsed || new Date().toISOString(),
+        },
+      });
+    }
+
+    return ok("Screening answers saved", { answers: parsed });
   } catch (error) {
     return handleApiError(error, "Failed to save screening answer");
   }

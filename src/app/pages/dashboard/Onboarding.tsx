@@ -20,6 +20,7 @@ import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
 import { getExtensionProviderConfig } from "src/lib/extension-providers";
 import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
+import { toQuestionKey as mapQuestionKey } from "src/lib/screening-question-map";
 import {
   DASHBOARD_TOUR_EVENT_NAME,
   DASHBOARD_TOUR_ONBOARDING_EXTENSION,
@@ -282,60 +283,8 @@ function sanitizeLocationFilterValues(values: string[]) {
     .slice(0, 25);
 }
 
-function slugifyKey(value: string) {
-  const normalized = normalizeLabel(value);
-  if (!normalized) return "";
-  return normalized.replace(/\s+/g, "_").replace(/^_+|_+$/g, "").slice(0, 160);
-}
-
-function hasWords(label: string, words: string[]) {
-  return words.every((word) => label.includes(word));
-}
-
 function canonicalizeQuestionKey(value: string) {
-  const normalized = normalizeLabel(value);
-  if (!normalized) return "";
-
-  if (
-    (hasWords(normalized, ["authorized", "work"]) ||
-      hasWords(normalized, ["eligible", "work"]) ||
-      hasWords(normalized, ["work", "authorization"])) &&
-    (normalized.includes("united states") || normalized.includes("u s") || normalized.includes("us"))
-  ) {
-    return "work_authorization_us";
-  }
-  if (hasWords(normalized, ["visa", "sponsorship"]) || hasWords(normalized, ["require", "sponsorship"])) {
-    return "visa_sponsorship_required";
-  }
-  if (normalized.includes("onsite") || normalized.includes("on site")) {
-    return "comfortable_working_onsite";
-  }
-  if (normalized.includes("commut") || normalized.includes("travel to office")) {
-    return "comfortable_commuting";
-  }
-  if (normalized.includes("relocat")) {
-    return "comfortable_relocation";
-  }
-  if ((normalized.includes("salary") || normalized.includes("compensation") || normalized.includes("pay")) && normalized.includes("expect")) {
-    return "expected_salary";
-  }
-  if (normalized.includes("year") && normalized.includes("experience")) {
-    return "years_of_experience";
-  }
-  if (normalized.includes("bachelor") && normalized.includes("degree")) {
-    return "bachelors_degree_completed";
-  }
-  if (normalized.includes("english") && normalized.includes("proficiency")) {
-    return "english_proficiency";
-  }
-  if (normalized.includes("notice") && normalized.includes("period")) {
-    return "notice_period_days";
-  }
-  if (normalized.includes("start") && normalized.includes("date")) {
-    return "start_date_availability";
-  }
-
-  return slugifyKey(normalized);
+  return mapQuestionKey(value);
 }
 
 function inferAnswerType(answer: string): ScreeningAnswerType {
@@ -815,7 +764,7 @@ export default function Onboarding() {
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({ installed: false });
   const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
     version: "1.1.3",
-    displayName: "AutoApply CV LinkedIn Copilot",
+    displayName: "AutoApply CV Copilot",
     downloadFileName: formatExtensionPackageFileName("1.1.3"),
     downloadBaseName: formatExtensionPackageName("1.1.3"),
   });
@@ -1339,7 +1288,7 @@ export default function Onboarding() {
 
     const extensionTimer = window.setInterval(() => {
       void checkExtensionStatus({ silent: true });
-    }, 7000);
+    }, 30000);
 
     return () => {
       window.clearInterval(extensionTimer);
@@ -2294,7 +2243,7 @@ export default function Onboarding() {
                       <Sparkles className="w-7 h-7 text-white" />
                     </div>
                     <div>
-                      <h1 className="text-2xl font-bold text-slate-900">
+                      <h1 className="text-base font-bold text-slate-900">
                         Hi there! 👋
                       </h1>
                       <p className="text-sm text-slate-500">
@@ -2464,7 +2413,7 @@ export default function Onboarding() {
                   <Check className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">Extension Preferences</h2>
+                  <h2 className="text-sm font-bold text-slate-900">Extension Preferences</h2>
                   <p className="text-sm text-slate-500">Set up how the AutoApply extension should search and apply</p>
                 </div>
               </div>
@@ -2725,7 +2674,7 @@ export default function Onboarding() {
               <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-emerald-400 to-green-600 shadow-md shadow-emerald-200/60">
                 <Check className="w-7 h-7 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-slate-900">Your ATS Resume is Ready!</h2>
+              <h2 className="text-sm font-bold text-slate-900">Your ATS Resume is Ready!</h2>
               <p className="text-sm text-slate-500">Download, upload another, or regenerate</p>
             </div>
 
@@ -2833,7 +2782,7 @@ function SectionCard({
     <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
           <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
         </div>
         {action}

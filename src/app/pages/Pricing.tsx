@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Check, X, Zap, Crown, Users, ArrowRight, Sparkles, Shield, Clock } from 'lucide-react';
+import { Check, X, Zap, Crown, Users, ArrowRight, Sparkles, Shield, Clock, Briefcase } from 'lucide-react';
 import { MediaSlot } from '../components/marketing/MediaSlot';
 
 type Plan = {
@@ -33,7 +33,7 @@ export default function Pricing() {
       yearlyPrice: 0,
       description: 'Starter access with daily apply limit',
       features: [
-        '3 Auto-Apply actions per day (0/3 cap)',
+        '3 Auto-Apply actions per day',
         '300 Hires coins signup bonus',
         'Basic job matching',
         'Application tracker',
@@ -41,50 +41,71 @@ export default function Pricing() {
         'Community support',
         'Email notifications'
       ],
-      cta: 'Start Free ($0)',
+      cta: 'Start Free',
       popular: false,
-      gradient: 'from-gray-600 to-gray-700'
+      gradient: 'from-gray-500 to-gray-600'
     },
     {
       name: 'Pro',
       icon: Crown,
-      monthlyPrice: 3,
-      yearlyPrice: 36,
+      monthlyPrice: 99,
+      yearlyPrice: 999,
       description: 'Unlimited applications with premium automation',
       features: [
         'Unlimited Auto-Apply',
         'Advanced AI job matching',
-        'AI resume builder and optimization',
+        'AI resume builder & optimization',
         'Interview preparation AI tools',
         'Weekly analytics dashboard',
-        'Priority support',
+        'Priority support (24hr)',
         'Cover letter generator',
         'LinkedIn profile optimizer',
         'Salary negotiation guide'
       ],
-      cta: 'Start Pro ($3/mo)',
+      cta: 'Start Pro',
       popular: true,
       gradient: 'from-[#6366F1] via-[#8B5CF6] to-[#A855F7]',
-      badge: 'BEST VALUE'
+      badge: 'MOST POPULAR'
     },
     {
-      name: 'Custom Hires',
+      name: 'Coach',
+      icon: Briefcase,
+      monthlyPrice: 299,
+      yearlyPrice: 2999,
+      description: 'For career coaches & multi-client management',
+      features: [
+        'Everything in Pro',
+        '200 Auto-Apply per day',
+        'Multi-client dashboard',
+        'Shared templates & workflows',
+        'Progress tracking per client',
+        'Team collaboration tools',
+        'White-label options',
+        'Dedicated account manager'
+      ],
+      cta: 'Start Coach',
+      popular: false,
+      gradient: 'from-orange-500 to-pink-500',
+      badge: 'FOR COACHES'
+    },
+    {
+      name: 'Pay-As-You-Go',
       icon: Users,
       monthlyPrice: 0,
       yearlyPrice: 0,
-      customPriceLabel: '$0.54 min top-up',
-      description: 'Pay-as-you-go wallet, no monthly commitment',
+      customPriceLabel: '₹50 min top-up',
+      description: 'Buy hires, no monthly commitment',
       features: [
         'Buy only what you need',
         '1 Hire = 1 Apply',
-        'Minimum top-up $0.54',
+        'Minimum top-up ₹50',
         'Works with daily cap controls',
         'No monthly subscription',
-        'Great for flexible usage'
+        'Great for occasional use'
       ],
       cta: 'Go to Hires Wallet',
       popular: false,
-      gradient: 'from-purple-600 to-pink-600'
+      gradient: 'from-emerald-500 to-teal-500'
     }
   ];
 
@@ -97,7 +118,7 @@ export default function Pricing() {
   ];
 
   const handleSelectPlan = (planName: string) => {
-    if (planName === 'Custom Hires') {
+    if (planName === 'Pay-As-You-Go') {
       navigate('/dashboard/billing');
       return;
     }
@@ -110,15 +131,15 @@ export default function Pricing() {
         <div className="max-w-7xl mx-auto px-6 lg:px-8 relative text-center">
           <div className="inline-block px-4 py-2 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full text-purple-700 text-sm font-semibold mb-6">
             <Sparkles className="w-4 h-4 inline mr-2" />
-            3 Simple Plans
+            Simple Pricing
           </div>
 
           <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
-            Clear pricing in <span className="bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">USD</span>
+            Start free, upgrade <span className="bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">when ready</span>
           </h1>
 
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-10">
-            Free ($0) with 3/day, Pro at $3/month unlimited, or Custom Hires top-up when you need flexibility.
+            Free plan with 3 applies/day. Pro at ₹99/mo unlimited. Coach at ₹299/mo for teams. Or pay-as-you-go.
           </p>
 
           <div className="inline-flex items-center gap-3 bg-white rounded-full p-2 shadow-lg border border-gray-200">
@@ -141,6 +162,7 @@ export default function Pricing() {
               }`}
             >
               Yearly
+              <span className="absolute -top-2 -right-4 text-[10px] font-bold bg-green-500 text-white px-1.5 py-0.5 rounded-full">SAVE</span>
             </button>
           </div>
         </div>
@@ -148,37 +170,45 @@ export default function Pricing() {
 
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {plans.map((plan, index) => (
               <div
                 key={index}
-                className={`relative rounded-3xl p-8 transition-all duration-300 ${
+                className={`relative rounded-3xl p-6 transition-all duration-300 ${
                   plan.popular
                     ? 'bg-gradient-to-br from-[#6366F1] via-[#8B5CF6] to-[#A855F7] text-white shadow-2xl scale-105 border-4 border-purple-300'
                     : 'bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 hover:border-purple-300 hover:shadow-xl'
                 }`}
               >
-                {plan.popular && (
-                  <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-orange-400 text-gray-900 px-6 py-2 rounded-full text-sm font-bold shadow-lg">
+                {plan.badge && (
+                  <div className={`absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-bold shadow-lg whitespace-nowrap ${
+                    plan.popular
+                      ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-gray-900'
+                      : plan.name === 'Coach'
+                      ? 'bg-gradient-to-r from-orange-400 to-pink-400 text-white'
+                      : 'bg-gradient-to-r from-emerald-400 to-teal-400 text-white'
+                  }`}>
                     {plan.badge}
                   </div>
                 )}
 
-                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${plan.gradient} flex items-center justify-center mb-6 shadow-lg`}>
-                  <plan.icon className="w-8 h-8 text-white" />
+                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${plan.gradient} flex items-center justify-center mb-5 shadow-lg`}>
+                  <plan.icon className="w-7 h-7 text-white" />
                 </div>
 
-                <h3 className={`text-2xl font-bold mb-2 ${plan.popular ? 'text-white' : 'text-gray-900'}`}>{plan.name}</h3>
-                <p className={`mb-6 ${plan.popular ? 'text-purple-100' : 'text-gray-600'}`}>{plan.description}</p>
+                <h3 className={`text-xl font-bold mb-2 ${plan.popular ? 'text-white' : 'text-gray-900'}`}>{plan.name}</h3>
+                <p className={`mb-5 text-sm ${plan.popular ? 'text-purple-100' : 'text-gray-600'}`}>{plan.description}</p>
 
-                <div className="mb-8">
+                <div className="mb-6">
                   <div className="flex items-baseline gap-2">
                     {plan.customPriceLabel ? (
-                      <span className={`text-4xl font-bold ${plan.popular ? 'text-white' : 'text-gray-900'}`}>{plan.customPriceLabel}</span>
+                      <span className={`text-2xl font-bold ${plan.popular ? 'text-white' : 'text-gray-900'}`}>{plan.customPriceLabel}</span>
+                    ) : plan.monthlyPrice === 0 ? (
+                      <span className={`text-4xl font-bold ${plan.popular ? 'text-white' : 'text-gray-900'}`}>₹0</span>
                     ) : (
                       <>
-                        <span className={`text-5xl font-bold ${plan.popular ? 'text-white' : 'text-gray-900'}`}>
-                          ${billingCycle === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice}
+                        <span className={`text-4xl font-bold ${plan.popular ? 'text-white' : 'text-gray-900'}`}>
+                          ₹{billingCycle === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice}
                         </span>
                         <span className={plan.popular ? 'text-purple-100' : 'text-gray-600'}>
                           /{billingCycle === 'monthly' ? 'mo' : 'yr'}
@@ -188,29 +218,29 @@ export default function Pricing() {
                   </div>
                 </div>
 
-                <ul className="space-y-4 mb-8">
+                <ul className="space-y-3 mb-6">
                   {plan.features.map((feature, fIndex) => (
-                    <li key={fIndex} className="flex items-start gap-3">
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                    <li key={fIndex} className="flex items-start gap-2.5">
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
                         plan.popular ? 'bg-white/20' : 'bg-green-100'
                       }`}>
-                        <Check className={`w-3 h-3 ${plan.popular ? 'text-white' : 'text-green-600'}`} />
+                        <Check className={`w-2.5 h-2.5 ${plan.popular ? 'text-white' : 'text-green-600'}`} />
                       </div>
-                      <span className={plan.popular ? 'text-purple-50' : 'text-gray-700'}>{feature}</span>
+                      <span className={`text-sm ${plan.popular ? 'text-purple-50' : 'text-gray-700'}`}>{feature}</span>
                     </li>
                   ))}
                 </ul>
 
                 <button
                   onClick={() => handleSelectPlan(plan.name)}
-                  className={`w-full py-4 rounded-xl font-bold transition-all duration-200 flex items-center justify-center gap-2 ${
+                  className={`w-full py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
                     plan.popular
                       ? 'bg-white text-purple-700 hover:bg-gray-100 shadow-lg'
                       : 'bg-gradient-to-r from-[#6366F1] to-[#A855F7] text-white hover:shadow-xl hover:scale-105'
                   }`}
                 >
                   {plan.cta}
-                  <ArrowRight className="w-5 h-5" />
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             ))}
@@ -226,7 +256,7 @@ export default function Pricing() {
             </div>
             <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3">Exactly what is charged and what is not</h2>
             <p className="text-lg text-gray-600">
-              Compare tools on billing clarity. AutoApply CV records charge intent only on successful submit outcomes.
+              We only charge when an application is successfully submitted. Skipped or failed runs are never billed.
             </p>
           </div>
 
@@ -272,33 +302,33 @@ export default function Pricing() {
         <div className="max-w-4xl mx-auto px-6 lg:px-8 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full text-sm font-semibold mb-8">
             <Sparkles className="w-4 h-4" />
-            Join 50,000+ Engineers
+            Start in minutes
           </div>
 
           <h2 className="text-4xl lg:text-5xl font-bold mb-6">Start your journey today</h2>
 
-          <p className="text-xl text-purple-100 mb-12">Free starts at $0 with 3/day. Pro is $3/month unlimited.</p>
+          <p className="text-xl text-purple-100 mb-12">Free plan with 3 applies/day. Upgrade to Pro at ₹99/mo for unlimited.</p>
 
           <button
             onClick={() => handleSelectPlan('Free')}
             className="px-10 py-5 bg-white text-purple-700 rounded-xl font-bold text-lg hover:bg-gray-100 shadow-2xl hover:scale-105 transition-all duration-200 inline-flex items-center gap-2"
           >
-            Start Free ($0)
+            Start Free
             <ArrowRight className="w-5 h-5" />
           </button>
 
           <div className="flex flex-wrap justify-center items-center gap-8 mt-12 pt-12 border-t border-white/20">
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5" />
-              <span className="text-sm">Secure Payments</span>
+              <span className="text-sm">Secure Payments via Razorpay</span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5" />
-              <span className="text-sm">14-Day Money Back</span>
+              <span className="text-sm">Cancel Anytime</span>
             </div>
             <div className="flex items-center gap-2">
               <Check className="w-5 h-5" />
-              <span className="text-sm">Cancel Anytime</span>
+              <span className="text-sm">No Hidden Fees</span>
             </div>
           </div>
         </div>

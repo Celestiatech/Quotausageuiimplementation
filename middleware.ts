@@ -8,9 +8,10 @@ export function middleware(req: NextRequest) {
   const requestId = req.headers.get("x-request-id") || createRequestId();
   const path = req.nextUrl.pathname;
   const isProd = process.env.NODE_ENV === "production";
-  // The Live Answer Assistant browser extension calls this endpoint cross-origin
-  // using a Bearer token (never cookies), so it bypasses the same-origin check.
-  const isExtensionAssist = path === "/api/interview/assist";
+  // The Live Answer Assistant and Interview Copilot browser extensions call
+  // these endpoints cross-origin using a Bearer token (never cookies), so they
+  // bypass the same-origin check.
+  const isExtensionApi = path === "/api/interview/assist" || path.startsWith("/api/v1/");
   const hasGoogleAnalytics = Boolean(String(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || "").trim());
   const hasGoogleTagManager = Boolean(String(process.env.NEXT_PUBLIC_GTM_ID || "").trim());
   // In development, allow GTM/GA endpoints so debugging tools (e.g. Tag Assistant)
@@ -40,7 +41,7 @@ export function middleware(req: NextRequest) {
         path === "/api/integrations/telegram/webhook" ||
         path === "/api/internal/worker/run";
       const hasBearer = /^Bearer\s+\S+/i.test(String(req.headers.get("authorization") || ""));
-      if (!sameOrigin && !(allowNoOrigin && !origin) && !(isExtensionAssist && hasBearer)) {
+      if (!sameOrigin && !(allowNoOrigin && !origin) && !(isExtensionApi && hasBearer)) {
         return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
       }
     }
@@ -71,9 +72,9 @@ export function middleware(req: NextRequest) {
   res.headers.set("x-dns-prefetch-control", "off");
   res.headers.set("cross-origin-opener-policy", "same-origin");
   res.headers.set("cross-origin-resource-policy", "same-origin");
-  if (isExtensionAssist) {
+  if (isExtensionApi) {
     res.headers.set("access-control-allow-origin", "*");
-    res.headers.set("access-control-allow-methods", "POST, OPTIONS");
+    res.headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
     res.headers.set("access-control-allow-headers", "Content-Type, Authorization");
     res.headers.set("access-control-max-age", "86400");
     res.headers.set("cross-origin-resource-policy", "cross-origin");

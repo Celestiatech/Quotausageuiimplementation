@@ -47,7 +47,7 @@ function ScoreRing({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-4">
       <div
-        className="w-20 h-20 rounded-full grid place-items-center font-bold text-2xl text-gray-900"
+        className="w-20 h-20 rounded-full grid place-items-center font-bold text-sm text-gray-900"
         style={{
           background: `conic-gradient(#8b5cf6 ${pct}%, #e5e7eb ${pct}% 100%)`,
         }}
@@ -151,7 +151,7 @@ export default function InterviewAssistant() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Live Answer Assistant</h1>
+        <h1 className="text-xs font-bold text-gray-900 mb-2">Live Answer Assistant</h1>
         <p className="text-gray-600">
           Draft polished, resume-personalized answers to client and interview questions in real time.
         </p>
@@ -239,7 +239,7 @@ export default function InterviewAssistant() {
 
           <div className="bg-white border-2 border-gray-200 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <h2 className="text-xs font-bold text-gray-900 flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-purple-600" />
                 Draft answer
               </h2>
@@ -280,7 +280,7 @@ export default function InterviewAssistant() {
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <h2 className="text-xs font-bold text-gray-900 flex items-center gap-2">
                 <PlayCircle className="w-5 h-5 text-purple-600" />
                 Timed Practice
               </h2>
@@ -367,7 +367,7 @@ export default function InterviewAssistant() {
           </div>
 
           <div className="bg-white border-2 border-gray-200 rounded-2xl p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <h2 className="text-xs font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Trophy className="w-5 h-5 text-purple-600" />
               AI Feedback
             </h2>

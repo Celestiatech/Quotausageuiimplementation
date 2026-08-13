@@ -53,6 +53,14 @@ textarea:focus, select:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba
 }
 .primary:disabled { opacity: .6; cursor: default; }
 
+.ghost-wide {
+  width: 100%; padding: 9px; border: 1px solid #c7d2fe; border-radius: 10px;
+  background: #eef2ff; color: #4338ca; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.ghost-wide:hover { background: #e0e7ff; }
+
+.kbd-hint { font-size: 11px; color: #9ca3af; text-align: center; }
+
 .spinner {
   width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.35);
   border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;

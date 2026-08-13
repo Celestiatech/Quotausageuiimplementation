@@ -4,8 +4,8 @@ import { ok, handleApiError, parsePagination } from "src/lib/api";
 
 const PLAN_PRICE_MONTHLY: Record<"free" | "pro" | "coach", number> = {
   free: 0,
-  pro: 999,
-  coach: 2999,
+  pro: 99,
+  coach: 299,
 };
 
 export async function GET(req: Request) {

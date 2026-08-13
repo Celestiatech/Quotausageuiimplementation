@@ -1235,12 +1235,15 @@ function canonicalScreeningKey(label) {
   if ((n.includes("salary") || n.includes("compensation") || n.includes("pay")) && n.includes("expect")) {
     return "expected_salary";
   }
-  if (n.includes("year") && n.includes("experience")) return "years_of_experience";
+  const expMatch = n.includes("experience") ? n.match(/experience(?:\s+\w+){0,6}\s+(with|in|on)\s+([a-z0-9 ]+)/) : null;
+  const experienceTech = expMatch ? expMatch[2].replace(/\s+/g, "").toLowerCase() : "";
+  if (n.includes("year") && n.includes("experience") && !experienceTech) return "years_of_experience";
   if (n.includes("bachelor") && n.includes("degree")) return "bachelors_degree_completed";
   if (n.includes("english") && n.includes("proficiency")) return "english_proficiency";
   if (n.includes("confidence") && n.includes("level")) return "cp_pref_confidence_level";
   if (n.includes("notice") && n.includes("period")) return "notice_period_days";
   if (n.includes("start") && n.includes("date")) return "start_date_availability";
+  if (experienceTech) return `what_is_your_experience_with_${experienceTech}`;
   return n.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
 }
 

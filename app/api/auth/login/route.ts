@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "src/lib/prisma";
 import { fail, handleApiError } from "src/lib/api";
-import { createSessionAndTokens, setAuthCookies, toClientUser } from "src/lib/auth";
+import { createSessionAndTokens, setAuthCookies, setExtensionAuthCookie, toClientUser } from "src/lib/auth";
 import { loginSchema } from "src/lib/schemas";
 import { ensureHireWindow } from "src/lib/hires";
 import { writeAuditLog } from "src/lib/audit";
@@ -35,12 +35,16 @@ export async function POST(req: NextRequest) {
     }
 
     const quotaAwareUser = await ensureHireWindow(user.id);
-    const { accessToken, refreshToken } = await createSessionAndTokens({
+    const { accessToken, refreshToken, sessionId } = await createSessionAndTokens({
       id: quotaAwareUser.id,
       email: quotaAwareUser.email,
       role: quotaAwareUser.role,
     });
     await setAuthCookies(accessToken, refreshToken);
+    await setExtensionAuthCookie(
+      { id: quotaAwareUser.id, email: quotaAwareUser.email, role: quotaAwareUser.role },
+      sessionId
+    );
 
     await writeAuditLog({
       actorUserId: quotaAwareUser.id,

@@ -439,7 +439,7 @@ export default function Marketing() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Marketing</h1>
+          <h1 className="text-xs font-bold text-gray-900 mb-2">Marketing</h1>
           <p className="text-gray-600">
             Create and manage email and WhatsApp campaigns
           </p>
@@ -492,28 +492,28 @@ export default function Marketing() {
                     <Mail className="w-8 h-8 text-purple-600" />
                     <span className="text-sm font-medium text-gray-500">Total Sent</span>
                   </div>
-                  <div className="text-3xl font-bold text-gray-900">{totalStats.sent.toLocaleString()}</div>
+                  <div className="text-xs font-bold text-gray-900">{totalStats.sent.toLocaleString()}</div>
                 </div>
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                   <div className="flex items-center justify-between mb-2">
                     <CheckCircle className="w-8 h-8 text-green-600" />
                     <span className="text-sm font-medium text-gray-500">Delivered</span>
                   </div>
-                  <div className="text-3xl font-bold text-gray-900">{totalStats.delivered.toLocaleString()}</div>
+                  <div className="text-xs font-bold text-gray-900">{totalStats.delivered.toLocaleString()}</div>
                 </div>
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                   <div className="flex items-center justify-between mb-2">
                     <Eye className="w-8 h-8 text-blue-600" />
                     <span className="text-sm font-medium text-gray-500">Open Rate</span>
                   </div>
-                  <div className="text-3xl font-bold text-gray-900">{openRate}%</div>
+                  <div className="text-xs font-bold text-gray-900">{openRate}%</div>
                 </div>
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                   <div className="flex items-center justify-between mb-2">
                     <TrendingUp className="w-8 h-8 text-orange-600" />
                     <span className="text-sm font-medium text-gray-500">Click Rate</span>
                   </div>
-                  <div className="text-3xl font-bold text-gray-900">{clickRate}%</div>
+                  <div className="text-xs font-bold text-gray-900">{clickRate}%</div>
                 </div>
               </div>
 
@@ -557,7 +557,7 @@ export default function Marketing() {
 
                   {showNewCampaign && (
                     <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2">
                         <Plus className="w-5 h-5" />
                         New Email Campaign
                       </h3>
@@ -674,7 +674,7 @@ export default function Marketing() {
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
-                                <h3 className="text-lg font-bold text-gray-900">{campaign.name}</h3>
+                                <h3 className="text-xs font-bold text-gray-900">{campaign.name}</h3>
                                 <span className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 ${getStatusColor(campaign.status)}`}>
                                   {getStatusIcon(campaign.status)}
                                   {campaign.status}
@@ -710,27 +710,27 @@ export default function Marketing() {
                           </div>
                           <div className="grid grid-cols-6 gap-3 pt-4 border-t border-gray-100">
                             <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-900">{campaign.stats.sent}</div>
+                              <div className="text-base font-bold text-gray-900">{campaign.stats.sent}</div>
                               <div className="text-xs text-gray-500">Sent</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-900">{campaign.stats.delivered}</div>
+                              <div className="text-base font-bold text-gray-900">{campaign.stats.delivered}</div>
                               <div className="text-xs text-gray-500">Delivered</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-900">{campaign.stats.opened}</div>
+                              <div className="text-base font-bold text-gray-900">{campaign.stats.opened}</div>
                               <div className="text-xs text-gray-500">Opened</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-900">{campaign.stats.clicked}</div>
+                              <div className="text-base font-bold text-gray-900">{campaign.stats.clicked}</div>
                               <div className="text-xs text-gray-500">Clicked</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-900">{campaign.stats.bounced}</div>
+                              <div className="text-base font-bold text-gray-900">{campaign.stats.bounced}</div>
                               <div className="text-xs text-gray-500">Bounced</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-900">{campaign.stats.unsubscribed}</div>
+                              <div className="text-base font-bold text-gray-900">{campaign.stats.unsubscribed}</div>
                               <div className="text-xs text-gray-500">Unsub</div>
                             </div>
                           </div>
@@ -753,7 +753,7 @@ export default function Marketing() {
 
                   {showNewTemplate && (
                     <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2">
                         <Plus className="w-5 h-5" />
                         New Email Template
                       </h3>
@@ -847,7 +847,7 @@ export default function Marketing() {
                           <div className="flex items-start justify-between mb-3">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
-                                <h3 className="text-lg font-bold text-gray-900">{template.name}</h3>
+                                <h3 className="text-xs font-bold text-gray-900">{template.name}</h3>
                                 {template.isGlobal && (
                                   <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold">Global</span>
                                 )}
@@ -927,7 +927,7 @@ export default function Marketing() {
 
               {showNewWA && (
                 <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2">
                     <Plus className="w-5 h-5" />
                     New WhatsApp Campaign
                   </h3>
@@ -1010,7 +1010,7 @@ export default function Marketing() {
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-bold text-gray-900">{campaign.name}</h3>
+                            <h3 className="text-xs font-bold text-gray-900">{campaign.name}</h3>
                             {(() => {
                               const extRes = extResults[campaign.id];
                               if (extRes) {

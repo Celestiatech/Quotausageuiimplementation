@@ -75,6 +75,8 @@ enum HireTxnType {
   credit_bonus
   debit_apply
   refund_apply
+  debit_interview
+  refund_interview
   admin_adjustment
 }
 

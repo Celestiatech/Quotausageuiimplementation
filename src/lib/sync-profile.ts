@@ -1,4 +1,5 @@
 import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
+import { toQuestionKey as mapQuestionKey } from "src/lib/screening-question-map";
 
 const EXT_BRIDGE_PING_TIMEOUT_MS = 4500;
 const EXT_BRIDGE_ACK_TIMEOUT_MS = 5000;
@@ -27,55 +28,8 @@ function normalizeLabel(value: string) {
     .trim();
 }
 
-function hasWords(label: string, words: string[]) {
-  return words.every((word) => label.includes(word));
-}
-
 function toQuestionKey(value: string) {
-  const normalized = normalizeLabel(value);
-  if (!normalized) return "";
-  if (normalized === "full name" || normalized === "full legal name" || normalized === "legal name") return "full_name";
-  if (normalized === "first name" || normalized === "given name") return "first_name";
-  if (normalized === "last name" || normalized === "family name" || normalized === "surname") return "last_name";
-  if (normalized === "email" || normalized === "email address") return "email_address";
-  if (
-    normalized === "phone" ||
-    normalized === "phone number" ||
-    normalized === "mobile phone" ||
-    normalized === "mobile phone number" ||
-    normalized === "contact number"
-  ) {
-    return "phone_number";
-  }
-  if (normalized.includes("linkedin") && (normalized.includes("profile") || normalized.includes("url"))) return "linkedin_url";
-  if (
-    normalized.includes("portfolio") &&
-    (normalized.includes("url") || normalized.includes("website") || normalized.includes("site") || normalized === "portfolio")
-  ) {
-    return "portfolio_url";
-  }
-  if (normalized === "current city" || normalized === "city" || normalized.includes("location city") || normalized.includes("city state")) {
-    return "current_city";
-  }
-  if (normalized === "state" || normalized === "state region" || normalized === "region") return "state_region";
-  if (normalized === "country") return "country";
-  if (
-    (hasWords(normalized, ["authorized", "work"]) || hasWords(normalized, ["eligible", "work"]) || hasWords(normalized, ["work", "authorization"])) &&
-    (normalized.includes("united states") || normalized.includes("u s") || normalized.includes("us"))
-  ) {
-    return "work_authorization_us";
-  }
-  if (hasWords(normalized, ["visa", "sponsorship"]) || hasWords(normalized, ["require", "sponsorship"])) return "visa_sponsorship_required";
-  if (normalized.includes("onsite") || normalized.includes("on site")) return "comfortable_working_onsite";
-  if (normalized.includes("commut")) return "comfortable_commuting";
-  if (normalized.includes("relocat")) return "comfortable_relocation";
-  if ((normalized.includes("salary") || normalized.includes("compensation") || normalized.includes("pay")) && normalized.includes("expect")) {
-    return "expected_salary";
-  }
-  if (normalized.includes("year") && normalized.includes("experience")) return "years_of_experience";
-  if (normalized.includes("bachelor") && normalized.includes("degree")) return "bachelors_degree_completed";
-  if (normalized.includes("english") && normalized.includes("proficiency")) return "english_proficiency";
-  return normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 160);
+  return mapQuestionKey(value);
 }
 
 function pickFirstNonEmpty(answers: Record<string, string>, keys: string[]) {
@@ -164,11 +118,11 @@ export async function syncProfileToExtension(
 
   const mergedAnswers: Record<string, string> = { ...screeningAnswers };
 
-  const preferredSearchLocation = pickFirstNonEmpty(mergedAnswers, ["cp_pref_search_location", "careerpilot_preference_search_location"]);
+  const preferredSearchLocation = pickFirstNonEmpty(mergedAnswers, ["cp_pref_search_locations", "preferred_locations", "cp_pref_search_location", "careerpilot_preference_search_location"]);
   const preferredSearchTermsRaw = pickFirstNonEmpty(mergedAnswers, ["cp_pref_search_terms", "preferred_job_titles", "careerpilot_preference_search_terms"]);
   const preferredSearchTerms = parseSearchTermsInput(preferredSearchTermsRaw);
   const preferredLocations = parsePreferenceListInput(
-    pickFirstNonEmpty(mergedAnswers, ["cp_pref_search_locations", "cp_pref_search_location", "preferred_locations"]),
+    pickFirstNonEmpty(mergedAnswers, ["preferred_locations", "cp_pref_search_locations", "cp_pref_search_location"]),
   );
   const preferredJobTypes = parsePreferenceListInput(pickFirstNonEmpty(mergedAnswers, ["cp_pref_job_types", "job_types"]));
   const preferredCountries = parsePreferenceListInput(pickFirstNonEmpty(mergedAnswers, ["cp_pref_preferred_countries", "preferred_countries"]));

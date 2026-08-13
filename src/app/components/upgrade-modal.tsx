@@ -38,7 +38,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
               </div>
 
               <Dialog.Description className="text-gray-600 text-base">
-                You reached the Free daily cap (3/day). Upgrade to Pro ($3/month) for unlimited auto-apply.
+                You reached the Free daily cap (3/day). Upgrade to Pro (₹99/month) for unlimited auto-apply.
               </Dialog.Description>
             </div>
 
@@ -51,7 +51,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
                 <div className="mb-4">
                   <h3 className="text-xl font-semibold text-[#030213] mb-1">Pro Plan</h3>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold text-[#030213]">$3</span>
+                    <span className="text-4xl font-bold text-[#030213]">₹99</span>
                     <span className="text-gray-600">/month</span>
                   </div>
                 </div>
@@ -83,9 +83,9 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
               </div>
 
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <h4 className="text-sm font-semibold text-[#030213] mb-2">Stay on Free ($0) Plan</h4>
+                <h4 className="text-sm font-semibold text-[#030213] mb-2">Stay on Free (₹0) Plan</h4>
                 <p className="text-sm text-gray-600 mb-3">
-                  Free plan includes 3 applies/day, plus a free 300 Hires signup bonus. Or buy Custom Hires (1 Hire = 1 Apply, minimum top-up $0.54).
+                  Free plan includes 3 applies/day, plus a free 300 Hires signup bonus. Or buy Pay-As-You-Go Hires (1 Hire = 1 Apply, minimum top-up ₹50).
                 </p>
                 <button
                   onClick={() => onClose()}

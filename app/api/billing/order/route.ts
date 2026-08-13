@@ -8,8 +8,8 @@ import { prisma } from "src/lib/prisma";
 import { enforceRateLimit, rateLimitKey } from "src/lib/rate-limit";
 
 const PLAN_AMOUNT_PAISE: Record<"pro" | "coach", number> = {
-  pro: 99900,
-  coach: 299900,
+  pro: 9900,
+  coach: 29900,
 };
 
 export async function POST(req: NextRequest) {
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       amount: order.amount,
       currency: order.currency,
       plan: body.plan,
-      keyId: process.env.RZP_KEY_ID || "",
+      keyId: process.env.RAZORPAY_MODE === "live" ? process.env.RZP_KEY_ID : process.env.RZP_TEST_KEY_ID,
     };
 
     if (idempotencyKey) {

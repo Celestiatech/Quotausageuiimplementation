@@ -197,8 +197,82 @@ function setMode(mode) {
 function openDashboard() {
   chrome.storage.local.get("assistOrigin", ({ assistOrigin }) => {
     const base = assistOrigin || DEFAULT_ORIGIN;
-    chrome.tabs.create({ url: `${base}/dashboard/interview-assistant` });
+    chrome.tabs.create({ url: `${base}/dashboard/client-assistant` });
   });
+}
+
+async function sendToDashboard() {
+  const question = el("question").value.trim();
+  if (!question) {
+    showError("Please enter the question first.");
+    return;
+  }  hide("errorBox");
+  setBusy(true);
+  el("resultLabel").textContent = "Dashboard answer";
+  el("resultText").textContent = "Sending to the Client Assistant page…";
+  show("resultBox");
+  el("meta").textContent = "";
+
+  const stored = await getStored();
+  const origin = stored.assistOrigin || DEFAULT_ORIGIN;
+
+  const tabs = await chrome.tabs.query({});
+  let target = null;
+  for (const tab of tabs) {
+    if (tab.id != null && tab.url && tab.url.startsWith(origin) && tab.url.includes("/dashboard")) {
+      target = tab;
+      break;
+    }
+  }
+
+  if (!target) {
+    // Open the Client Assistant page, then retry once it has loaded.
+    const created = await chrome.tabs.create({ url: `${origin}/dashboard/client-assistant` });
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+    target = created;
+  }
+
+  try {
+    const resp = await chrome.tabs.sendMessage(target.id, {
+      type: "CP_ASSIST_ASK_PAGE",
+      question,
+      tone: state.tone,
+    });
+    if (!resp || resp.ok === false) {
+      throw new Error((resp && resp.error) || "No response from the dashboard page.");
+    }
+    el("resultText").textContent = resp.draft || "No answer returned.";
+    el("meta").textContent = providerMeta(resp);
+  } catch (err) {
+    el("resultText").textContent = "";
+    hide("resultBox");
+    showError(
+      "Couldn't reach the dashboard page: " +
+        (err && err.message ? err.message : String(err)) +
+        ". Open the Client Assistant page first, then retry.",
+    );
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function openFloatingListener() {
+  hide("errorBox");
+  el("listenerSpinner").classList.remove("hidden");
+  el("listenOpenLabel").textContent = "Opening…";
+  try {
+    await chrome.storage.local.set({ autoOpenListener: true });
+    const resp = await chrome.runtime.sendMessage({ type: "CP_ASSIST_OPEN_LISTENER" });
+    if (!resp || resp.ok === false) {
+      throw new Error("No response from the background script.");
+    }
+    window.close();
+  } catch (err) {
+    el("listenOpenLabel").textContent = "Open floating listener";
+    showError("Couldn't open the listener window: " + (err && err.message ? err.message : String(err)));
+  } finally {
+    el("listenerSpinner").classList.add("hidden");
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -206,7 +280,9 @@ document.addEventListener("DOMContentLoaded", () => {
   el("tone").addEventListener("change", (e) => { state.tone = e.target.value; });
   el("modeAssist").addEventListener("click", () => setMode("assist"));
   el("modeScore").addEventListener("click", () => setMode("score"));
+  el("listenOpenBtn").addEventListener("click", () => void openFloatingListener());
   el("runBtn").addEventListener("click", () => void run());
+  el("sendDashBtn").addEventListener("click", () => void sendToDashboard());
   el("copyBtn").addEventListener("click", () => void copyResult());
   el("openDash").addEventListener("click", openDashboard);
   el("refreshBtn").addEventListener("click", async () => {

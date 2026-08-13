@@ -1062,7 +1062,7 @@ export default function HROutreach() {
             <Target className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-gray-900">HR Direct Outreach</h1>
+            <h1 className="text-sm font-bold text-gray-900">HR Direct Outreach</h1>
             <p className="text-sm text-gray-500">Collect HR contacts from LinkedIn & send personalized emails</p>
           </div>
           {/* Extension status badge */}
@@ -1101,7 +1101,7 @@ export default function HROutreach() {
               <Puzzle className="w-7 h-7 text-white" />
             </div>
             <div className="flex-1">
-              <h3 className="font-bold text-gray-900 text-lg">Install the HR Outreach Extension</h3>
+              <h3 className="font-bold text-gray-900 text-xs">Install the HR Outreach Extension</h3>
               <p className="text-sm text-gray-600 mt-1">
                 The extension scrapes LinkedIn hiring posts for HR contacts — name, title, company, email & phone number.
                 It auto-collects up to 100 contacts and syncs them to this dashboard.
@@ -1397,7 +1397,7 @@ export default function HROutreach() {
                       <Icon className="w-4 h-4 text-white" />
                     </div>
                   </div>
-                  <div className="text-3xl font-bold text-gray-900">{value}</div>
+                  <div className="text-xs font-bold text-gray-900">{value}</div>
                   <div className="text-xs text-gray-500 mt-1">
                     {stats.total > 0 ? `${Math.round((value / stats.total) * 100)}%` : '—'} of total
                   </div>
@@ -1608,7 +1608,7 @@ export default function HROutreach() {
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center mx-auto mb-4">
                   <Users className="w-8 h-8 text-indigo-400" />
                 </div>
-                <p className="font-semibold text-gray-600 text-lg">No contacts yet</p>
+                <p className="font-semibold text-gray-600 text-xs">No contacts yet</p>
                 <p className="text-sm text-gray-400 mt-1 max-w-sm mx-auto">
                   Use the extension to collect from LinkedIn, or add manually using the button above
                 </p>

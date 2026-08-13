@@ -4,6 +4,222 @@ let countDown;
 
 const SKIP_WORDS = ['Diversity', 'diversity', 'DIVERSITY', 'Survey', 'survey', 'SURVEY'];
 
+let localAnswersCache = null;
+let localAnswersCacheTs = 0;
+
+function normalizeAnswerKey(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[\t\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+async function getLocalAnswers() {
+    const now = Date.now();
+    if (localAnswersCache && now - localAnswersCacheTs < 15000) return localAnswersCache;
+    let settings = {};
+    try {
+        const res = await chrome.runtime.sendMessage({type: "CP_LOAD_SETTINGS"});
+        if (res && res.ok && res.settings && typeof res.settings === 'object') {
+            settings = res.settings;
+        }
+    } catch (e) {
+        console.error('getLocalAnswers:', e);
+    }
+    localAnswersCache = settings;
+    localAnswersCacheTs = now;
+    return settings;
+}
+
+function findSavedAnswer(settings, ...keys) {
+    const sa = (settings && settings.screeningAnswers && typeof settings.screeningAnswers === 'object') ? settings.screeningAnswers : {};
+    const candidates = [];
+    for (const key of keys) {
+        candidates.push(key);
+        candidates.push(normalizeAnswerKey(key));
+    }
+    for (const candidate of candidates) {
+        const direct = sa[candidate];
+        if (direct !== undefined && direct !== null && String(direct).trim() !== '') return String(direct).trim();
+    }
+    for (const [k, v] of Object.entries(sa)) {
+        if (!v || String(v).trim() === '') continue;
+        for (const key of keys) {
+            if (normalizeAnswerKey(k) === normalizeAnswerKey(key)) return String(v).trim();
+        }
+    }
+    return '';
+}
+
+function parseNumeric(value) {
+    const cleaned = String(value || '').replace(/[^0-9.-]/g, '');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? null : num;
+}
+
+function toLpaString(value) {
+    const num = parseNumeric(value);
+    if (num === null) return '';
+    const lpa = num >= 100000 ? num / 100000 : num;
+    return String(Math.round(lpa * 10) / 10);
+}
+
+function matchOption(options, value) {
+    const list = Array.isArray(options) ? options : [];
+    if (!list.length) return '';
+    const valueNorm = normalizeAnswerKey(value);
+    const num = parseNumeric(value);
+
+    let exact = list.find(o => normalizeAnswerKey(o) === valueNorm);
+    if (exact) return exact;
+
+    if (num !== null) {
+        for (const o of list) {
+            const nums = String(o || '').match(/\d+(\.\d+)?/g);
+            if (!nums || !nums.length) continue;
+            const parsed = nums.map(Number);
+            if (parsed.length >= 2) {
+                const lo = Math.min(...parsed);
+                const hi = Math.max(...parsed);
+                if (num >= lo && num <= hi) return o;
+            } else if (parsed.length === 1) {
+                if (Math.abs(parsed[0] - num) <= 0.01) return o;
+            }
+        }
+    }
+
+    let contains = list.find(o => valueNorm && normalizeAnswerKey(o).includes(valueNorm));
+    if (contains) return contains;
+    contains = list.find(o => valueNorm && valueNorm.includes(normalizeAnswerKey(o)) && normalizeAnswerKey(o).length > 2);
+    return contains || '';
+}
+
+function resolveLocalAnswer(field, settings) {
+    const label = normalizeAnswerKey(field.label || '');
+    if (!label) return '';
+
+    if (label.includes('english')) {
+        const eng = findSavedAnswer(settings, 'english_proficiency', 'English Proficiency', 'What is your English Proficiency?', 'englishProficiency');
+        if (eng) {
+            const e = normalizeAnswerKey(eng);
+            if (/professional|advanced|fluent|native/.test(e)) return 'Fluent/Native-like or Advanced';
+            if (/intermediate|beginner|basic/.test(e)) return 'Intermediate or Beginner';
+            return eng;
+        }
+    }
+
+    const isSalary = /salary|ctc|compensation|lpa|\bpay\b/.test(label);
+    if (isSalary) {
+        const isCurrent = /current|existing|present/.test(label);
+        const isExpected = /expected|minimum|min|desired|target|asking/.test(label);
+        let raw = '';
+        if (isCurrent) {
+            raw = findSavedAnswer(settings, 'what_is_your_current_ctc', 'What is your Current CTC?', 'What is your current salary?', 'current_ctc', 'currentCtc', 'Current CTC', 'current salary', 'current_salary');
+        }
+        if (isExpected) {
+            raw = findSavedAnswer(settings, 'what_is_your_expected_ctc', 'What is your Expected CTC?', 'What is your Expected Salary?', 'expected_ctc', 'expectedCtc', 'Expected CTC', 'Desired Salary', 'desired_salary', 'expected_salary');
+        }
+        if (raw) {
+            const lpa = toLpaString(raw);
+            if (lpa) {
+                if (Array.isArray(field.options) && field.options.length) {
+                    const matched = matchOption(field.options, lpa);
+                    if (matched) return matched;
+                }
+                return lpa;
+            }
+        }
+    }
+
+    if (label.includes('start date') || label.includes('available to start') || label.includes('earliest start')) {
+        const notice = findSavedAnswer(settings, 'what_is_your_notice_period', 'What Is Your Notice Period', 'What is your Notice Period?', 'notice_period_days', 'noticePeriodDays', 'notice period', 'Notice Period');
+        const days = parseNumeric(notice);
+        if (days !== null) {
+            const option = days <= 0 ? 'I am available immediately' : days <= 30 ? 'In 30 days' : days <= 45 ? 'In 45 days' : 'More than 45 days';
+            if (Array.isArray(field.options) && field.options.length) {
+                const matched = matchOption(field.options, option);
+                if (matched) return matched;
+            }
+            return option;
+        }
+    }
+
+    if (label.includes('notice') && label.includes('period')) {
+        const notice = findSavedAnswer(settings, 'what_is_your_notice_period', 'What Is Your Notice Period', 'What is your Notice Period?', 'notice_period_days', 'noticePeriodDays', 'notice period', 'Notice Period');
+        const days = parseNumeric(notice);
+        if (days !== null) {
+            const asText = days <= 0 ? '0' : String(days);
+            if (Array.isArray(field.options) && field.options.length) {
+                const matched = matchOption(field.options, asText);
+                if (matched) return matched;
+            }
+            return asText;
+        }
+    }
+
+    if (label.includes('experience')) {
+        const techs = ['golang', 'go', 'python', 'react', 'node', 'java', 'javascript', 'typescript', 'aws', 'sql', 'docker', 'kubernetes', 'system design', 'ai', 'api', 'graphql'];
+        for (const tech of techs) {
+            if (label.includes(tech)) {
+                const saved = findSavedAnswer(
+                    settings,
+                    `what_is_your_experience_with_${tech.replace(/[^a-z]/g, '')}`,
+                    `What is your experience with ${tech}?`,
+                    `What is your experience with ${tech}`,
+                    `experience with ${tech}`,
+                    `${tech} experience`
+                );
+                if (saved) {
+                    if (Array.isArray(field.options) && field.options.length) {
+                        const matched = matchOption(field.options, saved);
+                        if (matched) return matched;
+                    }
+                    return String(saved).trim();
+                }
+            }
+        }
+    }
+
+    if (label.includes('acknowledge') || label.includes('read and understand') || label.includes('confirm')) {
+        if (Array.isArray(field.options) && field.options.length) {
+            const yes = field.options.find(o => normalizeAnswerKey(o) === 'yes') || field.options.find(o => /^yes$/i.test(o));
+            if (yes) return yes;
+        }
+        return 'Yes';
+    }
+
+    if (label.includes('negotiation')) {
+        const saved = findSavedAnswer(settings, 'open to negotiation', 'open_to_negotiation', 'negotiable');
+        if (saved) {
+            if (Array.isArray(field.options) && field.options.length) {
+                const matched = matchOption(field.options, saved);
+                if (matched) return matched;
+            }
+            return String(saved).trim();
+        }
+        return '';
+    }
+
+    return '';
+}
+
+function isLocalAnswerable(field) {
+    const label = normalizeAnswerKey(field.label || '');
+    if (!label) return false;
+    return (
+        label.includes('english') ||
+        /salary|ctc|compensation|lpa|\bpay\b/.test(label) ||
+        label.includes('start date') ||
+        (label.includes('notice') && label.includes('period')) ||
+        label.includes('experience') ||
+        label.includes('acknowledge') ||
+        label.includes('read and understand') ||
+        label.includes('confirm') ||
+        label.includes('negotiation')
+    );
+}
+
 function getHeaderHeight() {
     return document.querySelector('.main-header').clientHeight;
 }
@@ -157,12 +373,29 @@ async function apply(data) {
 
     let fieldNum = 0;
     let field;
+    const localSettings = await getLocalAnswers();
     while (fieldNum < fields.length) {
         field = fields[fieldNum];
 
         try {
 
-            let {value, completed} = await getFieldValueByFieldName(field.label);
+            let value = null;
+            let completed = false;
+
+            if (isLocalAnswerable(field)) {
+                value = resolveLocalAnswer(field, localSettings);
+                if (value) {
+                    completed = true;
+                    console.log('Lever local answer applied:', field.label, value);
+                }
+            }
+
+            if (!value) {
+                const result = await getFieldValueByFieldName(field.label);
+                value = result.value;
+                completed = result.completed;
+            }
+
 
             if (completed) {
                 fieldNum += 1;

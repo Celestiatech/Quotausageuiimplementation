@@ -3,11 +3,27 @@
   "name": "Live Answer Assistant",
   "version": "1.0.0",
   "description": "Draft polished answers to live client and interview questions using your AutoApply CV dashboard resume context.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "system.display", "clipboardWrite"],
   "host_permissions": [
     "http://localhost:3000/*",
     "https://autoapplycv.in/*"
   ],
+  "commands": {
+    "open-listener": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "MacCtrl+Shift+L"
+      },
+      "description": "Open the floating listener window"
+    },
+    "toggle-listen": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Space",
+        "mac": "MacCtrl+Shift+Space"
+      },
+      "description": "Start or stop listening"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },

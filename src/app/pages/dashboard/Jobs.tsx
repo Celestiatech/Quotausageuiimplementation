@@ -1,54 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
-  Search,
-  MapPin,
   Briefcase,
-  Clock,
-  SlidersHorizontal,
   RefreshCw,
   AlertCircle,
   Play,
-  XCircle,
   FileText,
   CheckCircle2,
   Download,
   ExternalLink,
+  ChevronDown,
   Link2,
+  Bot,
+  Send,
+  ListChecks,
+  Save,
+  Loader2,
+  Clock,
+  User,
+  Sliders,
+  List,
+  type LucideIcon,
 } from "lucide-react";
-import { useParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
 import { getExtensionProviderConfig } from "src/lib/extension-providers";
 import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
 import { syncProfileToExtension as syncProfileToExtensionBase } from "src/lib/sync-profile";
+import { toQuestionKey as mapQuestionKey } from "src/lib/screening-question-map";
 import {
   DASHBOARD_TOUR_EVENT_NAME,
   DASHBOARD_TOUR_JOBS_EXTENSION,
   consumeDashboardTourRequest,
 } from "src/lib/dashboard-tour";
-
-type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
-
-type JobLog = {
-  id: string;
-  step: string;
-  level: "info" | "warn" | "error";
-  message: string;
-  createdAt: string;
-};
-
-type AutoApplyJob = {
-  id: string;
-  status: JobStatus;
-  createdAt: string;
-  updatedAt: string;
-  attempts: number;
-  maxAttempts: number;
-  errorMessage?: string | null;
-  criteriaJson: Record<string, unknown>;
-  logs?: JobLog[];
-};
 
 type ScreeningAnswerType = "text" | "boolean" | "number" | "choice" | "multiselect";
 type ScreeningAnswerSource = "manual" | "linkedin_import" | "resume_parse" | "extension_capture" | "system";
@@ -82,6 +66,29 @@ type ExtensionStatus = {
   }>;
   screeningAnswers?: Record<string, string>;
 };
+
+type JobBoard = {
+  id: string;
+  name: string;
+  url: string;
+  provider: "linkedin" | "indeed" | "other";
+};
+
+const JOB_BOARDS: JobBoard[] = [
+  { id: "linkedin", name: "LinkedIn", url: "https://www.linkedin.com/jobs/", provider: "linkedin" },
+  { id: "indeed", name: "Indeed", url: "https://www.indeed.com/jobs", provider: "indeed" },
+  { id: "lever", name: "Lever", url: "https://jobs.lever.co/", provider: "other" },
+  { id: "greenhouse", name: "Greenhouse", url: "https://job-boards.greenhouse.io/", provider: "other" },
+  { id: "workday", name: "Workday", url: "https://www.myworkdayjobs.com/", provider: "other" },
+  { id: "glassdoor", name: "Glassdoor", url: "https://www.glassdoor.com/Job/jobs.htm", provider: "other" },
+  { id: "monster", name: "Monster", url: "https://www.monster.com/jobs/search", provider: "other" },
+  { id: "workable", name: "Workable", url: "https://www.workable.com/", provider: "other" },
+  { id: "recruitee", name: "Recruitee", url: "https://www.recruitee.com/", provider: "other" },
+  { id: "ashby", name: "Ashby", url: "https://jobs.ashbyhq.com/", provider: "other" },
+  { id: "breezy", name: "Breezy", url: "https://breezy.hr/", provider: "other" },
+  { id: "wellfound", name: "Wellfound", url: "https://wellfound.com/jobs", provider: "other" },
+  { id: "smartrecruiters", name: "SmartRecruiters", url: "https://jobs.smartrecruiters.com/", provider: "other" },
+];
 
 type ScreeningAnswerApiItem = {
   questionKey: string;
@@ -124,24 +131,10 @@ type ScreeningFieldView = {
   source: "site" | "extension" | "pending" | "merged";
 };
 
-function statusBadge(status: JobStatus) {
-  if (status === "succeeded") return "bg-green-100 text-green-700";
-  if (status === "running") return "bg-blue-100 text-blue-700";
-  if (status === "queued") return "bg-purple-100 text-purple-700";
-  if (status === "cancelled") return "bg-gray-100 text-gray-700";
-  return "bg-red-100 text-red-700";
-}
-
-const JOB_REASON_CODE_LABELS: Record<string, string> = {
-  NO_APPLY_BUTTON: "No Easy Apply button",
-  APPLIED_CACHE_HIT: "Already applied earlier",
-  RECENTLY_RETRIED: "Skipped: recently retried",
-  EASY_APPLY_MODAL_MISSING: "Easy Apply modal not found",
-  MAX_SKIPS_REACHED: "Skipped: max skip limit reached",
-};
 const EXT_BRIDGE_PING_TIMEOUT_MS = 4500;
 const EXT_BRIDGE_ACK_TIMEOUT_MS = 5000;
 const EXTENSION_PACKAGE_PREFIX = "AutoApplyCVExtensionVersion";
+const PREFERENCE_LOCATION_KEYS = new Set(["cp_pref_search_locations", "cp_pref_search_location", "preferred_locations"]);
 const YES_NO_OPTIONS = ["No", "Yes"];
 const WORK_MODE_OPTIONS = ["Remote", "Hybrid", "Onsite", "Flexible"];
 const JOB_TYPE_OPTIONS = ["Full-time", "Part-time", "Contract", "Internship", "Temporary"];
@@ -170,36 +163,6 @@ function formatExtensionPackageFileName(version: string) {
   return `${formatExtensionPackageName(version)}.zip`;
 }
 
-function formatReasonCode(value: unknown) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const upper = raw.toUpperCase();
-  if (JOB_REASON_CODE_LABELS[upper]) return JOB_REASON_CODE_LABELS[upper];
-  return raw
-    .toLowerCase()
-    .split(/[_\s]+/g)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function getJobReason(job: AutoApplyJob | null) {
-  if (!job) return "";
-  const reasonCode = String(job.criteriaJson?.reasonCode || "").trim();
-  if (reasonCode) return formatReasonCode(reasonCode);
-  return String(job.criteriaJson?.reason || "").trim();
-}
-
-function displayJobStatus(job: AutoApplyJob | null) {
-  if (!job) return "";
-  if (job.status === "cancelled" && getJobReason(job)) return "skipped";
-  return job.status;
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleString();
-}
-
 function normalizeLabel(value: string) {
   return String(value || "")
     .toLowerCase()
@@ -208,72 +171,8 @@ function normalizeLabel(value: string) {
     .trim();
 }
 
-function hasWords(label: string, words: string[]) {
-  return words.every((word) => label.includes(word));
-}
-
 function toQuestionKey(value: string) {
-  const normalized = normalizeLabel(value);
-  if (!normalized) return "";
-  if (normalized === "full name" || normalized === "full legal name" || normalized === "legal name") {
-    return "full_name";
-  }
-  if (normalized === "first name" || normalized === "given name") return "first_name";
-  if (normalized === "last name" || normalized === "family name" || normalized === "surname") {
-    return "last_name";
-  }
-  if (normalized === "email" || normalized === "email address") return "email_address";
-  if (
-    normalized === "phone" ||
-    normalized === "phone number" ||
-    normalized === "mobile phone" ||
-    normalized === "mobile phone number" ||
-    normalized === "contact number"
-  ) {
-    return "phone_number";
-  }
-  if (normalized.includes("linkedin") && (normalized.includes("profile") || normalized.includes("url"))) {
-    return "linkedin_url";
-  }
-  if (
-    normalized.includes("portfolio") &&
-    (normalized.includes("url") || normalized.includes("website") || normalized.includes("site") || normalized === "portfolio")
-  ) {
-    return "portfolio_url";
-  }
-  if (
-    normalized === "current city" ||
-    normalized === "city" ||
-    normalized.includes("location city") ||
-    normalized.includes("city state")
-  ) {
-    return "current_city";
-  }
-  if (normalized === "state" || normalized === "state region" || normalized === "region") {
-    return "state_region";
-  }
-  if (normalized === "country") return "country";
-  if (
-    (hasWords(normalized, ["authorized", "work"]) ||
-      hasWords(normalized, ["eligible", "work"]) ||
-      hasWords(normalized, ["work", "authorization"])) &&
-    (normalized.includes("united states") || normalized.includes("u s") || normalized.includes("us"))
-  ) {
-    return "work_authorization_us";
-  }
-  if (hasWords(normalized, ["visa", "sponsorship"]) || hasWords(normalized, ["require", "sponsorship"])) {
-    return "visa_sponsorship_required";
-  }
-  if (normalized.includes("onsite") || normalized.includes("on site")) return "comfortable_working_onsite";
-  if (normalized.includes("commut")) return "comfortable_commuting";
-  if (normalized.includes("relocat")) return "comfortable_relocation";
-  if ((normalized.includes("salary") || normalized.includes("compensation") || normalized.includes("pay")) && normalized.includes("expect")) {
-    return "expected_salary";
-  }
-  if (normalized.includes("year") && normalized.includes("experience")) return "years_of_experience";
-  if (normalized.includes("bachelor") && normalized.includes("degree")) return "bachelors_degree_completed";
-  if (normalized.includes("english") && normalized.includes("proficiency")) return "english_proficiency";
-  return normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 160);
+  return mapQuestionKey(value);
 }
 
 function labelFromQuestionKey(questionKey: string) {
@@ -410,6 +309,9 @@ function compactAnswer(value: string, max = 1000) {
   return String(value || "").trim().slice(0, max);
 }
 
+const syncedExtensionAnswersModule = new Map<string, string>();
+let authSyncBlockedModule = false;
+
 function inferAnswerType(answer: string): ScreeningAnswerType {
   const value = String(answer || "").trim();
   if (!value) return "text";
@@ -433,6 +335,12 @@ const SCREENING_SECTION_META: Record<ScreeningFieldCategory, { title: string; su
     title: "Custom Screening Answers",
     subtitle: "Extra question/answer pairs captured from LinkedIn applications.",
   },
+};
+
+const CATEGORY_ICON: Record<ScreeningFieldCategory, { icon: LucideIcon; bg: string }> = {
+  profile: { icon: User, bg: "bg-gradient-to-br from-indigo-500 to-violet-600" },
+  preferences: { icon: Sliders, bg: "bg-gradient-to-br from-blue-500 to-cyan-500" },
+  screening: { icon: List, bg: "bg-gradient-to-br from-purple-500 to-pink-500" },
 };
 
 const SCREENING_FIELD_CATALOG: ScreeningCatalogField[] = [
@@ -597,10 +505,6 @@ function lookupCatalogField(...values: Array<string | undefined>) {
 
 export default function Jobs() {
   const { user } = useAuth();
-  const params = useParams();
-  const selectedProvider = params.provider === "indeed" ? "indeed" : "linkedin";
-  const showLinkedIn = selectedProvider === "linkedin";
-  const showIndeed = selectedProvider === "indeed";
   const extensionZipUrl = String(process.env.NEXT_PUBLIC_EXTENSION_ZIP_URL || "/api/public/extension-download").trim();
   const linkedInExtensionZipUrl = `${extensionZipUrl}?provider=linkedin`;
   const indeedExtensionZipUrl = `${extensionZipUrl}?provider=indeed`;
@@ -609,7 +513,7 @@ export default function Jobs() {
   ).trim();
   const [extensionRelease, setExtensionRelease] = useState<ExtensionReleaseMeta>({
     version: "1.1.3",
-    displayName: "AutoApply CV LinkedIn Copilot",
+    displayName: "AutoApply CV Copilot",
     downloadFileName: formatExtensionPackageFileName("1.1.3"),
     downloadBaseName: formatExtensionPackageName("1.1.3"),
   });
@@ -619,15 +523,8 @@ export default function Jobs() {
     downloadFileName: "AutoApplyCVIndeedExtensionVersion0.1.0.zip",
     downloadBaseName: "AutoApplyCVIndeedExtensionVersion0.1.0",
   });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [jobs, setJobs] = useState<AutoApplyJob[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [installMessage, setInstallMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
   const [checkingExtension, setCheckingExtension] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({
     installed: false,
@@ -642,6 +539,13 @@ export default function Jobs() {
   const storeLinkButtonRef = useRef<HTMLAnchorElement | null>(null);
   const syncProfileButtonRef = useRef<HTMLButtonElement | null>(null);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
+  const [jobBoardsOpen, setJobBoardsOpen] = useState(false);
+  const [selectedBoardOpen, setSelectedBoardOpen] = useState(false);
+  const [selectedBoardId, setSelectedBoardId] = useState<string>("linkedin");
+  const activeBoard = useMemo(
+    () => JOB_BOARDS.find((board) => board.id === selectedBoardId) || JOB_BOARDS[0],
+    [selectedBoardId],
+  );
   const [installGuideStepIndex, setInstallGuideStepIndex] = useState(0);
   const [installGuideCompletedIds, setInstallGuideCompletedIds] = useState<string[]>([]);
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
@@ -652,6 +556,8 @@ export default function Jobs() {
   const [syncingSettings, setSyncingSettings] = useState(false);
   const syncedAnswerRef = useRef<Record<string, string>>({});
   const reportedIssueRef = useRef<Record<string, string>>({});
+  const autoSavedPendingKeysRef = useRef<Set<string>>(new Set());
+  const pendingAnswersRefreshRef = useRef<string>("");
   const linkedInProviderStatus = extensionStatus.providers?.linkedin;
   const indeedProviderStatus = extensionStatus.providers?.indeed;
   const linkedInInstalled = Boolean(
@@ -659,6 +565,11 @@ export default function Jobs() {
       (extensionStatus.installed && !indeedProviderStatus),
   );
   const indeedInstalled = Boolean(indeedProviderStatus?.installed);
+  const linkedInReady = Boolean(
+    linkedInInstalled &&
+      extensionStatus.linkedIn?.hasLinkedInTab &&
+      extensionStatus.linkedIn?.hasJobsTab,
+  );
   const linkedInInstalledVersion =
     linkedInProviderStatus?.version || extensionStatus.version || extensionRelease.version;
   const indeedInstalledVersion =
@@ -666,12 +577,6 @@ export default function Jobs() {
   const installedPackageName = linkedInInstalled
     ? formatExtensionPackageName(linkedInInstalledVersion || "")
     : "";
-  const [criteria, setCriteria] = useState({
-    keywords: "",
-    location: "",
-    company: "",
-    easyApplyOnly: true,
-  });
 
   const resolveKnownAnswer = (
     questionKey: string,
@@ -679,14 +584,85 @@ export default function Jobs() {
     extensionAnswers: Record<string, string> = {},
   ) => {
     const normalizedLabel = normalizeLabel(questionLabel);
-    return (
+    const direct =
       String(answerDrafts[questionKey] || "").trim() ||
       String(siteScreeningAnswers[questionKey] || "").trim() ||
       String(siteScreeningAnswers[normalizedLabel] || "").trim() ||
       String(extensionAnswers[questionKey] || "").trim() ||
-      String(extensionAnswers[normalizedLabel] || "").trim() ||
-      ""
+      String(extensionAnswers[normalizedLabel] || "").trim();
+    if (direct) return direct;
+    for (const source of [siteScreeningAnswers, extensionAnswers]) {
+      for (const [rawKey, rawValue] of Object.entries(source)) {
+        const value = String(rawValue || "").trim();
+        if (!value) continue;
+        if (toQuestionKey(rawKey) === questionKey) return value;
+        if (normalizeLabel(rawKey) === normalizedLabel) return value;
+      }
+    }
+    return resolveProfileAnswer(questionKey, questionLabel);
+  };
+
+  const resolveProfileAnswer = (questionKey: string, questionLabel: string): string => {
+    const canonical = toQuestionKey(questionKey || questionLabel);
+    const label = normalizeLabel(questionLabel || "");
+    const nameParts = String(user?.name || "").trim().split(/\s+/).filter(Boolean);
+    const profile: Record<string, string> = {
+      full_name: String(user?.name || "").trim(),
+      first_name: nameParts[0] || "",
+      last_name: nameParts.slice(1).join(" ") || "",
+      email_address: String(user?.email || "").trim(),
+      phone_number: String(user?.phone || "").trim(),
+      current_city: String(user?.currentCity || "").trim(),
+      address_line: String(user?.addressLine || "").trim(),
+      linkedin_url: String(user?.linkedinUrl || "").trim(),
+      portfolio_url: String(user?.portfolioUrl || "").trim(),
+    };
+    if (profile[canonical]) return profile[canonical];
+    if (canonical.includes("linkedin") && profile.linkedin_url) return profile.linkedin_url;
+    if ((canonical.includes("city") || canonical.includes("location")) && profile.current_city) return profile.current_city;
+    if ((canonical.includes("email") || canonical.includes("mail")) && profile.email_address) return profile.email_address;
+    if (label.includes("linkedin") && profile.linkedin_url) return profile.linkedin_url;
+    if ((label.includes("city") || label.includes("location") || label.includes("address")) && profile.current_city) return profile.current_city;
+    if (label.includes("portfolio") && profile.portfolio_url) return profile.portfolio_url;
+
+    const mergedAnswers: Record<string, string> = {
+      ...(extensionStatus.screeningAnswers || {}),
+      ...(answerDrafts || {}),
+      ...siteScreeningAnswers,
+    };
+    const preferenceAliases: Record<string, string[]> = {
+      years_of_experience: ["cp_pref_years_of_experience", "careerpilot_preference_years_of_experience", "years_of_experience"],
+      work_authorization_us: ["cp_pref_us_citizenship", "careerpilot_preference_us_work_authorization", "us_work_authorization"],
+      visa_sponsorship_required: ["cp_pref_require_visa", "careerpilot_preference_require_visa", "careerpilot_preference_need_visa_sponsorship"],
+      comfortable_working_onsite: ["cp_pref_work_mode", "remote_onsite_hybrid", "work_mode_preference"],
+      comfortable_commuting: ["cp_pref_work_mode", "remote_onsite_hybrid", "work_mode_preference"],
+      comfortable_relocation: ["cp_pref_work_mode", "remote_onsite_hybrid", "work_mode_preference"],
+      expected_salary: ["cp_pref_desired_salary", "cp_pref_salary_min", "desired_salary"],
+      cp_pref_confidence_level: ["cp_pref_confidence_level", "careerpilot_preference_confidence_level", "confidence_level"],
+      current_city: ["current_city", "your_location_city_state", "location_city"],
+      state_region: ["state_region", "state", "your_location_state"],
+      country: ["country", "preferred_countries"],
+      linkedin_url: ["linkedin_url", "linkedin_profile"],
+      portfolio_url: ["portfolio_url", "website_url"],
+      address_line: ["address_line", "street_address"],
+    };
+    const aliasKeys = preferenceAliases[canonical];
+    if (aliasKeys) {
+      const aliasValue = pickFirstNonEmpty(mergedAnswers, aliasKeys);
+      if (aliasValue) return aliasValue;
+    }
+    const relatedByPrefix = Object.entries(preferenceAliases).find(
+      ([key]) => canonical.includes(key) || key.includes(canonical)
     );
+    if (relatedByPrefix) {
+      const relatedValue = pickFirstNonEmpty(mergedAnswers, relatedByPrefix[1]);
+      if (relatedValue) return relatedValue;
+    }
+    if (canonical.startsWith("what_is_your_experience_with_")) {
+      const totalYears = pickFirstNonEmpty(mergedAnswers, ["cp_pref_years_of_experience", "careerpilot_preference_years_of_experience", "years_of_experience"]);
+      if (totalYears) return totalYears;
+    }
+    return "";
   };
 
   const remoteWorkModeSelected = useMemo(() => {
@@ -712,17 +688,17 @@ export default function Jobs() {
       {
         id: "install-store",
         title: "Install from Chrome Web Store",
-        body: "Open the AutoApply CV LinkedIn Copilot page on the Chrome Web Store and click Add to Chrome.",
+        body: "Open the AutoApply CV Copilot page on the Chrome Web Store and click Add to Chrome.",
         note: extensionStoreUrl
           ? "The extension installs automatically after you confirm the permission prompt."
-          : "You can also search for 'AutoApply CV LinkedIn Copilot' on the Chrome Web Store.",
+          : "You can also search for 'AutoApply CV Copilot' on the Chrome Web Store.",
         actionLabel: "Open Chrome Web Store",
         targetRef: storeLinkButtonRef,
       },
       {
         id: "pin-extension",
         title: "Pin extension",
-        body: "Click the puzzle piece icon in Chrome's toolbar, find AutoApply CV LinkedIn Extension, and pin it for easy access.",
+        body: "Click the puzzle piece icon in Chrome's toolbar, find AutoApply CV Copilot, and pin it for easy access.",
         image: "/Install guide/Pin extension.png",
         imageAlt: "Chrome toolbar showing the extensions menu with pin option",
         targetRef: checkExtensionButtonRef,
@@ -742,6 +718,78 @@ export default function Jobs() {
     [checkingExtension, extensionStoreUrl, installedPackageName],
   );
 
+  const applySavedAnswersLocally = (payloads: Array<{
+    questionKey: string;
+    questionLabel: string;
+    answer: string;
+    answerType: ScreeningAnswerType;
+  }>) => {
+    for (const p of payloads) {
+      syncedAnswerRef.current[p.questionKey] = p.answer;
+      syncedExtensionAnswersModule.set(p.questionKey, p.answer);
+      setSiteScreeningAnswers((prev) => ({
+        ...prev,
+        [p.questionKey]: p.answer,
+        [normalizeLabel(p.questionLabel)]: p.answer,
+      }));
+      setSiteQuestionLabels((prev) => ({
+        ...prev,
+        [p.questionKey]: p.questionLabel,
+      }));
+      setSiteAnswerTypes((prev) => ({
+        ...prev,
+        [p.questionKey]: p.answerType,
+      }));
+    }
+  };
+
+  const saveAnswersToSiteBulk = async (
+    items: Array<{
+      questionKey: string;
+      questionLabel: string;
+      answer: string;
+      answerType: ScreeningAnswerType;
+      source: ScreeningAnswerSource;
+    }>,
+  ) => {
+    const payloads = items
+      .map((it) => ({
+        questionKey: String(it.questionKey || "").trim(),
+        questionLabel: String(it.questionLabel || "").trim() || labelFromQuestionKey(it.questionKey),
+        answer: compactAnswer(it.answer),
+        answerType: it.answerType || inferAnswerType(it.answer),
+        source: it.source || "manual",
+        lastUsed: new Date().toISOString(),
+      }))
+      .filter((p) => p.questionKey && p.answer);
+    if (!payloads.length) return;
+
+    const res = await fetch("/api/user/screening/answers", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payloads.length === 1 ? payloads[0] : payloads),
+    });
+    if (res.status === 401) {
+      authSyncBlockedModule = true;
+      const err = new Error("Unauthorized");
+      err.name = "AuthError";
+      throw err;
+    }
+    if (!res.ok) {
+      let message = "Failed to save answers on site";
+      try {
+        const data = await res.json();
+        if (data?.message) message = String(data.message);
+      } catch {
+        // Keep default error.
+      }
+      throw new Error(message);
+    }
+
+    applySavedAnswersLocally(payloads);
+  };
+
   const saveAnswerToSite = async (
     questionKey: string,
     questionLabel: string,
@@ -759,37 +807,7 @@ export default function Jobs() {
     };
     if (!payload.questionKey || !payload.answer) return;
 
-    const res = await fetch("/api/user/screening/answers", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      let message = "Failed to save answer on site";
-      try {
-        const data = await res.json();
-        if (data?.message) message = String(data.message);
-      } catch {
-        // Keep default error.
-      }
-      throw new Error(message);
-    }
-
-    setSiteScreeningAnswers((prev) => ({
-      ...prev,
-      [payload.questionKey]: payload.answer,
-      [normalizeLabel(payload.questionLabel)]: payload.answer,
-    }));
-    setSiteQuestionLabels((prev) => ({
-      ...prev,
-      [payload.questionKey]: payload.questionLabel,
-    }));
-    setSiteAnswerTypes((prev) => ({
-      ...prev,
-      [payload.questionKey]: payload.answerType,
-    }));
-    syncedAnswerRef.current[payload.questionKey] = payload.answer;
+    await saveAnswersToSiteBulk([payload]);
   };
 
   const loadSiteScreeningAnswers = async () => {
@@ -813,6 +831,7 @@ export default function Jobs() {
           labelMap[questionKey] = questionLabel;
         }
         syncedAnswerRef.current[questionKey] = answer;
+        syncedExtensionAnswersModule.set(questionKey, compactAnswer(answer));
       }
       setSiteScreeningAnswers(answerMap);
       setSiteQuestionLabels(labelMap);
@@ -835,6 +854,7 @@ export default function Jobs() {
   };
 
   const syncExtensionAnswersToSite = async (status: ExtensionStatus) => {
+    if (authSyncBlockedModule) return;
     const extensionAnswers = status.screeningAnswers || {};
     const entries = Object.entries(extensionAnswers);
     if (!entries.length) return;
@@ -846,22 +866,48 @@ export default function Jobs() {
       pendingLabelMap.set(key, String(pending.questionLabel || "").trim() || labelFromQuestionKey(key));
     }
 
+    const knownSite = new Map<string, string>();
+    for (const [k, v] of Object.entries(siteScreeningAnswers)) {
+      const answer = compactAnswer(String(v || "").trim());
+      if (!answer) continue;
+      const key = toQuestionKey(k);
+      if (!key) continue;
+      knownSite.set(key, answer);
+    }
+
+    const toSync: Array<{
+      questionKey: string;
+      questionLabel: string;
+      answer: string;
+      answerType: ScreeningAnswerType;
+      source: ScreeningAnswerSource;
+    }> = [];
     for (const [rawKey, rawValue] of entries) {
-      const answer = String(rawValue || "").trim();
+      const answer = compactAnswer(String(rawValue || "").trim());
       if (!answer) continue;
       const canonicalKey = toQuestionKey(rawKey);
       if (!canonicalKey) continue;
-      if (syncedAnswerRef.current[canonicalKey] === answer) continue;
+      // Never push captured preference-location values (e.g. a bot-captured "Mohali")
+      // back to the site as extension_capture; those would clobber the user's manually
+      // saved preferred locations. Mirror the extension's own preference-location guard
+      // in content.js and the read-side guard in the screening answers API.
+      if (PREFERENCE_LOCATION_KEYS.has(canonicalKey)) continue;
+      if (syncedExtensionAnswersModule.get(canonicalKey) === answer) continue;
+      if (knownSite.get(canonicalKey) === answer) continue;
       const questionLabel =
         pendingLabelMap.get(canonicalKey) ||
         siteQuestionLabels[canonicalKey] ||
         labelFromQuestionKey(canonicalKey);
       const catalogField = lookupCatalogField(canonicalKey, rawKey, questionLabel);
       const answerType = catalogField?.answerType || siteAnswerTypes[canonicalKey] || inferAnswerType(answer);
+      toSync.push({ questionKey: canonicalKey, questionLabel, answer, answerType, source: "extension_capture" });
+    }
+
+    if (toSync.length) {
       try {
-        await saveAnswerToSite(canonicalKey, questionLabel, answer, answerType, "extension_capture");
+        await saveAnswersToSiteBulk(toSync);
       } catch {
-        // Keep running if one answer fails to sync.
+        // Keep running if the batch sync fails; it will retry on the next poll.
       }
     }
   };
@@ -911,12 +957,31 @@ export default function Jobs() {
       await syncExtensionAnswersToSite(result);
 
       if (result.pendingQuestions?.length) {
+        const pendingSig = JSON.stringify(
+          (result.pendingQuestions as any[])
+            .map((q: any) => String(q.questionKey || q.questionLabel || "").trim())
+            .sort(),
+        );
+        if (pendingAnswersRefreshRef.current !== pendingSig) {
+          pendingAnswersRefreshRef.current = pendingSig;
+          void loadSiteScreeningAnswers();
+        }
         const presetDrafts: Record<string, string> = {};
+        const autoSaveQueue: Array<{ q: any; answer: string }> = [];
         for (const q of result.pendingQuestions) {
           const normalizedKey = toQuestionKey(q.questionKey || q.questionLabel || "");
           if (!normalizedKey) continue;
-          const preset = resolveKnownAnswer(normalizedKey, q.questionLabel, result.screeningAnswers || {});
+          let preset = resolveKnownAnswer(normalizedKey, q.questionLabel, result.screeningAnswers || {});
+          if (!preset) {
+            const profileAnswer = resolveProfileAnswer(q.questionKey, q.questionLabel);
+            if (profileAnswer) preset = profileAnswer;
+          }
           if (preset) presetDrafts[normalizedKey] = preset;
+
+          if (preset && !autoSavedPendingKeysRef.current.has(normalizedKey)) {
+            autoSavedPendingKeysRef.current.add(normalizedKey);
+            autoSaveQueue.push({ q, answer: preset });
+          }
 
           if (q.questionKey && q.questionLabel) {
             const issueSignature = `${q.questionKey}::${String(q.validationMessage || "").trim()}`;
@@ -947,6 +1012,15 @@ export default function Jobs() {
             }
             return changed ? next : prev;
           });
+        }
+        if (autoSaveQueue.length) {
+          for (const { q, answer } of autoSaveQueue) {
+            const pendingCatalog = lookupCatalogField(q.questionKey || q.questionLabel, q.questionLabel);
+            const pendingKey = toQuestionKey(q.questionKey || q.questionLabel);
+            const pendingAnswerType =
+              pendingCatalog?.answerType || siteAnswerTypes[pendingKey] || inferAnswerType(answer);
+            void saveAnswerForQuestion(q.questionKey, q.questionLabel, pendingAnswerType, answer).catch(() => {});
+          }
         }
       }
     } finally {
@@ -992,6 +1066,8 @@ export default function Jobs() {
 
       // These preferences are stored as screening answers on the site, but the extension expects them as settings.
       const preferredSearchLocation = pickFirstNonEmpty(mergedAnswers, [
+        "cp_pref_search_locations",
+        "preferred_locations",
         "cp_pref_search_location",
         "careerpilot_preference_search_location",
       ]);
@@ -1003,9 +1079,9 @@ export default function Jobs() {
       const preferredSearchTerms = parseSearchTermsInput(preferredSearchTermsRaw);
       const preferredLocations = parsePreferenceListInput(
         pickFirstNonEmpty(mergedAnswers, [
+          "preferred_locations",
           "cp_pref_search_locations",
           "cp_pref_search_location",
-          "preferred_locations",
         ]),
       );
       const preferredJobTypes = parsePreferenceListInput(
@@ -1036,14 +1112,32 @@ export default function Jobs() {
         "cp_pref_us_citizenship",
         "careerpilot_preference_us_work_authorization",
       ]);
+      const preferredSalaryMin = pickFirstNonEmpty(mergedAnswers, ["cp_pref_salary_min", "desired_salary"]);
+      const preferredSalaryMax = pickFirstNonEmpty(mergedAnswers, [
+        "cp_pref_salary_max",
+        "cp_pref_desired_salary",
+        "desired_salary",
+      ]);
 
       const screeningAnswersForSync: Record<string, string> = {};
-      for (const [rawKey, rawValue] of Object.entries(mergedAnswers)) {
+      const addSyncAnswer = (rawKey: string, rawValue: string, override = false) => {
         const answer = String(rawValue || "").trim();
-        if (!answer) continue;
+        if (!answer) return;
         const canonicalKey = toQuestionKey(rawKey);
-        if (!canonicalKey) continue;
-        screeningAnswersForSync[canonicalKey] = answer;
+        if (!canonicalKey) return;
+        const catalogField = lookupCatalogField(rawKey, "");
+        const displayedKey = catalogField?.key || canonicalKey;
+        if (!override && screeningAnswersForSync[displayedKey]) return;
+        screeningAnswersForSync[displayedKey] = answer;
+      };
+      for (const [rawKey, rawValue] of Object.entries(extensionStatus.screeningAnswers || {})) {
+        addSyncAnswer(rawKey, rawValue);
+      }
+      for (const [rawKey, rawValue] of Object.entries(siteScreeningAnswers)) {
+        addSyncAnswer(rawKey, rawValue);
+      }
+      for (const [rawKey, rawValue] of Object.entries(answerDrafts)) {
+        addSyncAnswer(rawKey, rawValue, true);
       }
       if (preferredYearsOfExperience) {
         screeningAnswersForSync["years_of_experience"] = String(preferredYearsOfExperience).trim();
@@ -1072,6 +1166,23 @@ export default function Jobs() {
         remoteModeSelected ? preferredLocations : [...preferredLocations, ...preferredCountries],
       );
 
+      console.log("[CP-LOC] dashboard sync source", {
+        resolvedSearchLocation,
+        preferredSearchLocation,
+        preferredLocations,
+        preferredCountries,
+        remoteModeSelected,
+        currentCity,
+        filterLocations,
+        raw: {
+          cp_pref_search_location: pickFirstNonEmpty(mergedAnswers, ["cp_pref_search_location", "careerpilot_preference_search_location"]),
+          preferred_locations: pickFirstNonEmpty(mergedAnswers, ["preferred_locations"]),
+          cp_pref_search_locations: pickFirstNonEmpty(mergedAnswers, ["cp_pref_search_locations"]),
+          cp_pref_preferred_countries: pickFirstNonEmpty(mergedAnswers, ["cp_pref_preferred_countries"]),
+          current_city: pickFirstNonEmpty(mergedAnswers, ["current_city", "your_location_city_state"]),
+        },
+      });
+
       const settingsPayload = {
         currentCity,
         searchLocation: resolvedSearchLocation,
@@ -1088,6 +1199,8 @@ export default function Jobs() {
         yearsOfExperienceAnswer: preferredYearsOfExperience || "",
         currentExperience: preferredYearsOfExperience ? Number.parseInt(String(preferredYearsOfExperience), 10) : -1,
         confidenceLevel: preferredConfidenceLevel || "",
+        salaryMin: preferredSalaryMin || "",
+        salaryMax: preferredSalaryMax || "",
         easyApplyOnly: true,
         debugMode: false,
         dryRun: false,
@@ -1155,10 +1268,11 @@ export default function Jobs() {
     questionKey: string,
     questionLabel: string,
     answerType?: ScreeningAnswerType,
+    explicitAnswer?: string,
   ) => {
     const canonicalKey = toQuestionKey(questionKey || questionLabel);
     const label = String(questionLabel || "").trim() || labelFromQuestionKey(canonicalKey);
-    const answer = compactAnswer(answerDrafts[canonicalKey] || answerDrafts[questionKey] || "");
+    const answer = compactAnswer(explicitAnswer || answerDrafts[canonicalKey] || answerDrafts[questionKey] || "");
     const resolvedAnswerType =
       answerType ||
       lookupCatalogField(canonicalKey, questionLabel)?.answerType ||
@@ -1224,26 +1338,183 @@ export default function Jobs() {
     }
   };
 
-  const loadJobs = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await fetch("/api/auto-apply/jobs", { credentials: "include" });
-      const data = await res.json();
-      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to fetch jobs");
-      const nextJobs = (data?.data?.jobs || []) as AutoApplyJob[];
-      setJobs(nextJobs);
-      if (!selectedJobId && nextJobs.length > 0) {
-        setSelectedJobId(nextJobs[0].id);
-      } else if (selectedJobId && !nextJobs.find((j) => j.id === selectedJobId)) {
-        setSelectedJobId(nextJobs[0]?.id || null);
+  type ChatMessage = {
+    id: string;
+    role: "assistant" | "user";
+    text: string;
+    questionKey?: string;
+    questionLabel?: string;
+    answered?: boolean;
+  };
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const chatAnswerTargetRef = useRef<{ questionKey: string; questionLabel: string } | null>(null);
+  const chatGreetedRef = useRef(false);
+  const chatAskedKeysRef = useRef<Set<string>>(new Set());
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  const firstName = String(user?.name || "").trim().split(/\s+/)[0] || "there";
+
+  const friendlyFieldPhrase = (questionLabel: string) => {
+    const lower = String(questionLabel || "").trim().toLowerCase();
+    if (lower.includes("linkedin")) return "your LinkedIn ID or profile URL";
+    if (lower.includes("location") || lower.includes("city")) return "your current city";
+    if (lower.includes("email")) return "your email address";
+    if (lower.includes("phone") || lower.includes("mobile") || lower.includes("contact number")) return "your phone number";
+    if (lower.includes("portfolio") || lower.includes("website") || lower.includes("github")) return "your portfolio or website URL";
+    if (lower.includes("name")) return "your name";
+    if (lower.includes("experience")) return "your years of experience";
+    if (lower.includes("salary") || lower.includes("compensation")) return "your expected salary";
+    if (lower.includes("visa") || lower.includes("sponsorship")) return "whether you need visa sponsorship";
+    if (lower.includes("authorization") || lower.includes("authorized")) return "your work authorization status";
+    return `the following: "${String(questionLabel || "").trim()}"`;
+  };
+
+  const appendChatMessage = (message: Omit<ChatMessage, "id">) => {
+    const id = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setChatMessages((prev) => [...prev, { id, ...message }]);
+    return id;
+  };
+
+  const askNextPendingQuestion = () => {
+    const pending = extensionStatus.pendingQuestions || [];
+    if (chatAnswerTargetRef.current) {
+      const targetKey = toQuestionKey(
+        chatAnswerTargetRef.current.questionKey || chatAnswerTargetRef.current.questionLabel || "",
+      );
+      const stillPending = targetKey && pending.some((q) => {
+        const key = toQuestionKey(q.questionKey || q.questionLabel || "");
+        return key === targetKey;
+      });
+      if (stillPending) return;
+      chatAnswerTargetRef.current = null;
+    }
+    const resumeRequired = pending.find(
+      (q) => q.questionKey === "resume_upload_required" || /resume/i.test(String(q.validationMessage || "")),
+    );
+    if (resumeRequired && !chatAskedKeysRef.current.has("resume_upload_required")) {
+      chatAskedKeysRef.current.add("resume_upload_required");
+      appendChatMessage({
+        role: "assistant",
+        text: "One more thing — please upload your resume in the LinkedIn Easy Apply profile. Copilot will auto-select the newest attached resume and continue.",
+      });
+      return;
+    }
+    const next = pending.find((q) => {
+      const key = toQuestionKey(q.questionKey || q.questionLabel || "");
+      if (!key) return false;
+      if (chatAskedKeysRef.current.has(key)) return false;
+      if (autoSavedPendingKeysRef.current.has(key)) return false;
+      const mergedAnswers = {
+        ...(extensionStatus.screeningAnswers || {}),
+        ...siteScreeningAnswers,
+      };
+      if (resolveKnownAnswer(key, q.questionLabel || "", mergedAnswers)) return false;
+      return true;
+    });
+    if (!next) return;
+    const key = toQuestionKey(next.questionKey || next.questionLabel || "");
+    chatAskedKeysRef.current.add(key);
+    chatAnswerTargetRef.current = { questionKey: next.questionKey, questionLabel: next.questionLabel };
+    const validationNote = next.validationMessage ? ` (Note: ${next.validationMessage})` : "";
+    appendChatMessage({
+      role: "assistant",
+      text: `Please send me ${friendlyFieldPhrase(next.questionLabel)}${validationNote}.`,
+      questionKey: next.questionKey,
+      questionLabel: next.questionLabel,
+    });
+  };
+
+  useEffect(() => {
+    const pending = extensionStatus.pendingQuestions || [];
+    if (!pending.length) {
+      if (chatGreetedRef.current && chatMessages.length) {
+        appendChatMessage({ role: "assistant", text: "All required fields are answered. You're good to continue!" });
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to fetch jobs");
+      chatGreetedRef.current = false;
+      return;
+    }
+    if (!chatGreetedRef.current) {
+      chatGreetedRef.current = true;
+      const mergedAnswers = {
+        ...(extensionStatus.screeningAnswers || {}),
+        ...siteScreeningAnswers,
+      };
+      const remaining = pending.filter((q) => {
+        const key = toQuestionKey(q.questionKey || q.questionLabel || "");
+        if (key === "resume_upload_required" || /resume/i.test(String(q.validationMessage || ""))) return false;
+        if (!key || chatAskedKeysRef.current.has(key) || autoSavedPendingKeysRef.current.has(key)) return false;
+        if (resolveKnownAnswer(key, q.questionLabel || "", mergedAnswers)) return false;
+        return true;
+      }).length;
+      appendChatMessage({
+        role: "assistant",
+        text:
+          `Hey ${firstName}! I need a few more details from you to finish this application. ` +
+          (remaining > 1 ? `There are ${remaining} fields left to answer. ` : "") +
+          "Just reply right here and I'll save it automatically.",
+      });
+      askNextPendingQuestion();
+      return;
+    }
+    askNextPendingQuestion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extensionStatus.pendingQuestions]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [chatMessages]);
+
+  const sendChatAnswer = async () => {
+    const answer = chatInput.trim();
+    if (!answer || chatBusy) return;
+    const target = chatAnswerTargetRef.current;
+    if (!target) return;
+    setChatInput("");
+    setChatBusy(true);
+    appendChatMessage({ role: "user", text: answer });
+    try {
+      const pendingCatalog = lookupCatalogField(target.questionKey || target.questionLabel, target.questionLabel);
+      const pendingKey = toQuestionKey(target.questionKey || target.questionLabel);
+      const pendingAnswerType =
+        pendingCatalog?.answerType || siteAnswerTypes[pendingKey] || inferAnswerType(answer);
+      await saveAnswerForQuestion(target.questionKey, target.questionLabel, pendingAnswerType, answer);
+      appendChatMessage({
+        role: "assistant",
+        text: `Got it — saved "${answer}". Thank you!`,
+        answered: true,
+      });
+      chatAnswerTargetRef.current = null;
+      window.setTimeout(() => askNextPendingQuestion(), 250);
+    } catch {
+      appendChatMessage({
+        role: "assistant",
+        text: "Sorry, I couldn't save that. Could you try sending it again?",
+      });
     } finally {
-      setLoading(false);
+      setChatBusy(false);
     }
   };
+
+  const answerablePendingQuestions = useMemo(() => {
+    const mergedAnswers: Record<string, string> = {
+      ...(extensionStatus.screeningAnswers || {}),
+      ...siteScreeningAnswers,
+    };
+    const result = (extensionStatus.pendingQuestions || []).filter((q) => {
+      const key = toQuestionKey(q.questionKey || q.questionLabel || "");
+      if (!key) return false;
+      if (key === "resume_upload_required" || /resume/i.test(String(q.validationMessage || ""))) return false;
+      if (chatAskedKeysRef.current.has(key)) return false;
+      if (autoSavedPendingKeysRef.current.has(key)) return false;
+      const known = resolveKnownAnswer(key, q.questionLabel || "", mergedAnswers);
+      if (known) return false;
+      return true;
+    });
+    return result;
+  }, [extensionStatus.pendingQuestions, siteScreeningAnswers]);
 
   useEffect(() => {
     let active = true;
@@ -1280,21 +1551,12 @@ export default function Jobs() {
   }, []);
 
   useEffect(() => {
-    void loadJobs();
     void loadSiteScreeningAnswers();
     void checkExtensionStatus();
-    const jobsIntervalId = setInterval(() => {
-      void loadJobs();
-    }, 10000);
-    const siteAnswersIntervalId = setInterval(() => {
-      void loadSiteScreeningAnswers();
-    }, 12000);
     const extensionIntervalId = setInterval(() => {
       void checkExtensionStatus();
-    }, 4000);
+    }, 20000);
     return () => {
-      clearInterval(jobsIntervalId);
-      clearInterval(siteAnswersIntervalId);
       clearInterval(extensionIntervalId);
     };
   }, []);
@@ -1308,23 +1570,6 @@ export default function Jobs() {
     void syncProfileToExtension();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extensionStatus.installed, user?.id, Object.keys(siteScreeningAnswers).length, Object.keys(extensionStatus.screeningAnswers || {}).length]);
-
-  const filteredJobs = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return jobs;
-    return jobs.filter((job) => {
-      const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "").toLowerCase();
-      const company = String(job.criteriaJson?.company || "").toLowerCase();
-      const location = String(job.criteriaJson?.location || job.criteriaJson?.currentCity || "").toLowerCase();
-      return (
-        job.id.toLowerCase().includes(q) ||
-        title.includes(q) ||
-        company.includes(q) ||
-        location.includes(q) ||
-        job.status.toLowerCase().includes(q)
-      );
-    });
-  }, [jobs, searchQuery]);
 
   const screeningSections = useMemo(() => {
     const merged = new Map<string, ScreeningFieldView>();
@@ -1459,73 +1704,6 @@ export default function Jobs() {
       .filter((section) => section.fields.length > 0);
   }, [remoteWorkModeSelected, siteScreeningAnswers, siteQuestionLabels, siteAnswerTypes, extensionStatus.pendingQuestions, extensionStatus.screeningAnswers]);
 
-  const selectedJob = jobs.find((j) => j.id === selectedJobId) || null;
-
-  const submitAutoApply = async () => {
-    try {
-      setSubmitting(true);
-      setError("");
-      const consentRes = await fetch("/api/user/consent", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          consentType: "auto_apply_terms",
-          version: "v1",
-        }),
-      });
-      const consentData = await consentRes.json();
-      if (!consentRes.ok || !consentData?.success) {
-        throw new Error(consentData?.message || "Consent recording failed");
-      }
-
-      const body = {
-        criteria: {
-          keywords: criteria.keywords.trim(),
-          title: criteria.keywords.trim(),
-          location: criteria.location.trim(),
-          currentCity: criteria.location.trim(),
-          company: criteria.company.trim(),
-          easyApplyOnly: criteria.easyApplyOnly,
-        },
-      };
-      const res = await fetch("/api/auto-apply/jobs", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to queue auto-apply job");
-      await loadJobs();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to queue auto-apply job");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const cancelSelected = async () => {
-    if (!selectedJob) return;
-    try {
-      setCancelling(true);
-      setError("");
-      const res = await fetch(`/api/auto-apply/jobs/${selectedJob.id}/cancel`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "Cancelled from dashboard" }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) throw new Error(data?.message || "Failed to cancel job");
-      await loadJobs();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to cancel job");
-    } finally {
-      setCancelling(false);
-    }
-  };
-
   const openExtensionStore = () => {
     if (typeof window === "undefined") return;
     setError("");
@@ -1635,26 +1813,40 @@ export default function Jobs() {
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {showLinkedIn ? "LinkedIn Jobs Extension" : "Indeed Jobs Extension Beta"}
+          <h1 className="text-xs font-bold text-gray-900 mb-2">
+            AutoApply CV Copilot
           </h1>
-          <p className="text-gray-600">Showing {jobs.length} real jobs from your backend queue</p>
+          <p className="text-gray-600">Configure your extension, sync answers, and auto-apply across all job boards.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => void loadJobs()}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-          <button
-            onClick={() => void submitAutoApply()}
-            disabled={submitting}
-            className="px-6 py-3 gradient-primary text-white rounded-xl font-semibold shadow-premium hover:shadow-premium-lg transition-all disabled:opacity-60"
-          >
-            {submitting ? "Queuing..." : "Create Auto-Apply Job"}
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setSelectedBoardOpen((prev) => !prev)}
+              className="px-4 py-2 bg-white border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm"
+            >
+              <ExternalLink className="w-4 h-4 text-sky-600" />
+              {activeBoard.name}
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </button>
+            {selectedBoardOpen ? (
+              <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-gray-200 bg-white shadow-lg z-30 py-2">
+                {JOB_BOARDS.map((board) => (
+                  <button
+                    key={board.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedBoardId(board.id);
+                      setSelectedBoardOpen(false);
+                    }}
+                    className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${board.id === selectedBoardId ? "font-semibold text-sky-700 bg-sky-50" : "text-gray-700"}`}
+                  >
+                    {board.name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       </motion.div>
 
@@ -1678,11 +1870,9 @@ export default function Jobs() {
                 <Play className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Extension Workspace</h2>
+                <h2 className="text-xs font-bold text-gray-900">Extension Workspace</h2>
                 <p className="text-sm text-gray-500">
-                  {showLinkedIn
-                    ? "Install, verify, and sync your LinkedIn extension"
-                    : "Install, verify, and sync your Indeed extension"}
+                  Install, verify, and sync your AutoApply CV Copilot across LinkedIn, Indeed, and 10+ job boards.
                 </p>
               </div>
             </div>
@@ -1696,163 +1886,224 @@ export default function Jobs() {
                 <RefreshCw className={`w-4 h-4 ${checkingExtension ? "animate-spin" : ""}`} />
                 {checkingExtension ? "Checking..." : "Check Status"}
               </button>
-              {showLinkedIn ? (
-                <button
-                  type="button"
-                  onClick={openInstallGuide}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all inline-flex items-center gap-2 shadow-sm ${
-                    linkedInInstalled
-                      ? "bg-sky-600 text-white hover:bg-sky-700"
-                      : "bg-sky-600 text-white hover:bg-sky-700 ring-2 ring-sky-300 ring-offset-1"
-                  }`}
-                >
-                  <Play className="w-4 h-4" />
-                  Install Guide
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={openInstallGuide}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all inline-flex items-center gap-2 shadow-sm ${
+                  linkedInInstalled
+                    ? "bg-sky-600 text-white hover:bg-sky-700"
+                    : "bg-sky-600 text-white hover:bg-sky-700 ring-2 ring-sky-300 ring-offset-1"
+                }`}
+              >
+                <Play className="w-4 h-4" />
+                Install Guide
+              </button>
             </div>
           </div>
         </div>
 
         <div className="p-6 space-y-6">
           {/* Extension Info + Status */}
-          {showLinkedIn ? (
-            <div className="space-y-4">
-              {/* Status Cards */}
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className={`rounded-xl border p-4 transition-all ${linkedInInstalled ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {linkedInInstalled ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Extension</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {linkedInInstalled ? "Detected and ready" : "Not installed yet"}
-                  </p>
+          <div className="space-y-4">
+            {/* Status Cards */}
+            {activeBoard.provider === "linkedin" ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className={`rounded-xl border p-4 transition-all ${linkedInReady ? "border-emerald-200 bg-emerald-50" : linkedInInstalled ? "border-sky-200 bg-sky-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {linkedInReady ? (
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
+                  ) : linkedInInstalled ? (
+                    <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center"><Download className="w-3.5 h-3.5 text-sky-600" /></div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
+                  )}
+                  <span className="text-sm font-semibold text-gray-900">{activeBoard.name} Extension</span>
                 </div>
-                <div className={`rounded-xl border p-4 transition-all ${extensionStatus.linkedIn?.hasLinkedInTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {extensionStatus.linkedIn?.hasLinkedInTab ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">LinkedIn</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {extensionStatus.linkedIn?.hasLinkedInTab ? "Signed in and open" : "Open linkedin.com first"}
-                  </p>
-                </div>
-                <div className={`rounded-xl border p-4 transition-all ${extensionStatus.linkedIn?.hasJobsTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {extensionStatus.linkedIn?.hasJobsTab ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Jobs Tab</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {extensionStatus.linkedIn?.hasJobsTab ? "LinkedIn Jobs page open" : "Open LinkedIn Jobs page"}
-                  </p>
-                </div>
+                <p className="text-xs text-gray-600">
+                  {linkedInReady ? "Ready" : linkedInInstalled ? "Installed" : "Not installed yet"}
+                </p>
               </div>
+              <div className={`rounded-xl border p-4 transition-all ${extensionStatus.linkedIn?.hasLinkedInTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {extensionStatus.linkedIn?.hasLinkedInTab ? (
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
+                  )}
+                  <span className="text-sm font-semibold text-gray-900">{activeBoard.name}</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  {extensionStatus.linkedIn?.hasLinkedInTab ? "Signed in and open" : "Open linkedin.com first"}
+                </p>
+              </div>
+              <div className={`rounded-xl border p-4 transition-all ${extensionStatus.linkedIn?.hasJobsTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {extensionStatus.linkedIn?.hasJobsTab ? (
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
+                  )}
+                  <span className="text-sm font-semibold text-gray-900">Jobs Tab</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  {extensionStatus.linkedIn?.hasJobsTab ? "LinkedIn Jobs page open" : "Open LinkedIn Jobs page"}
+                </p>
+              </div>
+            </div>
+            ) : activeBoard.provider === "indeed" ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className={`rounded-xl border p-4 transition-all ${indeedInstalled ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {indeedInstalled ? (
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
+                  )}
+                  <span className="text-sm font-semibold text-gray-900">{activeBoard.name} Extension</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  {indeedInstalled ? `Detected v${indeedInstalledVersion}` : "Load the Indeed ZIP"}
+                </p>
+              </div>
+              <div className={`rounded-xl border p-4 transition-all ${extensionStatus.indeed?.hasIndeedTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {extensionStatus.indeed?.hasIndeedTab ? (
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
+                  )}
+                  <span className="text-sm font-semibold text-gray-900">{activeBoard.name}</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  {extensionStatus.indeed?.hasIndeedTab ? "Indeed tab open" : "Open indeed.com first"}
+                </p>
+              </div>
+              <div className={`rounded-xl border p-4 transition-all ${extensionStatus.indeed?.hasJobsTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {extensionStatus.indeed?.hasJobsTab ? (
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
+                  )}
+                  <span className="text-sm font-semibold text-gray-900">Jobs Tab</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  {extensionStatus.indeed?.hasJobsTab ? "Indeed Jobs open" : "Open Indeed Jobs page"}
+                </p>
+              </div>
+            </div>
+            ) : (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className={`rounded-xl border p-4 transition-all ${extensionStatus.installed ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {extensionStatus.installed ? (
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
+                  )}
+                  <span className="text-sm font-semibold text-gray-900">AutoApply CV Copilot</span>
+                </div>
+                <p className="text-xs text-gray-600">
+                  {extensionStatus.installed ? "Installed and connected" : "Not installed yet"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 transition-all">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center"><ExternalLink className="w-3.5 h-3.5 text-sky-600" /></div>
+                  <span className="text-sm font-semibold text-gray-900">{activeBoard.name}</span>
+                </div>
+                <p className="text-xs text-gray-600">Open {activeBoard.name} to apply from this board</p>
+              </div>
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 transition-all">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center"><Play className="w-3.5 h-3.5 text-sky-600" /></div>
+                  <span className="text-sm font-semibold text-gray-900">Auto-apply ready</span>
+                </div>
+                <p className="text-xs text-gray-600">Supported by the AutoApply CV Copilot extension</p>
+              </div>
+            </div>
+            )}
 
-              {/* Quick Actions */}
-              <div className="flex flex-wrap gap-2">
+            {/* Quick Actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setJobBoardsOpen((prev) => !prev)}
+                  className="px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 transition-all inline-flex items-center gap-2 shadow-sm"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Open Job Boards
+                </button>
+                {jobBoardsOpen ? (
+                  <div className="absolute left-0 top-full mt-2 w-56 rounded-xl border border-gray-200 bg-white shadow-lg z-20 py-2">
+                    {JOB_BOARDS.map((board) => (
+                      <a
+                        key={board.name}
+                        href={board.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setJobBoardsOpen(false)}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        {board.name}
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              {!linkedInInstalled ? (
                 <a
                   ref={storeLinkButtonRef}
                   href={extensionStoreUrl || "#"}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 transition-all inline-flex items-center gap-2 shadow-sm"
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm"
                 >
                   <Download className="w-4 h-4" />
                   Install from Chrome Web Store
                 </a>
-                <a
-                  ref={openLinkedInJobsButtonRef}
-                  href="https://www.linkedin.com/jobs/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Open LinkedIn Jobs
-                </a>
-                <button
-                  ref={syncProfileButtonRef}
-                  onClick={() => void syncProfileToExtension()}
-                  disabled={syncingSettings}
-                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm disabled:opacity-60"
-                >
-                  <Link2 className="w-4 h-4" />
-                  {syncingSettings ? "Syncing..." : "Sync Profile"}
-                </button>
-              </div>
+              ) : null}
+              <a
+                ref={openLinkedInJobsButtonRef}
+                href={activeBoard.url}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open {activeBoard.name} Jobs
+              </a>
+              {activeBoard.provider === "indeed" ? (
+              <a
+                href={indeedExtensionZipUrl}
+                download={indeedExtensionRelease.downloadFileName || undefined}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                Download Indeed ZIP
+              </a>
+              ) : null}
+              <button
+                ref={syncProfileButtonRef}
+                onClick={() => void syncProfileToExtension()}
+                disabled={syncingSettings}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm disabled:opacity-60"
+              >
+                <Link2 className="w-4 h-4" />
+                {syncingSettings ? "Syncing..." : "Sync Profile"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void checkExtensionStatus()}
+                disabled={checkingExtension}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm disabled:opacity-60"
+              >
+                <RefreshCw className={`w-4 h-4 ${checkingExtension ? "animate-spin" : ""}`} />
+                Refresh Status
+              </button>
             </div>
-          ) : null}
-
-          {showIndeed ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className={`rounded-xl border p-4 transition-all ${indeedInstalled ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {indeedInstalled ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Extension</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {indeedInstalled ? `Detected v${indeedInstalledVersion}` : "Load the Indeed ZIP"}
-                  </p>
-                </div>
-                <div className={`rounded-xl border p-4 transition-all ${extensionStatus.indeed?.hasIndeedTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {extensionStatus.indeed?.hasIndeedTab ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Indeed</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {extensionStatus.indeed?.hasIndeedTab ? "Indeed tab open" : "Open indeed.com first"}
-                  </p>
-                </div>
-                <div className={`rounded-xl border p-4 transition-all ${extensionStatus.indeed?.hasJobsTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {extensionStatus.indeed?.hasJobsTab ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Jobs Tab</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {extensionStatus.indeed?.hasJobsTab ? "Indeed Jobs open" : "Open Indeed Jobs page"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <a href={indeedExtensionZipUrl} download={indeedExtensionRelease.downloadFileName || undefined} className="px-4 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 transition-all inline-flex items-center gap-2 shadow-sm">
-                  <Download className="w-4 h-4" /> Download ZIP
-                </a>
-                <a href="https://www.indeed.com/jobs" target="_blank" rel="noreferrer" className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm">
-                  <ExternalLink className="w-4 h-4" /> Open Indeed Jobs
-                </a>
-                <button type="button" onClick={() => void checkExtensionStatus()} disabled={checkingExtension} className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm disabled:opacity-60">
-                  <RefreshCw className={`w-4 h-4 ${checkingExtension ? "animate-spin" : ""}`} /> Refresh Status
-                </button>
-              </div>
-            </div>
-          ) : null}
+          </div>
 
           {installMessage ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
@@ -1861,342 +2112,217 @@ export default function Jobs() {
             </div>
           ) : null}
 
-          {showLinkedIn ? (
-            <ExtensionInstallGuide
-              open={installGuideOpen}
-              steps={installGuideSteps}
-              currentStepIndex={installGuideStepIndex}
-              completedStepIds={installGuideCompletedIds}
-              onClose={closeInstallGuide}
-              onNext={nextInstallGuideStep}
-              onPrevious={previousInstallGuideStep}
-              onStepDone={markInstallGuideStepDone}
-              onJumpToStep={jumpToInstallGuideStep}
-              onStepAction={runInstallGuideStepAction}
-            />
-          ) : null}
+          <ExtensionInstallGuide
+            open={installGuideOpen}
+            steps={installGuideSteps}
+            currentStepIndex={installGuideStepIndex}
+            completedStepIds={installGuideCompletedIds}
+            onClose={closeInstallGuide}
+            onNext={nextInstallGuideStep}
+            onPrevious={previousInstallGuideStep}
+            onStepDone={markInstallGuideStepDone}
+            onJumpToStep={jumpToInstallGuideStep}
+            onStepAction={runInstallGuideStepAction}
+          />
 
         {(extensionStatus.pendingQuestions || []).length > 0 ? (
-          <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
-            <h3 className="font-semibold text-gray-900">Action Needed: Answer Required Fields</h3>
-            {(extensionStatus.pendingQuestions || []).map((q) => {
-              const pendingKey = toQuestionKey(q.questionKey || q.questionLabel);
-              const pendingCatalog = lookupCatalogField(q.questionKey || q.questionLabel, q.questionLabel);
-              const pendingDraftValue = answerDrafts[pendingKey] || "";
-              const pendingAnswerType = pendingCatalog?.answerType || siteAnswerTypes[pendingKey] || inferAnswerType(pendingDraftValue);
-              const hasValidationMessage = Boolean(q.validationMessage);
-              return (
-                <div
-                  key={q.questionKey}
-                  className={`rounded-xl border p-4 ${
-                    hasValidationMessage ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
-                  }`}
-                >
-                  <div className="text-sm font-semibold text-gray-900">{q.questionLabel}</div>
-                  {q.validationMessage ? (
-                    <div className="mt-1 text-xs font-medium text-red-700">{q.validationMessage}</div>
-                  ) : null}
-                  {(q.questionKey === "resume_upload_required" || /resume/i.test(String(q.validationMessage || ""))) ? (
-                    <div className="text-xs text-blue-700 mt-2">
-                      Upload resume in LinkedIn Easy Apply profile. Copilot will auto-select the newest attached resume.
-                    </div>
-                  ) : null}
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <div className="flex-1">
-                      <AnswerValueEditor
-                        answerType={pendingAnswerType}
-                        value={pendingDraftValue}
-                        onChange={(value) =>
-                          setAnswerDrafts((prev) => ({
-                            ...prev,
-                            [pendingKey]: value,
-                          }))
-                        }
-                        options={withCurrentSelectOption(pendingCatalog?.options || (pendingAnswerType === "boolean" ? YES_NO_OPTIONS : []), pendingDraftValue)}
-                        presets={pendingCatalog?.presets || []}
-                        placeholder="Enter answer to reuse in next applications"
-                        variant="amber"
-                      />
-                    </div>
-                    <button
-                      onClick={() => void saveAnswerForQuestion(q.questionKey, q.questionLabel, pendingAnswerType)}
-                      disabled={savingAnswerKey === pendingKey}
-                      className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
-                    >
-                      {savingAnswerKey === pendingKey ? "Saving..." : "Save"}
-                    </button>
-                  </div>
+          <div className="mt-6 border-t border-gray-200 pt-4">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="bg-purple-600 px-4 py-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+                  <Bot className="w-5 h-5 text-white" />
                 </div>
-              );
-            })}
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Copilot Assistant</h3>
+                  <p className="text-xs text-purple-100">A few more details are needed to continue</p>
+                </div>
+                <span className="ml-auto text-xs font-medium text-purple-100 bg-white/20 px-2.5 py-1 rounded-full">
+                  {chatMessages.length > 0
+                    ? `${answerablePendingQuestions.length} required`
+                    : "Required fields"}
+                </span>
+              </div>
+
+              <div className="h-80 overflow-y-auto px-4 py-4 space-y-3 bg-gray-50">
+                {chatMessages.length === 0 ? (
+                  <div className="flex items-start gap-2">
+                    <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                      <Bot className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-3 py-2 text-sm text-gray-700 max-w-[85%]">
+                      Gathering the required fields…
+                    </div>
+                  </div>
+                ) : (
+                  chatMessages.map((msg) => (
+                    <div key={msg.id} className={`flex items-start gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
+                      {msg.role === "assistant" ? (
+                        <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                          <Bot className="w-4 h-4 text-purple-600" />
+                        </div>
+                      ) : null}
+                      <div
+                        className={`px-3 py-2 text-sm max-w-[80%] break-words ${
+                          msg.role === "assistant"
+                            ? "bg-white border border-gray-200 rounded-2xl rounded-tl-sm text-gray-700"
+                            : "bg-purple-600 rounded-2xl rounded-tr-sm text-white"
+                        }`}
+                      >
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {chatBusy ? (
+                  <div className="text-xs text-gray-400 flex items-center gap-2">
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Saving your answer…
+                  </div>
+                ) : null}
+                <div ref={chatEndRef} />
+              </div>
+
+              <div className="border-t border-gray-200 px-4 py-3 bg-white">
+                <div className="flex gap-2">
+                  <input
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void sendChatAnswer();
+                    }}
+                    placeholder="Type your answer here and press Enter…"
+                    disabled={chatBusy || !chatAnswerTargetRef.current}
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
+                  />
+                  <button
+                    onClick={() => void sendChatAnswer()}
+                    disabled={chatBusy || !chatInput.trim()}
+                    className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {chatBusy ? "Saving…" : "Send"}
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2">
+                  Type your answer (e.g. your LinkedIn URL) and press Enter — Copilot saves it and continues automatically.
+                </p>
+              </div>
+            </div>
           </div>
         ) : null}
 
         {screeningSections.length > 0 ? (
-          <div className="mt-6 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-bold text-gray-900">Saved Screening Answers</h3>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  Synced from onboarding and extension — used in Easy Apply forms
-                </p>
+          <div className="mt-3 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-gradient-to-r from-indigo-50/80 to-purple-50/80 border border-indigo-100/60 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center shadow-md shrink-0">
+                  <ListChecks className="w-4 h-4 text-white" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Saved Screening Answers</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Synced from onboarding and extension — used in Easy Apply forms
+                  </p>
+                </div>
               </div>
-              <div className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
+              <span className="text-xs font-semibold text-purple-700 bg-white border border-purple-100 px-2.5 py-1 rounded-full shadow-sm">
                 {screeningSections.reduce((count, section) => count + section.fields.length, 0)} fields
-              </div>
+              </span>
             </div>
 
-            {screeningSections.map((section) => (
-              <div key={section.category} className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-                <div className="bg-gray-50 px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-900">{section.title}</h4>
-                    <p className="text-xs text-gray-500">{section.subtitle}</p>
-                  </div>
-                  <span className="text-xs font-medium text-gray-400">{section.fields.length} fields</span>
-                </div>
-
-                <div className="divide-y divide-gray-100">
-                  {section.fields.map((field) => {
-                    const draftValue = answerDrafts[field.questionKey] ?? field.answer;
-                    const isPending = field.source === "pending";
-                    const sourceBadge =
-                      field.source === "site"
-                        ? "Saved"
-                        : field.source === "extension"
-                          ? "Extension"
-                          : field.source === "pending"
-                            ? "Pending"
-                            : "Merged";
-
-                    return (
-                      <div
-                        key={field.questionKey}
-                        className={`px-5 py-4 ${isPending ? "bg-amber-50/50" : "bg-white"}`}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-900">{field.questionLabel}</span>
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                            isPending ? "bg-amber-100 text-amber-700" :
-                            field.source === "site" ? "bg-emerald-100 text-emerald-700" :
-                            "bg-gray-100 text-gray-600"
-                          }`}>
-                            {sourceBadge}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <div className="flex-1">
-                            <AnswerValueEditor
-                              answerType={field.answerType}
-                              value={draftValue}
-                              onChange={(value) =>
-                                setAnswerDrafts((prev) => ({
-                                  ...prev,
-                                  [field.questionKey]: value,
-                                }))
-                              }
-                              options={withCurrentSelectOption(field.options || (field.answerType === "boolean" ? YES_NO_OPTIONS : []), draftValue)}
-                              presets={field.presets || []}
-                              placeholder="Type answer and click Save"
-                              variant={isPending ? "amber" : "default"}
-                            />
-                          </div>
-                          <button
-                            onClick={() => void saveAnswerForQuestion(field.questionKey, field.questionLabel, field.answerType)}
-                            disabled={savingAnswerKey === field.questionKey || !String(draftValue || "").trim()}
-                            className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            {savingAnswerKey === field.questionKey ? "Saving..." : "Save"}
-                          </button>
-                        </div>
+            <div className="space-y-3">
+              {screeningSections.map((section) => {
+                const cat = CATEGORY_ICON[section.category] || CATEGORY_ICON.screening;
+                const CatIcon = cat.icon;
+                return (
+                  <div key={section.category} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 bg-gray-50/80 border-b border-gray-100">
+                      <span className={`w-7 h-7 rounded-lg ${cat.bg} flex items-center justify-center shrink-0`}>
+                        <CatIcon className="w-3.5 h-3.5 text-white" />
+                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-gray-900">{section.title}</h4>
+                        <p className="text-[11px] text-gray-500 truncate">{section.subtitle}</p>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+                      <span className="ml-auto text-[11px] font-semibold text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-full shrink-0">
+                        {section.fields.length} {section.fields.length === 1 ? "field" : "fields"}
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-gray-50">
+                      {section.fields.map((field) => {
+                        const draftValue = answerDrafts[field.questionKey] ?? field.answer;
+                        const isPending = field.source === "pending";
+                        const hasValue = Boolean(String(draftValue || "").trim());
+
+                        return (
+                          <div
+                            key={field.questionKey}
+                            className={`flex flex-wrap items-center gap-2 px-3 py-2 transition-colors ${isPending ? "bg-amber-50/60" : "bg-white"}`}
+                          >
+                            <div className="flex items-center gap-2 w-40 shrink-0 min-w-0">
+                              {isPending ? (
+                                <span className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                                  <Clock className="w-3 h-3 text-amber-600" />
+                                </span>
+                              ) : hasValue ? (
+                                <span className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                </span>
+                              ) : (
+                                <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                                </span>
+                              )}
+                              <span className="text-xs font-medium text-gray-900 truncate" title={field.questionLabel}>
+                                {field.questionLabel}
+                              </span>
+                            </div>
+                            <div className="flex-1 min-w-[160px]">
+                              <AnswerValueEditor
+                                answerType={field.answerType}
+                                value={draftValue}
+                                onChange={(value) =>
+                                  setAnswerDrafts((prev) => ({
+                                    ...prev,
+                                    [field.questionKey]: value,
+                                  }))
+                                }
+                                options={withCurrentSelectOption(field.options || (field.answerType === "boolean" ? YES_NO_OPTIONS : []), draftValue)}
+                                presets={field.presets || []}
+                                placeholder="Type answer and click Save"
+                                variant={isPending ? "amber" : "default"}
+                                compact
+                              />
+                            </div>
+                            <button
+                              onClick={() => void saveAnswerForQuestion(field.questionKey, field.questionLabel, field.answerType)}
+                              disabled={savingAnswerKey === field.questionKey || !String(draftValue || "").trim()}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-[#6366F1] to-[#A855F7] text-white text-xs font-semibold hover:opacity-90 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                            >
+                              {savingAnswerKey === field.questionKey ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="w-3 h-3" />
+                                  Save
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : null}
         </div>
       </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-white rounded-2xl p-6 border-2 border-gray-200 space-y-4"
-      >
-        <div className="flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search queued jobs by id, title, company, status..."
-              className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
-            />
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
-          >
-            <SlidersHorizontal className="w-5 h-5" />
-            Criteria
-          </button>
-        </div>
-
-        {showFilters && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="grid md:grid-cols-2 gap-4">
-            <input
-              value={criteria.keywords}
-              onChange={(e) => setCriteria((p) => ({ ...p, keywords: e.target.value }))}
-              placeholder="Keywords / title"
-              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
-            />
-            <input
-              value={criteria.company}
-              onChange={(e) => setCriteria((p) => ({ ...p, company: e.target.value }))}
-              placeholder="Company"
-              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
-            />
-            <input
-              value={criteria.location}
-              onChange={(e) => setCriteria((p) => ({ ...p, location: e.target.value }))}
-              placeholder="Location / city"
-              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
-            />
-            <label className="flex items-center gap-2 px-3">
-              <input
-                type="checkbox"
-                checked={criteria.easyApplyOnly}
-                onChange={(e) => setCriteria((p) => ({ ...p, easyApplyOnly: e.target.checked }))}
-              />
-              <span className="text-sm font-medium text-gray-700">Easy Apply only</span>
-            </label>
-          </motion.div>
-        )}
-      </motion.div>
-
-      <div className="grid lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-2 space-y-4 max-h-[800px] overflow-y-auto">
-          {loading ? <div className="text-sm text-gray-500">Loading jobs...</div> : null}
-          {!loading && filteredJobs.length === 0 ? <div className="text-sm text-gray-500">No jobs found.</div> : null}
-          {filteredJobs.map((job, index) => {
-            const company = String(job.criteriaJson?.company || "LinkedIn");
-            const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "Auto-Apply Job");
-            const location = String(job.criteriaJson?.location || job.criteriaJson?.currentCity || "N/A");
-            const reason = getJobReason(job);
-            const displayStatus = displayJobStatus(job);
-            return (
-              <motion.div
-                key={job.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.04 }}
-                onClick={() => setSelectedJobId(job.id)}
-                className={`bg-white rounded-2xl p-6 border-2 cursor-pointer transition-all duration-300 ${
-                  selectedJobId === job.id ? "border-purple-400 shadow-xl" : "border-gray-200 hover:border-purple-300 hover:shadow-lg"
-                }`}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center font-bold text-purple-700">
-                      {company.charAt(0)}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900">{title}</h3>
-                      <p className="text-sm text-gray-600">{company}</p>
-                    </div>
-                  </div>
-                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge(job.status)}`}>{displayStatus}</div>
-                </div>
-                {reason ? (
-                  <div className="mb-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">
-                    Reason: {reason}
-                  </div>
-                ) : null}
-                <div className="space-y-2 text-sm">
-                  {location && location !== "N/A" ? (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <MapPin className="w-4 h-4" />
-                      {location}
-                    </div>
-                  ) : null}
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Clock className="w-4 h-4" />
-                    {formatDate(job.createdAt)}
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="lg:col-span-3 bg-white rounded-2xl p-8 border-2 border-gray-200 max-h-[800px] overflow-y-auto sticky top-0"
-        >
-          {!selectedJob ? (
-            <div className="text-sm text-gray-500">Select a job to view details.</div>
-          ) : (
-            <>
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{String(selectedJob.criteriaJson?.title || selectedJob.criteriaJson?.keywords || "Auto-Apply Job")}</h2>
-                  <p className="text-sm text-gray-600 mt-2">Job ID: {selectedJob.id}</p>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${statusBadge(selectedJob.status)}`}>{displayJobStatus(selectedJob)}</div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-purple-50 rounded-xl p-4">
-                  <div className="text-xs uppercase text-purple-700 font-semibold mb-1">Created</div>
-                  <div className="text-sm text-gray-900">{formatDate(selectedJob.createdAt)}</div>
-                </div>
-              </div>
-
-              {getJobReason(selectedJob) ? (
-                <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
-                  Skipped reason: {getJobReason(selectedJob)}
-                </div>
-              ) : null}
-
-              {selectedJob.errorMessage ? (
-                <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{selectedJob.errorMessage}</div>
-              ) : null}
-
-              <div className="flex gap-4 mt-8 pt-6 border-t border-gray-200">
-                <button
-                  onClick={() => void submitAutoApply()}
-                  disabled={submitting}
-                  className="flex-1 px-6 py-3 gradient-primary text-white rounded-xl font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  <Play className="w-4 h-4" />
-                  {submitting ? "Queuing..." : "Queue New Job"}
-                </button>
-                <button
-                  onClick={() => void cancelSelected()}
-                  disabled={
-                    cancelling ||
-                    selectedJob.status === "running" ||
-                    selectedJob.status === "succeeded" ||
-                    selectedJob.status === "failed" ||
-                    selectedJob.status === "dead_letter" ||
-                    selectedJob.status === "cancelled"
-                  }
-                  className="px-6 py-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-semibold transition-colors disabled:opacity-60 flex items-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  {cancelling ? "Cancelling..." : "Cancel Job"}
-                </button>
-              </div>
-            </>
-          )}
-        </motion.div>
-      </div>
     </div>
   );
 }
@@ -2216,6 +2342,7 @@ function AnswerValueEditor({
   presets = [],
   placeholder,
   variant = "default",
+  compact = false,
 }: {
   answerType: ScreeningAnswerType;
   value: string;
@@ -2224,6 +2351,7 @@ function AnswerValueEditor({
   presets?: string[];
   placeholder: string;
   variant?: "default" | "amber";
+  compact?: boolean;
 }) {
   if (answerType === "multiselect") {
     return (
@@ -2233,6 +2361,7 @@ function AnswerValueEditor({
         placeholder={placeholder}
         presets={presets}
         variant={variant}
+        compact={compact}
       />
     );
   }
@@ -2243,6 +2372,7 @@ function AnswerValueEditor({
         onChange={onChange}
         options={options}
         variant={variant}
+        compact={compact}
       />
     );
   }
@@ -2253,6 +2383,7 @@ function AnswerValueEditor({
       placeholder={placeholder}
       inputMode={answerType === "number" ? "numeric" : undefined}
       variant={variant}
+      compact={compact}
     />
   );
 }
@@ -2263,12 +2394,14 @@ function AnswerTextInput({
   placeholder,
   inputMode,
   variant = "default",
+  compact = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   inputMode?: "text" | "numeric" | "decimal" | "email" | "tel" | "url" | "search" | "none";
   variant?: "default" | "amber";
+  compact?: boolean;
 }) {
   const borderClass = variant === "amber" ? "border-amber-300 focus:border-amber-400" : "border-gray-300 focus:border-purple-400";
   return (
@@ -2277,7 +2410,7 @@ function AnswerTextInput({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       inputMode={inputMode}
-      className={`w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ${borderClass}`}
+      className={`w-full rounded-lg border bg-white outline-none ${compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm"} ${borderClass}`}
     />
   );
 }
@@ -2287,18 +2420,20 @@ function AnswerSelectInput({
   onChange,
   options,
   variant = "default",
+  compact = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: string[];
   variant?: "default" | "amber";
+  compact?: boolean;
 }) {
   const borderClass = variant === "amber" ? "border-amber-300 focus:border-amber-400" : "border-gray-300 focus:border-purple-400";
   return (
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className={`w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ${borderClass}`}
+      className={`w-full rounded-lg border bg-white outline-none ${compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm"} ${borderClass}`}
     >
       <option value="">Select</option>
       {options.map((option) => (
@@ -2316,12 +2451,14 @@ function AnswerTagInput({
   placeholder,
   presets = [],
   variant = "default",
+  compact = false,
 }: {
   values: string[];
   onChange: (values: string[]) => void;
   placeholder: string;
   presets?: string[];
   variant?: "default" | "amber";
+  compact?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const borderClass = variant === "amber" ? "border-amber-300" : "border-gray-300";
@@ -2378,19 +2515,19 @@ function AnswerTagInput({
               }
             }}
             placeholder={placeholder}
-            className="min-w-[180px] flex-1 px-1 py-1 text-sm outline-none"
+            className={`flex-1 px-1 outline-none ${compact ? "min-w-[120px] py-0.5 text-xs" : "min-w-[180px] py-1 text-sm"}`}
           />
         </div>
       </div>
 
       {presets.length ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className={`flex flex-wrap gap-1.5 ${compact ? "mt-1" : "mt-2"}`}>
           {presets.map((preset) => (
             <button
               key={preset}
               type="button"
               onClick={() => addTag(preset)}
-              className="rounded-full border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              className={`rounded-full border border-gray-300 text-gray-700 hover:bg-gray-50 ${compact ? "px-2 py-0.5 text-[11px]" : "px-2 py-1 text-xs"}`}
             >
               {preset}
             </button>

@@ -13,6 +13,7 @@ import {
 } from 'react-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { hasCompletedRequiredOnboarding } from 'src/lib/onboarding';
+import ChatWidget from '../../app/ChatWidget';
 
 // Layouts (lightweight - keep eager)
 import Root from './Root';
@@ -60,6 +61,7 @@ const Applications = lazy(() => import('./pages/dashboard/Applications'));
 const Resume = lazy(() => import('./pages/dashboard/Resume'));
 const Interview = lazy(() => import('./pages/dashboard/Interview'));
 const InterviewAssistant = lazy(() => import('./pages/dashboard/InterviewAssistant'));
+const ClientAssistant = lazy(() => import('./pages/dashboard/ClientAssistant'));
 const DashboardAnalytics = lazy(() => import('./pages/dashboard/Analytics'));
 const Settings = lazy(() => import('./pages/dashboard/Settings'));
 const Profile = lazy(() => import('./pages/dashboard/Profile'));
@@ -68,6 +70,7 @@ const Onboarding = lazy(() => import('./pages/dashboard/Onboarding'));
 const Marketing = lazy(() => import('./pages/dashboard/Marketing'));
 const HROutreach = lazy(() => import('./pages/dashboard/HROutreach'));
 const ColdEmails = lazy(() => import('./pages/dashboard/ColdEmails'));
+const ScreeningAnswers = lazy(() => import('./pages/dashboard/ScreeningAnswers'));
 
 // Admin Pages (lazy load)
 const AdminOverview = lazy(() => import('./pages/admin/Overview'));
@@ -129,6 +132,7 @@ function AppChrome() {
         <SeoManager />
       </Suspense>
       <Outlet />
+      <ChatWidget />
     </>
   );
 }
@@ -182,19 +186,20 @@ const routes = createRoutesFromElements(
       }
     >
       <Route index element={<Suspense fallback={<PageLoader />}><DashboardOverview /></Suspense>} />
-      <Route path="jobs" element={<Navigate to="linkedin" replace />} />
-      <Route path="jobs/:provider" element={<Suspense fallback={<PageLoader />}><Jobs /></Suspense>} />
+      <Route path="jobs" element={<Suspense fallback={<PageLoader />}><Jobs /></Suspense>} />
       <Route path="applications" element={<Suspense fallback={<PageLoader />}><Applications /></Suspense>} />
       <Route path="resume" element={<Suspense fallback={<PageLoader />}><Resume /></Suspense>} />
       <Route path="interview" element={<Suspense fallback={<PageLoader />}><Interview /></Suspense>} />
       <Route path="interview-assistant" element={<Suspense fallback={<PageLoader />}><InterviewAssistant /></Suspense>} />
+      <Route path="client-assistant" element={<Suspense fallback={<PageLoader />}><ClientAssistant /></Suspense>} />
       <Route path="analytics" element={<Suspense fallback={<PageLoader />}><DashboardAnalytics /></Suspense>} />
       <Route path="settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
       <Route path="profile" element={<Suspense fallback={<PageLoader />}><Profile /></Suspense>} />
       <Route path="billing" element={<Suspense fallback={<PageLoader />}><Billing /></Suspense>} />
-      <Route path="marketing" element={<Navigate to="/dashboard/marketing/email" replace />} />
+      <Route path="screening-answers" element={<Suspense fallback={<PageLoader />}><ScreeningAnswers /></Suspense>} />
+      <Route path="marketing" element={<Navigate to="/dashboard/marketing/email" replace={true}></Navigate>} />
       <Route path="marketing/email" element={<Suspense fallback={<PageLoader />}><Marketing /></Suspense>} />
-      <Route path="marketing/whatsapp" element={<Suspense fallback={<PageLoader />}><Marketing /></Suspense>} />
+      <Route path="marketing/whatsapp" element={<Suspense fallback={<PageLoader />}> <Marketing /></Suspense>} />
       <Route path="hr-outreach" element={<Suspense fallback={<PageLoader />}><HROutreach /></Suspense>} />
       <Route path="cold-emails" element={<Suspense fallback={<PageLoader />}><ColdEmails /></Suspense>} />
       <Route path="onboarding" element={<Suspense fallback={<PageLoader />}><Onboarding /></Suspense>} />

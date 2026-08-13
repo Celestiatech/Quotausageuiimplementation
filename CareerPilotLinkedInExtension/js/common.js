@@ -2460,9 +2460,19 @@ async function streamVacancyFields(fields, ustarted) {
     const simpleFields = [];
     const complexFields = [];
     
-    agentStatus.webSocketInfo = await chrome.runtime.sendMessage({type: "GET-WEBSOCKET-URL"});
+    let wsInfo = {type: 'ERROR', data: 'GET-WEBSOCKET-URL failed'};
+    try {
+        wsInfo = await chrome.runtime.sendMessage({type: "GET-WEBSOCKET-URL"});
+    } catch (e) {
+        console.error('GET-WEBSOCKET-URL:', e);
+    }
+    if (!wsInfo || typeof wsInfo !== 'object') {
+        wsInfo = {type: 'ERROR', data: 'GET-WEBSOCKET-URL failed'};
+    }
+    agentStatus.webSocketInfo = wsInfo;
 
-    if (agentStatus.webSocketInfo.data.successfulSubmissions > 2 || agentStatus.webSocketInfo.data.failedSubmissions > 2 ) {
+    const subInfo = (wsInfo.type === 'SUCCESS' && wsInfo.data) ? wsInfo.data : {};
+    if ((subInfo.successfulSubmissions || 0) > 2 || (subInfo.failedSubmissions || 0) > 2) {
         fields.forEach(field => {
             if (field.type === 'textarea') {
                 complexFields.push(field);
@@ -2507,7 +2517,6 @@ async function vacancyFieldsLoader(fields, ustarted, model) {
     }
 
     for (let loaderAttempt = 1; loaderAttempt <= STREAM_LOADER_MAX_ATTEMPTS; loaderAttempt++) {
-        let ws;
         try {
             if (ustarted && ustarted != agentStatus.applyStarted) return false;
 
@@ -2517,28 +2526,17 @@ async function vacancyFieldsLoader(fields, ustarted, model) {
             agentStatus[k_fiedsRaw] = '';
 
             const response = agentStatus.webSocketInfo;
-            if (response.type !== 'SUCCESS') {
-                throw new Error(response.data);
-            }
-            if (agentStatus.OpenAIConnectionError) {
-                agentStatus.OpenAIConnectionError = false;
-                if (agentStatus.agentMode != 'Copilot') {
-                    chrome.runtime.sendMessage({type: "UNSET-COPILOT-NOW"});
-                }
-            }
-            ws = new WebSocket(response.data.url + 'vacancy-fields-values');
+            const historyDetails = (response && response.type === 'SUCCESS' && response.data && response.data.historyDetails) ? response.data.historyDetails : {};
 
             const data = {
-                apiKey: response.data.apiKey,
-                originKey: response.data.originKey,
                 url: window.location.href,
                 fields: fields.map(({ element, ...other }) => ({
                     ...other,
                     required: Boolean(other.required),
                 })),
-                company: response.data.historyDetails.company,
-                role: response.data.historyDetails.role,
-                description: response.data.historyDetails.description
+                company: historyDetails.company,
+                role: historyDetails.role,
+                description: historyDetails.description
             }
 
             if (!data.role) {
@@ -2546,94 +2544,52 @@ async function vacancyFieldsLoader(fields, ustarted, model) {
             }
 
             if (data.url?.startsWith("https://www.monster.com/") || data.url?.startsWith("https://www.monster.ca/") || data.url?.startsWith("https://smartapply.indeed.com/") || data.url?.startsWith("https://www.linkedin.com/")) {
-                if (response.data.historyDetails?.url) {
-                    data.url = response.data.historyDetails.url;
+                if (historyDetails?.url) {
+                    data.url = historyDetails.url;
                 }
             }
 
-            ws.onopen = () => {
-                if (enableMessages) {
-                    appendStatusMessage('Sending the fields to the server for processing...');
-                }
-                logStreamEvent('ws-send', {
-                    model,
-                    attempt: loaderAttempt,
-                    fieldCount: fields.length,
-                    labels: fields.slice(0, 20).map(f => `${f.label || ''}${f.required ? '*' : ''}`),
-                    types: fields.map(f => f.type),
-                    withOptions: fields.filter(f => f.options?.length).length,
-                    url: String(data.url || '').slice(0, 160),
-                    company: data.company,
-                    role: String(data.role || '').slice(0, 80),
-                });
-                ws.send(JSON.stringify(data));
-            };
+            if (enableMessages) {
+                appendStatusMessage('Sending the fields to the server for processing...');
+            }
+            logStreamEvent('field-values-request', {
+                model,
+                attempt: loaderAttempt,
+                fieldCount: fields.length,
+                labels: fields.slice(0, 20).map(f => `${f.label || ''}${f.required ? '*' : ''}`),
+                types: fields.map(f => f.type),
+                withOptions: fields.filter(f => f.options?.length).length,
+                url: String(data.url || '').slice(0, 160),
+                company: data.company,
+                role: String(data.role || '').slice(0, 80),
+            });
 
-            ws.onmessage = (evt) => {
-                if (ustarted && ustarted != agentStatus.applyStarted) { return; }
-                if (generation !== agentStatus[k_loaderGeneration]) {
-                    return;
-                }
-                if (evt.data === "OpenAI connection error") {
-                    if (!agentStatus.OpenAIConnectionError) {
-                        appendStatusMessage("Oops… I’m having trouble connecting to the ChatGPT API. I’ll keep trying to restore your session automatically, or you can close this window and try again in a few hours.");
-                        agentStatus.OpenAIConnectionError = true;
-                        if (agentStatus.agentMode != 'Copilot') {
-                            chrome.runtime.sendMessage({type: "SET-COPILOT-MODE"});
-                        }
-                    }
-                    agentStatus[k_webSocketStarted] = null;
-                    return;
-                }
-                if (evt.data === "[DONE]") {
-                    agentStatus[k_fiedsDone] = true;
-                    agentStatus[k_webSocketStarted] = null;
-                    return;
-                }
-                if (!agentStatus[k_fiedsRaw]) {
-                    try {
-                        if (!agentStatus.timeAdded && countDown?.addTime) {
-                            countDown.addTime(60);
-                            agentStatus.timeAdded = true;
-                        }
-                    } catch {}
-                    if (enableMessages) {
-                        appendStatusMessage('Filling in the application fields. Almost done – please wait a bit...');
-                    }
-                }
-                agentStatus[k_fiedsRaw] += evt.data;
-            };
-
-            ws.onclose = () => {
-                console.info('WebSocket connection closed');
-                if (generation === agentStatus[k_loaderGeneration]) {
-                    agentStatus[k_webSocketStarted] = null;
-                }
+            const result = await chrome.runtime.sendMessage({type: "GET-VACANCY-FIELD-VALUES", data});
+            if (!result || result.type !== 'SUCCESS') {
+                throw new Error(result?.data || 'No response from the server');
+            }
+            const answers = result.data?.answers;
+            if (!Array.isArray(answers) || !answers.length) {
+                throw new Error('No answers received from the server');
             }
 
-            await wait(STREAM_WAIT_INITIAL_MS);
-            if (!agentStatus[k_fiedsRaw]) {
-                if (ustarted && ustarted != agentStatus.applyStarted) { return false; }
-                if (enableMessages) {
-                    appendStatusMessage('Waiting for server response to begin filling out the application. This may take a moment – please hang tight...');
+            if (ustarted && ustarted != agentStatus.applyStarted) return false;
+            if (generation !== agentStatus[k_loaderGeneration]) return false;
+
+            agentStatus[k_fiedsRaw] = JSON.stringify(answers);
+            agentStatus[k_fiedsDone] = true;
+            agentStatus[k_webSocketStarted] = null;
+
+            try {
+                if (!agentStatus.timeAdded && countDown?.addTime) {
+                    countDown.addTime(60);
+                    agentStatus.timeAdded = true;
                 }
+            } catch {}
+            if (enableMessages) {
+                appendStatusMessage('Filling in the application fields. Almost done – please wait a bit...');
             }
-            for (let poll = 0; poll < STREAM_WAIT_MAX_POLLS; poll++) {
-                await wait(STREAM_WAIT_POLL_MS);
-                if (ustarted && ustarted != agentStatus.applyStarted) { return false; }
-                if (generation !== agentStatus[k_loaderGeneration]) { return false; }
-                if (agentStatus[k_fiedsRaw] == "REGENERATE") {
-                    logStreamEvent('regenerate', { model, fieldCount: fields.length, attempt: loaderAttempt });
-                    appendStatusMessage('Incorrect fields received from the server. Regenerating fields...');
-                    throw new Error('REGENERATE');
-                }
-                if (agentStatus[k_fiedsDone]) {
-                    try { ws.close(); } catch {}
-                    return true;
-                }
-            }
-            logStreamEvent('timeout', { model, fieldCount: fields.length, attempt: loaderAttempt, waitedSec: (STREAM_WAIT_INITIAL_MS + STREAM_WAIT_MAX_POLLS * STREAM_WAIT_POLL_MS) / 1000 });
-            throw new Error('Timeout while waiting for fields from the server');
+            return true;
         } catch (e) {
             logStreamEvent('loader-error', {
                 model,
@@ -2643,9 +2599,8 @@ async function vacancyFieldsLoader(fields, ustarted, model) {
             });
             console.error(e);
         }
-        try { ws?.close?.(); } catch {}
         if (ustarted && ustarted != agentStatus.applyStarted) { return false; }
-        if (loaderAttempt < STREAM_LOADER_MAX_ATTEMPTS && !agentStatus.OpenAIConnectionError) {
+        if (loaderAttempt < STREAM_LOADER_MAX_ATTEMPTS) {
             logStreamEvent('retry-no-response', {
                 model,
                 attempt: loaderAttempt,

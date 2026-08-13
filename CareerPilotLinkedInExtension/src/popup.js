@@ -454,6 +454,8 @@ async function refresh() {
     return;
   }
   setStats(boot.state || {}, loadedSettings?.settings || {});
+  const debugToggle = document.getElementById("debugToggle");
+  if (debugToggle) debugToggle.checked = Boolean(loadedSettings?.settings?.debugMode);
   setStatus(boot.state?.running ? "Run active." : boot.state?.paused ? "Run paused." : "Ready.");
 }
 
@@ -592,6 +594,27 @@ document.getElementById("stop").addEventListener("click", async () => {
   await sendMessage({ type: "CP_STOP" });
   await refresh();
   setStatus("Run stopped.");
+});
+
+document.getElementById("debugToggle").addEventListener("change", async (event) => {
+  const enabled = Boolean(event?.target?.checked);
+  const saved = await sendMessage({ type: "CP_SAVE_SETTINGS", settings: { debugMode: enabled } });
+  if (!saved?.ok) {
+    setStatus(saved?.error || "Failed to update debug mode", "error");
+    await refresh();
+    return;
+  }
+  setStatus(enabled ? "Debug logging enabled." : "Debug logging disabled.");
+});
+
+document.getElementById("clearLogs").addEventListener("click", async () => {
+  const cleared = await sendMessage({ type: "CP_CLEAR_LOGS" });
+  if (!cleared?.ok) {
+    setStatus(cleared?.error || "Failed to clear logs", "error");
+    return;
+  }
+  await refresh();
+  setStatus("All logs cleared.");
 });
 
 document.getElementById("accountAction").addEventListener("click", async () => {

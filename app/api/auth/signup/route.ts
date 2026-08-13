@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "src/lib/prisma";
 import { signupSchema } from "src/lib/schemas";
-import { createSessionAndTokens, setAuthCookies, toClientUser } from "src/lib/auth";
+import { createSessionAndTokens, setAuthCookies, setExtensionAuthCookie, toClientUser } from "src/lib/auth";
 import { getPlanQuota } from "src/lib/quota";
 import { creditBonusHires, getDailyHireCap } from "src/lib/hires";
 import { writeAuditLog } from "src/lib/audit";
@@ -54,12 +54,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const { accessToken, refreshToken } = await createSessionAndTokens({
+    const { accessToken, refreshToken, sessionId } = await createSessionAndTokens({
       id: user.id,
       email: user.email,
       role: user.role,
     });
     await setAuthCookies(accessToken, refreshToken);
+    await setExtensionAuthCookie({ id: user.id, email: user.email, role: user.role }, sessionId);
 
     await writeAuditLog({
       actorUserId: user.id,

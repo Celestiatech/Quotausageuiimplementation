@@ -31,7 +31,7 @@ export function Navigation() {
       <div className="bg-gradient-to-r from-[#6366F1] via-[#8B5CF6] to-[#A855F7] text-white py-2.5 px-4 text-center text-sm">
         <span className="inline-flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-yellow-300" />
-          <span><strong>Free:</strong> Start applying with $0 signup + 300 Hires bonus credits.</span>
+          <span><strong>Free:</strong> Start applying with ₹0 signup + 300 Hires bonus credits.</span>
         </span>
       </div>
 

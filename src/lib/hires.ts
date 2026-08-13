@@ -94,7 +94,7 @@ async function createTxnInTx(
   tx: Prisma.TransactionClient,
   input: {
     userId: string;
-    type: "credit_purchase" | "credit_bonus" | "debit_apply" | "refund_apply" | "admin_adjustment";
+    type: "credit_purchase" | "credit_bonus" | "debit_apply" | "refund_apply" | "debit_interview" | "refund_interview" | "admin_adjustment";
     amount: number;
     balanceAfter: number;
     referenceType?: string;
@@ -311,6 +311,139 @@ export async function consumeHiresForApplies(input: {
       },
     };
   });
+}
+
+// The Interview Copilot charges 1 Hire per generated answer. Free daily Hires
+// are consumed first, then paid Hires from the wallet. Every answer writes a
+// debit_interview transaction so usage can be tracked (used today / total).
+export async function consumeHiresForInterview(input: {
+  userId: string;
+  count?: number;
+  referenceId: string;
+  idempotencyKey: string;
+  metadataJson?: Prisma.InputJsonValue;
+}) {
+  const count = Math.max(1, Math.floor(input.count || 1));
+  const user = await ensureHireWindow(input.userId);
+  const referenceType = "interview_copilot";
+
+  // Pro is unlimited: log the answer as usage without deducting anything.
+  if (user.plan === "pro") {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          hireSpent: { increment: count },
+          dailyHireUsed: { increment: count },
+        },
+      });
+      await createTxnInTx(tx, {
+        userId: updated.id,
+        type: "debit_interview",
+        amount: 0,
+        balanceAfter: updated.hireBalance,
+        referenceType,
+        referenceId: input.referenceId,
+        metadataJson: input.metadataJson,
+        idempotencyKey: input.idempotencyKey,
+      });
+      return { ok: true as const, consumed: count, sourceBreakdown: { free: count, paid: 0 } };
+    });
+  }
+
+  const freeRemaining = getFreeRemaining(user);
+  const paidNeeded = Math.max(0, count - freeRemaining);
+  if (user.hireBalance < paidNeeded) {
+    return { ok: false as const, reason: "INSUFFICIENT_HIRES" as const };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const refreshed = await tx.user.findUnique({ where: { id: user.id } });
+    if (!refreshed) throw new Error("User not found");
+
+    const freeNow = Math.max(0, getDailyFreeHires(refreshed.plan) - refreshed.dailyHireUsed);
+    const paidNow = Math.max(0, count - freeNow);
+    if (refreshed.hireBalance < paidNow) {
+      return { ok: false as const, reason: "INSUFFICIENT_HIRES" as const };
+    }
+
+    const freeConsumed = Math.min(freeNow, count);
+    const nextBalance = refreshed.hireBalance - paidNow;
+
+    const updated = await tx.user.updateMany({
+      where: {
+        id: refreshed.id,
+        hireBalance: { gte: paidNow },
+      },
+      data: {
+        hireBalance: nextBalance,
+        hireSpent: { increment: count },
+        dailyHireUsed: { increment: freeConsumed },
+      },
+    });
+
+    if (updated.count === 0) {
+      return { ok: false as const, reason: "INSUFFICIENT_HIRES" as const };
+    }
+
+    await createTxnInTx(tx, {
+      userId: refreshed.id,
+      type: "debit_interview",
+      amount: -paidNow,
+      balanceAfter: nextBalance,
+      referenceType,
+      referenceId: input.referenceId,
+      metadataJson: {
+        ...(typeof input.metadataJson === "object" && input.metadataJson ? (input.metadataJson as object) : {}),
+        freeConsumed,
+        paidConsumed: paidNow,
+      } as Prisma.InputJsonValue,
+      idempotencyKey: input.idempotencyKey,
+    });
+
+    return {
+      ok: true as const,
+      consumed: count,
+      sourceBreakdown: {
+        free: freeConsumed,
+        paid: paidNow,
+      },
+    };
+  });
+}
+
+export async function getInterviewUsageSummary(userId: string) {
+  const user = await ensureHireWindow(userId);
+  const freeRemaining = getFreeRemaining(user);
+  const spendable =
+    user.plan === "pro"
+      ? 1000000
+      : Math.max(0, user.hireBalance + freeRemaining);
+
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const [answersToday, answersTotal] = await Promise.all([
+    prisma.hireTransaction.count({
+      where: { userId, type: "debit_interview", createdAt: { gte: todayStart } },
+    }),
+    prisma.hireTransaction.count({
+      where: { userId, type: "debit_interview" },
+    }),
+  ]);
+
+  return {
+    plan: user.plan,
+    hireBalance: user.hireBalance,
+    hireSpent: user.hireSpent,
+    hirePurchased: user.hirePurchased,
+    freeRemaining,
+    dailyUsed: user.dailyHireUsed,
+    dailyCap: user.dailyHireCap,
+    spendable,
+    answersToday,
+    answersTotal,
+    dailyResetTime: user.dailyHireResetTime.toISOString(),
+  };
 }
 
 export async function refundHires(input: {
