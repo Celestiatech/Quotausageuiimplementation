@@ -4,32 +4,45 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AutoApply CV Copilot</title>
-    <style>html,body,body.cp-connected,body.cp-disconnected{width:350px;min-width:350px;max-width:350px}body{margin:0;overflow:hidden}.popup-content{opacity:0}</style>
+    <style>
+      html, body {
+        width: 360px;
+        min-width: 360px;
+        max-width: 360px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+      .popup-content {
+        opacity: 0;
+      }
+    </style>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <div class="accent-bar"></div>
     <main class="wrap">
+      <!-- Header -->
       <header class="head">
-        <div
-          id="popupToggle"
-          class="brand"
-          role="button"
-          tabindex="0"
-          aria-label="Toggle popup content"
-          aria-expanded="true"
-          title="Hide popup content"
-        >
-          <img class="brand-logo" src="../icons/icon128.png" alt="AutoApply CV" />
+        <div id="popupToggle" class="brand" role="button" tabindex="0" aria-label="AutoApply CV">
+          <div class="brand-logo-wrap">
+            <img class="brand-logo" src="../icons/icon128.png" alt="AutoApply CV" />
+          </div>
           <div class="brand-text">
-            <h1>AutoApply CV</h1>
-            <p class="sub">LinkedIn job assistant</p>
+            <div class="brand-title-row">
+              <h1>AutoApply CV</h1>
+              <span class="sparkle-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+              </span>
+            </div>
+            <p class="sub">AI LinkedIn Job Copilot</p>
           </div>
         </div>
         <span id="statusBadge" class="status-badge idle">Idle</span>
       </header>
 
       <section id="popupContent" class="popup-content">
+        <!-- Account Status Card -->
         <section id="accountCard" class="account-card disconnected">
           <div class="account-head">
             <div class="account-title-wrap">
@@ -42,17 +55,38 @@
             Sign in to connect your profile and enable auto-apply controls.
           </p>
           <div class="actions account-actions">
-            <button id="accountAction" class="btn-primary">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            <button id="accountAction" class="btn-account">
               <span id="accountActionText">Sign in to AutoApply CV</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             </button>
           </div>
         </section>
 
+        <!-- Quota & Balance Card -->
+        <section id="quotaCard" class="quota-card">
+          <div class="quota-header">
+            <div class="quota-title-wrap">
+              <div class="quota-icon-wrap">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><line x1="12" y1="6" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="18"/></svg>
+              </div>
+              <div class="quota-text-wrap">
+                <span class="quota-balance-title"><strong id="popupHiresCount">0</strong> Hires Available</span>
+                <span class="quota-sub-detail" id="popupQuotaDetail">Daily Free: 3/3 Used &bull; Spendable: 0</span>
+              </div>
+            </div>
+            <a id="popupTopupLink" href="https://autoapplycv.in/dashboard/pricing" target="_blank" rel="noopener noreferrer" class="quota-topup-btn">
+              <span>Top Up</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+        </section>
+
+        <!-- Copilot Run Area -->
         <section id="runArea">
+          <!-- Hero Status Card -->
           <section class="now-card">
             <div class="now-icon" id="nowIcon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
             </div>
             <div class="now-text">
               <p id="nowTitle" class="now-title">Loading run state...</p>
@@ -60,6 +94,26 @@
             </div>
           </section>
 
+          <!-- Live Metrics Counter -->
+          <div class="stats-row">
+            <div class="stat-pill applied">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="stat-val" id="applied">0</span>
+              <span class="stat-lbl">Applied</span>
+            </div>
+            <div class="stat-pill skipped">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+              <span class="stat-val" id="skipped">0</span>
+              <span class="stat-lbl">Skipped</span>
+            </div>
+            <div class="stat-pill failed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span class="stat-val" id="failed">0</span>
+              <span class="stat-lbl">Cooldown</span>
+            </div>
+          </div>
+
+          <!-- Mode Toggle & Badge -->
           <div class="mode-control">
             <label class="mode-switch" for="liveModeToggle">
               <input id="liveModeToggle" type="checkbox" />
@@ -69,18 +123,43 @@
             <span id="modeBadge" class="mode-badge">Dry Run</span>
           </div>
 
+          <!-- Quick Action Buttons -->
           <div class="actions primary">
             <button id="start" class="btn-start">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Start
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span>Start</span>
             </button>
             <button id="pause" class="btn-pause">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-              Pause
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <span>Pause</span>
             </button>
             <button id="stop" class="btn-stop">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-              Stop
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+              <span>Stop</span>
+            </button>
+          </div>
+
+          <!-- Resume for Easy Apply Direct Shortcut -->
+          <div class="resume-quick-card">
+            <div class="resume-quick-info">
+              <div class="resume-icon-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+              <div class="resume-quick-text">
+                <span class="resume-quick-title">Easy Apply Resume</span>
+                <span class="resume-quick-sub">LinkedIn application settings</span>
+              </div>
+            </div>
+            <a href="https://www.linkedin.com/jobs/application-settings/" target="_blank" rel="noopener noreferrer" class="resume-quick-btn" title="Open LinkedIn Application Settings">
+              <span>Manage</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+
+          <div class="popup-footer-row">
+            <button id="popupClearLogs" class="btn-clear-logs" title="Clear logs and reset run stats">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>Clear Logs & Counters</span>
             </button>
           </div>
         </section>

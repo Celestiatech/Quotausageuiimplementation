@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const signupBonus = Math.max(0, Math.floor(Number(process.env.SIGNUP_BONUS_HIRES || 300)));
+    const signupBonus = Math.max(0, Math.floor(Number(process.env.SIGNUP_BONUS_HIRES || 30)));
     if (signupBonus > 0) {
       await creditBonusHires({
         userId: user.id,

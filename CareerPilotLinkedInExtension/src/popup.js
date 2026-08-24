@@ -373,16 +373,53 @@ function applyModeControls(settings) {
   }
 }
 
-function setStats(state, settings) {
-  document.getElementById("applied").textContent = String(state?.applied || 0);
-  document.getElementById("skipped").textContent = String(state?.skipped || 0);
-  document.getElementById("failed").textContent = String(state?.failed || 0);
+function setStats(state, settings, portalQuota) {
+  const appliedEl = document.getElementById("applied");
+  if (appliedEl) appliedEl.textContent = String(state?.applied || 0);
+  const skippedEl = document.getElementById("skipped");
+  if (skippedEl) skippedEl.textContent = String(state?.skipped || 0);
+  const failedEl = document.getElementById("failed");
+  if (failedEl) failedEl.textContent = String(state?.failed || 0);
   updateStatusBadge(state || {});
   const now = deriveNowCard(state || {});
-  document.getElementById("nowTitle").textContent = now.title;
-  document.getElementById("nowDetail").textContent = `${modeLine(settings)} ${now.detail}`;
+  const nowTitleEl = document.getElementById("nowTitle");
+  if (nowTitleEl) nowTitleEl.textContent = now.title;
+  const nowDetailEl = document.getElementById("nowDetail");
+  if (nowDetailEl) nowDetailEl.textContent = `${modeLine(settings)} ${now.detail}`;
   applyModeControls(settings);
-  // Popup is intentionally minimal; live feed is available in the floating panel.
+
+  // Render Quota & Balance
+  const q = portalQuota?.data && typeof portalQuota.data === "object" ? portalQuota.data : {};
+  const hiresCountEl = document.getElementById("popupHiresCount");
+  const quotaDetailEl = document.getElementById("popupQuotaDetail");
+  const topupLinkEl = document.getElementById("popupTopupLink");
+
+  const hireBalance = Number(q.hireBalance ?? NaN);
+  const spendable = Number(q.spendable ?? NaN);
+  const quotaUsed = Number(q.quotaUsed ?? NaN);
+  const quotaTotal = Number(q.quotaTotal ?? NaN);
+
+  if (hiresCountEl) {
+    if (Number.isFinite(hireBalance)) {
+      hiresCountEl.textContent = String(hireBalance);
+    } else if (Number.isFinite(spendable)) {
+      hiresCountEl.textContent = String(spendable);
+    } else {
+      hiresCountEl.textContent = "0";
+    }
+  }
+
+  if (quotaDetailEl) {
+    const freeUsedStr = Number.isFinite(quotaUsed) && Number.isFinite(quotaTotal)
+      ? `${quotaUsed}/${quotaTotal} Free Used`
+      : "Free Quota Active";
+    const spendableStr = Number.isFinite(spendable) ? `Spendable: ${spendable}` : "";
+    quotaDetailEl.textContent = `${freeUsedStr}${spendableStr ? ` • ${spendableStr}` : ""}`;
+  }
+
+  if (topupLinkEl) {
+    topupLinkEl.href = buildPortalUrl("/dashboard/pricing");
+  }
 }
 
 function applyPopupCollapsed(collapsed, persist = true) {
@@ -453,7 +490,7 @@ async function refresh() {
     setStatus("Sign in to AutoApply CV to enable run controls.", "warn");
     return;
   }
-  setStats(boot.state || {}, loadedSettings?.settings || {});
+  setStats(boot.state || {}, loadedSettings?.settings || {}, boot.portalQuota || null);
   setStatus(boot.state?.running ? "Run active." : boot.state?.paused ? "Run paused." : "Ready.");
 }
 
@@ -600,6 +637,15 @@ document.getElementById("accountAction").addEventListener("click", async () => {
   await chrome.tabs.create({ url });
   setStatus(action === "dashboard" ? "Opened dashboard." : "Opened login.");
 });
+
+const clearLogsBtn = document.getElementById("popupClearLogs");
+if (clearLogsBtn) {
+  clearLogsBtn.addEventListener("click", async () => {
+    await sendMessage({ type: "CP_CLEAR_LOGS" });
+    await refresh();
+    setStatus("Logs and counters cleared.");
+  });
+}
 
 async function init() {
   bindPopupToggle();

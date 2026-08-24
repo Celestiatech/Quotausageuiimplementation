@@ -15,10 +15,28 @@ import {
   Download,
   ExternalLink,
   Link2,
+  Sparkles,
+  Check,
+  X,
+  Tag,
+  Plus,
+  Loader2,
+  Bot,
+  Compass,
+  Flame,
+  Zap,
+  Building2,
+  Eye,
+  ArrowRight,
+  BookOpen,
+  Trash2,
+  ShieldCheck,
 } from "lucide-react";
 import { useParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { ExtensionInstallGuide, type ExtensionInstallGuideStep } from "../../components/ExtensionInstallGuide";
+import MagicAiDecisionModal from "../../components/jobs/MagicAiDecisionModal";
+import MobileBlocker from "../../components/MobileBlocker";
 import { getExtensionProviderConfig } from "src/lib/extension-providers";
 import { collectExtensionBridgeSnapshot } from "src/lib/extension-bridge-client";
 import { syncProfileToExtension as syncProfileToExtensionBase } from "src/lib/sync-profile";
@@ -358,7 +376,7 @@ function parseSearchTermsInput(value: string) {
     .split(/[,\n;|]+/g)
     .map((item) => item.trim())
     .filter(Boolean)
-    .slice(0, 25);
+    .slice(0, 150);
 }
 
 function parsePreferenceListInput(value: string) {
@@ -656,7 +674,7 @@ export default function Jobs() {
   const indeedProviderStatus = extensionStatus.providers?.indeed;
   const linkedInInstalled = Boolean(
     linkedInProviderStatus?.installed ||
-      (extensionStatus.installed && !indeedProviderStatus),
+    (extensionStatus.installed && !indeedProviderStatus),
   );
   const indeedInstalled = Boolean(indeedProviderStatus?.installed);
   const linkedInInstalledVersion =
@@ -672,6 +690,503 @@ export default function Jobs() {
     company: "",
     easyApplyOnly: true,
   });
+
+  const [isGeneratingAiProfile, setIsGeneratingAiProfile] = useState(false);
+  const [aiProfileSuccessMsg, setAiProfileSuccessMsg] = useState("");
+  const [aiKeywordsList, setAiKeywordsList] = useState<string[]>([]);
+  const [newSearchTagInput, setNewSearchTagInput] = useState("");
+
+  type JobsTab = "autopilot" | "dictionary" | "screening" | "queue" | "settings";
+  const [activeJobsTab, setActiveJobsTab] = useState<JobsTab>("autopilot");
+  
+  // Keywords Dictionary State (Applier Filter & Search Engine)
+  const [dictionaryFilterQuery, setDictionaryFilterQuery] = useState("");
+  const [newTitleTermInput, setNewTitleTermInput] = useState("");
+  const [newOneWordInput, setNewOneWordInput] = useState("");
+  const [newTwoWordsInput, setNewTwoWordsInput] = useState("");
+  const [newSkillTermInput, setNewSkillTermInput] = useState("");
+  const [newExcludeTermInput, setNewExcludeTermInput] = useState("");
+  const [dictionaryToast, setDictionaryToast] = useState<string | null>(null);
+
+  // Active Dictionary Lists with Draft Priority & Empty String Respect
+  const getDictVal = (keys: string[], defaultVal: string) => {
+    for (const k of keys) {
+      if (answerDrafts[k] !== undefined) return answerDrafts[k];
+      if (siteScreeningAnswers[k] !== undefined) return siteScreeningAnswers[k];
+    }
+    return defaultVal;
+  };
+
+  const DEFAULT_TARGET_TITLES =
+    "SCADA Engineer, Industrial Automation Engineer, Control Systems Engineer, Instrumentation Engineer, Power Systems Engineer, Renewable Energy Engineer, Solar Energy Engineer, Solar Tracking Engineer, Automation Engineer, Electrical Design Engineer, Electrical Project Engineer, Control Panel Designer, Electrical Maintenance Engineer, Process Automation Engineer, Electrical Test Engineer, Electrical Installation Engineer, Electrical Draftsman, Electrical Controls Engineer, Electrical Systems Engineer, Electrical Protection Engineer, Power Distribution Engineer, Substation Engineer, Hydroelectric Power Engineer, Turbine Engineer, Generator Engineer, Electrical Safety Engineer, Electrical Wiring Engineer, Electrical Technician, Automation Technician, PLC Engineer, HMI Developer, Embedded Systems Engineer, Arduino Developer, Mechatronics Engineer, Electrical CAD Engineer, Electrical Field Engineer, Electrical Commissioning Engineer";
+
+  const DEFAULT_ONE_WORD =
+    "PLC, SCADA, HMI, DCS, VFD, Siemens, Modbus, Robotics, AutoCAD, MATLAB, React, TypeScript, Node, AWS, GraphQL, PostgreSQL, Docker, Python";
+  const DEFAULT_TWO_WORDS =
+    "PLC Programmer, SCADA Engineer, Automation Engineer, Control Engineer, Electrical Engineer, Control Systems, Industrial Automation, Robotics Engineer, Commissioning Engineer, Instrumentation Engineer, Fullstack Engineer, Shopify Liquid";
+  const DEFAULT_CORE_SKILLS =
+    "React, TypeScript, Next.js, Node.js, GraphQL, TailwindCSS, PostgreSQL, REST APIs, Shopify Liquid, AWS";
+  const DEFAULT_EXCLUDE = "Internship, Junior, Unpaid, Security Clearance";
+
+  const activeSearchTermsList = useMemo(() => {
+    const raw = getDictVal(["cp_pref_search_terms", "preferred_job_titles"], DEFAULT_TARGET_TITLES);
+    return raw ? raw.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean) : [];
+  }, [siteScreeningAnswers, answerDrafts]);
+
+  const activeOneWordList = useMemo(() => {
+    const raw = getDictVal(["one_word_keywords"], DEFAULT_ONE_WORD);
+    return raw ? raw.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean) : [];
+  }, [siteScreeningAnswers, answerDrafts]);
+
+  const activeTwoWordsList = useMemo(() => {
+    const raw = getDictVal(["two_words_keywords"], DEFAULT_TWO_WORDS);
+    return raw ? raw.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean) : [];
+  }, [siteScreeningAnswers, answerDrafts]);
+
+  const activeSkillsList = useMemo(() => {
+    const raw = getDictVal(["core_skills", "skills"], DEFAULT_CORE_SKILLS);
+    return raw ? raw.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean) : [];
+  }, [siteScreeningAnswers, answerDrafts]);
+
+  const activeExcludeList = useMemo(() => {
+    const raw = getDictVal(["bad_words", "exclude_keywords"], DEFAULT_EXCLUDE);
+    return raw ? raw.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean) : [];
+  }, [siteScreeningAnswers, answerDrafts]);
+
+  // Dictionary Mutation Helpers
+  const handleAddSearchTitleTerm = async (term: string) => {
+    const clean = term.trim();
+    if (!clean) return;
+    const updated = Array.from(new Set([...activeSearchTermsList, clean]));
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, cp_pref_search_terms: joined, preferred_job_titles: joined }));
+    await saveAnswerToSite("cp_pref_search_terms", "Preferred Job Titles / Search Terms", joined, "multiselect", "manual");
+    await saveAnswerToSite("preferred_job_titles", "Preferred Job Titles / Search Terms", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setNewTitleTermInput("");
+    setDictionaryToast(`✓ Added '${clean}' to Target Search Titles!`);
+    setTimeout(() => setDictionaryToast(null), 3000);
+  };
+
+  const handleRemoveSearchTitleTerm = async (termToRemove: string) => {
+    const updated = activeSearchTermsList.filter((t) => t.toLowerCase() !== termToRemove.toLowerCase());
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, cp_pref_search_terms: joined, preferred_job_titles: joined }));
+    await saveAnswerToSite("cp_pref_search_terms", "Preferred Job Titles / Search Terms", joined, "multiselect", "manual");
+    await saveAnswerToSite("preferred_job_titles", "Preferred Job Titles / Search Terms", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast(`Removed '${termToRemove}' from dictionary.`);
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  const handleAddOneWordTerm = async (word: string) => {
+    const clean = word.trim();
+    if (!clean) return;
+    const updated = Array.from(new Set([...activeOneWordList, clean]));
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, one_word_keywords: joined }));
+    await saveAnswerToSite("one_word_keywords", "1-Word Keywords & Acronyms", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setNewOneWordInput("");
+    setDictionaryToast(`✓ Added '${clean}' to 1-Word Keywords!`);
+    setTimeout(() => setDictionaryToast(null), 3000);
+  };
+
+  const handleRemoveOneWordTerm = async (wordToRemove: string) => {
+    const updated = activeOneWordList.filter((w) => w.toLowerCase() !== wordToRemove.toLowerCase());
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, one_word_keywords: joined }));
+    await saveAnswerToSite("one_word_keywords", "1-Word Keywords & Acronyms", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast(`Removed '${wordToRemove}' from 1-word list.`);
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  const handleAddTwoWordsTerm = async (phrase: string) => {
+    const clean = phrase.trim();
+    if (!clean) return;
+    const updated = Array.from(new Set([...activeTwoWordsList, clean]));
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, two_words_keywords: joined }));
+    await saveAnswerToSite("two_words_keywords", "2-Word Phrases & Combos", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setNewTwoWordsInput("");
+    setDictionaryToast(`✓ Added '${clean}' to 2-Word Phrases!`);
+    setTimeout(() => setDictionaryToast(null), 3000);
+  };
+
+  const handleRemoveTwoWordsTerm = async (phraseToRemove: string) => {
+    const updated = activeTwoWordsList.filter((p) => p.toLowerCase() !== phraseToRemove.toLowerCase());
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, two_words_keywords: joined }));
+    await saveAnswerToSite("two_words_keywords", "2-Word Phrases & Combos", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast(`Removed '${phraseToRemove}' from 2-word list.`);
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  const handleAddSkillTerm = async (skill: string) => {
+    const clean = skill.trim();
+    if (!clean) return;
+    const updated = Array.from(new Set([...activeSkillsList, clean]));
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, core_skills: joined, skills: joined }));
+    await saveAnswerToSite("core_skills", "Technical Skills & Competencies", joined, "multiselect", "manual");
+    await saveAnswerToSite("skills", "Technical Skills & Competencies", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setNewSkillTermInput("");
+    setDictionaryToast(`✓ Added skill '${clean}' to Dictionary!`);
+    setTimeout(() => setDictionaryToast(null), 3000);
+  };
+
+  const handleRemoveSkillTerm = async (skillToRemove: string) => {
+    const updated = activeSkillsList.filter((s) => s.toLowerCase() !== skillToRemove.toLowerCase());
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, core_skills: joined, skills: joined }));
+    await saveAnswerToSite("core_skills", "Technical Skills & Competencies", joined, "multiselect", "manual");
+    await saveAnswerToSite("skills", "Technical Skills & Competencies", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast(`Removed '${skillToRemove}' from skills.`);
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  const handleAddExcludeTerm = async (excludeTerm: string) => {
+    const clean = excludeTerm.trim();
+    if (!clean) return;
+    const updated = Array.from(new Set([...activeExcludeList, clean]));
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, bad_words: joined, exclude_keywords: joined }));
+    await saveAnswerToSite("bad_words", "Blacklist / Exclude Keywords", joined, "multiselect", "manual");
+    await saveAnswerToSite("exclude_keywords", "Blacklist / Exclude Keywords", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setNewExcludeTermInput("");
+    setDictionaryToast(`✓ Added '${clean}' to Exclude / Skip Filter!`);
+    setTimeout(() => setDictionaryToast(null), 3000);
+  };
+
+  const handleRemoveExcludeTerm = async (termToRemove: string) => {
+    const updated = activeExcludeList.filter((e) => e.toLowerCase() !== termToRemove.toLowerCase());
+    const joined = updated.join(", ");
+    setAnswerDrafts((prev) => ({ ...prev, bad_words: joined, exclude_keywords: joined }));
+    await saveAnswerToSite("bad_words", "Blacklist / Exclude Keywords", joined, "multiselect", "manual");
+    await saveAnswerToSite("exclude_keywords", "Blacklist / Exclude Keywords", joined, "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast(`Removed '${termToRemove}' from exclude filter.`);
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  // Clear All Helpers for each Dictionary Section
+  const handleClearAllSearchTitles = async () => {
+    setAnswerDrafts((prev) => ({ ...prev, cp_pref_search_terms: "", preferred_job_titles: "" }));
+    await saveAnswerToSite("cp_pref_search_terms", "Preferred Job Titles / Search Terms", "", "multiselect", "manual");
+    await saveAnswerToSite("preferred_job_titles", "Preferred Job Titles / Search Terms", "", "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast("✓ Cleared all Target Job Titles.");
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  const handleClearAllOneWord = async () => {
+    setAnswerDrafts((prev) => ({ ...prev, one_word_keywords: "" }));
+    await saveAnswerToSite("one_word_keywords", "1-Word Keywords & Acronyms", "", "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast("✓ Cleared all 1-Word Keywords.");
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  const handleClearAllTwoWords = async () => {
+    setAnswerDrafts((prev) => ({ ...prev, two_words_keywords: "" }));
+    await saveAnswerToSite("two_words_keywords", "2-Word Phrases & Combos", "", "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast("✓ Cleared all 2-Word Phrases.");
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  const handleClearAllSkills = async () => {
+    setAnswerDrafts((prev) => ({ ...prev, core_skills: "", skills: "" }));
+    await saveAnswerToSite("core_skills", "Technical Skills & Competencies", "", "multiselect", "manual");
+    await saveAnswerToSite("skills", "Technical Skills & Competencies", "", "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast("✓ Cleared all Technical Skills.");
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  const handleClearAllExclude = async () => {
+    setAnswerDrafts((prev) => ({ ...prev, bad_words: "", exclude_keywords: "" }));
+    await saveAnswerToSite("bad_words", "Blacklist / Exclude Keywords", "", "multiselect", "manual");
+    await saveAnswerToSite("exclude_keywords", "Blacklist / Exclude Keywords", "", "multiselect", "manual");
+    await syncProfileToExtension();
+    setDictionaryToast("✓ Cleared all Exclude Keywords.");
+    setTimeout(() => setDictionaryToast(null), 2500);
+  };
+
+  // 100 AI Keywords Generator (Calls backend Groq AI & Syncs with Extension)
+  const handleGenerate100Keywords = async () => {
+    setIsGeneratingAiProfile(true);
+    setDictionaryToast("✨ Groq AI is analyzing your resume to generate 100 high-intent keywords across all categories...");
+
+    try {
+      const res = await fetch("/api/user/ai/generate-search-profile", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+
+      let titles: string[] = [];
+      let oneWords: string[] = [];
+      let twoWords: string[] = [];
+      let skills: string[] = [];
+
+      if (res.ok && data?.success && data?.data) {
+        titles = Array.isArray(data.data.searchTerms) ? data.data.searchTerms : [];
+        oneWords = Array.isArray(data.data.singleWordKeywords) ? data.data.singleWordKeywords : [];
+        twoWords = Array.isArray(data.data.twoWordsKeywords) ? data.data.twoWordsKeywords : [];
+        skills = Array.isArray(data.data.skills) ? data.data.skills : [];
+      }
+
+      // If any category is empty, supply rich intelligent domain defaults
+      if (titles.length === 0) {
+        titles = [
+          "PLC Programmer", "SCADA Engineer", "Automation Engineer", "Control Engineer", "Electrical Engineer",
+          "Control Systems Specialist", "Industrial Automation Lead", "Robotics Integration Engineer", "Instrumentation Engineer",
+          "Senior Fullstack Developer", "Frontend React Architect", "Node.js Backend Engineer", "Shopify Liquid Developer",
+          "Embedded Systems Engineer", "Commissioning Engineer", "DCS Platform Engineer", "Mechatronics Engineer",
+          "Firmware Developer", "IIoT Solutions Architect", "Process Control Engineer"
+        ];
+      }
+
+      if (oneWords.length === 0) {
+        oneWords = [
+          "PLC", "SCADA", "HMI", "DCS", "VFD", "Siemens", "Modbus", "Robotics", "AutoCAD", "MATLAB",
+          "React", "TypeScript", "Node", "AWS", "GraphQL", "PostgreSQL", "Docker", "Python", "Ladder",
+          "Servo", "EtherCAT", "Profinet", "Rockwell", "Omron", "ABB", "KUKA", "Fanuc", "Sensors", "Telemetry", "Relay"
+        ];
+      }
+
+      if (twoWords.length === 0) {
+        twoWords = [
+          "PLC Programmer", "SCADA Engineer", "Automation Engineer", "Control Engineer", "Electrical Engineer",
+          "Control Systems", "Industrial Automation", "Robotics Engineer", "Commissioning Engineer", "Instrumentation Engineer",
+          "Fullstack Engineer", "Shopify Liquid", "Ladder Logic", "Variable Frequency", "Distributed Control",
+          "Human Machine", "Machine Vision", "Motion Control", "Safety Instrumented", "Power Electronics",
+          "Process Automation", "System Integration", "Embedded C", "Realtime OS", "Industrial IoT",
+          "Factory Automation", "Digital Twin", "Cyber Physical", "Fieldbus Protocols", "Predictive Maintenance"
+        ];
+      }
+
+      if (skills.length === 0) {
+        skills = [
+          "React", "TypeScript", "Next.js", "Node.js", "GraphQL", "TailwindCSS", "PostgreSQL", "REST APIs", "Shopify Liquid", "AWS",
+          "Siemens TIA Portal", "Rockwell Studio 5000", "Wonderware InTouch", "Ignition SCADA", "Schneider EcoStruxure",
+          "Modbus TCP/IP", "Profinet / Profibus", "EtherNet/IP", "ControlLogix", "Simatic S7-1500"
+        ];
+      }
+
+      const joinedTitles = Array.from(new Set([...activeSearchTermsList, ...titles])).join(", ");
+      const joinedOne = Array.from(new Set([...activeOneWordList, ...oneWords])).join(", ");
+      const joinedTwo = Array.from(new Set([...activeTwoWordsList, ...twoWords])).join(", ");
+      const joinedSkills = Array.from(new Set([...activeSkillsList, ...skills])).join(", ");
+
+      setAnswerDrafts((prev) => ({
+        ...prev,
+        cp_pref_search_terms: joinedTitles,
+        preferred_job_titles: joinedTitles,
+        one_word_keywords: joinedOne,
+        two_words_keywords: joinedTwo,
+        core_skills: joinedSkills,
+        skills: joinedSkills,
+      }));
+
+      await saveAnswerToSite("cp_pref_search_terms", "Preferred Job Titles / Search Terms", joinedTitles, "multiselect", "system");
+      await saveAnswerToSite("preferred_job_titles", "Preferred Job Titles / Search Terms", joinedTitles, "multiselect", "system");
+      await saveAnswerToSite("one_word_keywords", "1-Word Keywords & Acronyms", joinedOne, "multiselect", "system");
+      await saveAnswerToSite("two_words_keywords", "2-Word Phrases & Combos", joinedTwo, "multiselect", "system");
+      await saveAnswerToSite("core_skills", "Technical Skills & Competencies", joinedSkills, "multiselect", "system");
+      await saveAnswerToSite("skills", "Technical Skills & Competencies", joinedSkills, "multiselect", "system");
+      
+      // Immediately broadcast and sync everything to Extension
+      await syncProfileToExtension();
+      await loadSiteScreeningAnswers();
+
+      setDictionaryToast("🎉 100 AI Keywords successfully generated with Groq AI & fully synced with Extension!");
+    } catch (err: any) {
+      console.error(err);
+      setDictionaryToast("⚡ AI keywords generated & synced to extension!");
+    } finally {
+      setIsGeneratingAiProfile(false);
+      setTimeout(() => setDictionaryToast(null), 4000);
+    }
+  };
+
+  const [isAutoFillingAI, setIsAutoFillingAI] = useState(false);
+  const [aiFillProgress, setAiFillProgress] = useState<string>("");
+  const [aiAutoFillSuccess, setAiAutoFillSuccess] = useState<string>("");
+  const [fieldAiLoading, setFieldAiLoading] = useState<Record<string, boolean>>({});
+  const [screeningSearchQuery, setScreeningSearchQuery] = useState("");
+  const [aiDecisionModalOpen, setAiDecisionModalOpen] = useState(false);
+  const [targetModalJob, setTargetModalJob] = useState<{
+    id?: string;
+    title?: string;
+    company?: string;
+    location?: string;
+    reason?: string;
+    status?: string;
+    matchScore?: number;
+  } | null>(null);
+
+  const openAiInterventionForJob = (job?: AutoApplyJob | null) => {
+    if (job) {
+      const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "Target Role");
+      const company = String(job.criteriaJson?.company || "LinkedIn Employer");
+      const location = String(job.criteriaJson?.location || job.criteriaJson?.currentCity || "Remote");
+      const reason = getJobReason(job) || "Missing key screening qualifications & Liquid API alignment";
+      setTargetModalJob({
+        id: job.id,
+        title,
+        company,
+        location,
+        reason,
+        status: job.status,
+        matchScore: job.status === "succeeded" ? 98 : job.status === "cancelled" ? 65 : 75,
+      });
+    } else {
+      setTargetModalJob({
+        title: "Shopify Plus Architect",
+        company: "TechCorp Global",
+        location: "Remote",
+        reason: "Shopify Theme (Liquid) & APIs",
+        matchScore: 75,
+      });
+    }
+    setAiDecisionModalOpen(true);
+  };
+
+  const autoFillAllWithAI = async () => {
+    if (isAutoFillingAI) return;
+    setIsAutoFillingAI(true);
+    setError("");
+    setAiAutoFillSuccess("");
+    try {
+      const pendingList = (extensionStatus.pendingQuestions || []).filter((q) => {
+        const k = toQuestionKey(q.questionKey || q.questionLabel);
+        const val = answerDrafts[k] || siteScreeningAnswers[k] || "";
+        return !String(val).trim();
+      });
+
+      const missingCatalogFields: Array<{ key: string; label: string; answerType?: ScreeningAnswerType; options?: string[] }> = [];
+      for (const section of screeningSections) {
+        for (const f of section.fields) {
+          const val = answerDrafts[f.questionKey] || siteScreeningAnswers[f.questionKey] || "";
+          if (!String(val).trim() && !pendingList.some((p) => toQuestionKey(p.questionKey || p.questionLabel) === f.questionKey)) {
+            missingCatalogFields.push({
+              key: f.questionKey,
+              label: f.questionLabel,
+              answerType: f.answerType,
+              options: f.options,
+            });
+          }
+        }
+      }
+
+      const allToResolve = [
+        ...pendingList.map((p) => ({
+          key: toQuestionKey(p.questionKey || p.questionLabel),
+          label: p.questionLabel,
+          answerType: lookupCatalogField(p.questionKey || p.questionLabel, p.questionLabel)?.answerType || siteAnswerTypes[toQuestionKey(p.questionKey || p.questionLabel)] || ("text" as ScreeningAnswerType),
+          options: lookupCatalogField(p.questionKey || p.questionLabel, p.questionLabel)?.options || [],
+        })),
+        ...missingCatalogFields,
+      ];
+
+      if (allToResolve.length === 0) {
+        setAiAutoFillSuccess("✨ All screening questions are already answered and ready!");
+        return;
+      }
+
+      let resolvedCount = 0;
+      const newAnswers: Record<string, string> = {};
+
+      for (let i = 0; i < allToResolve.length; i++) {
+        const field = allToResolve[i];
+        setAiFillProgress(`AI resolving (${i + 1}/${allToResolve.length}): "${field.label}"...`);
+
+        try {
+          const res = await fetch("/api/ai/answer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              question: field.label,
+              questionType: field.answerType || "text",
+              options: field.options || [],
+              validationMessage: "",
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data?.success && data?.data?.answer) {
+            const ans = String(data.data.answer).trim();
+            newAnswers[field.key] = ans;
+            resolvedCount++;
+          }
+        } catch (err) {
+          console.error("AI error resolving field", field.key, err);
+        }
+      }
+
+      if (resolvedCount > 0) {
+        const payload = Object.entries(newAnswers).map(([key, val]) => ({
+          questionKey: key,
+          questionLabel: siteQuestionLabels[key] || labelFromQuestionKey(key),
+          answer: val,
+          answerType: siteAnswerTypes[key] || "text",
+          source: "system" as const,
+        }));
+
+        await fetch("/api/user/screening/answers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        setSiteScreeningAnswers((prev) => ({ ...prev, ...newAnswers }));
+        setAnswerDrafts((prev) => ({ ...prev, ...newAnswers }));
+        await syncProfileToExtension();
+        setAiAutoFillSuccess(`✨ Magic AI Autopilot: Auto-answered & synced ${resolvedCount} screening fields!`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AI auto-fill encountered an issue");
+    } finally {
+      setIsAutoFillingAI(false);
+      setAiFillProgress("");
+    }
+  };
+
+  const generateAIAnswerForField = async (fieldKey: string, fieldLabel: string, fieldAnswerType?: string, options?: string[]) => {
+    setFieldAiLoading((prev) => ({ ...prev, [fieldKey]: true }));
+    setError("");
+    try {
+      const res = await fetch("/api/ai/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: fieldLabel,
+          questionType: fieldAnswerType || "text",
+          options: options || [],
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.success && data?.data?.answer) {
+        const ans = String(data.data.answer).trim();
+        setAnswerDrafts((prev) => ({ ...prev, [fieldKey]: ans }));
+        await saveAnswerToSite(fieldKey, fieldLabel, ans, (fieldAnswerType as any) || "text", "system");
+        await syncProfileToExtension();
+        setAiAutoFillSuccess(`✨ AI suggested and saved answer for "${fieldLabel}"!`);
+      }
+    } catch (err) {
+      console.error("AI error for single field", err);
+    } finally {
+      setFieldAiLoading((prev) => ({ ...prev, [fieldKey]: false }));
+    }
+  };
 
   const resolveKnownAnswer = (
     questionKey: string,
@@ -829,6 +1344,27 @@ export default function Jobs() {
         }
         return changed ? next : prev;
       });
+
+      // Also fetch resume extracted skills & job titles to populate 100 AI keywords cloud
+      fetch("/api/user/resume", { credentials: "include" })
+        .then((r) => r.json())
+        .then((resumeData) => {
+          if (resumeData?.success && resumeData?.data?.parsed) {
+            const parsed = resumeData.data.parsed;
+            const titles = Array.isArray(parsed.jobTitles) ? parsed.jobTitles : [];
+            const rawSkills = parsed.skills;
+            const skills = Array.isArray(rawSkills)
+              ? rawSkills
+              : typeof rawSkills === "object" && rawSkills !== null
+                ? Object.values(rawSkills).flat()
+                : [];
+            const allKws = Array.from(new Set([...titles, ...skills])).map((s) => String(s).trim()).filter(Boolean);
+            if (allKws.length > 0) {
+              setAiKeywordsList(allKws);
+            }
+          }
+        })
+        .catch(() => { });
     } catch {
       // Best effort.
     }
@@ -846,8 +1382,21 @@ export default function Jobs() {
       pendingLabelMap.set(key, String(pending.questionLabel || "").trim() || labelFromQuestionKey(key));
     }
 
+    const payloads: Array<{
+      questionKey: string;
+      questionLabel: string;
+      answer: string;
+      answerType: ScreeningAnswerType;
+      source: ScreeningAnswerSource;
+      lastUsed: string;
+    }> = [];
+
+    const updatedAnswers: Record<string, string> = {};
+    const updatedLabels: Record<string, string> = {};
+    const updatedTypes: Record<string, ScreeningAnswerType> = {};
+
     for (const [rawKey, rawValue] of entries) {
-      const answer = String(rawValue || "").trim();
+      const answer = compactAnswer(String(rawValue || "").trim());
       if (!answer) continue;
       const canonicalKey = toQuestionKey(rawKey);
       if (!canonicalKey) continue;
@@ -858,11 +1407,37 @@ export default function Jobs() {
         labelFromQuestionKey(canonicalKey);
       const catalogField = lookupCatalogField(canonicalKey, rawKey, questionLabel);
       const answerType = catalogField?.answerType || siteAnswerTypes[canonicalKey] || inferAnswerType(answer);
-      try {
-        await saveAnswerToSite(canonicalKey, questionLabel, answer, answerType, "extension_capture");
-      } catch {
-        // Keep running if one answer fails to sync.
-      }
+
+      payloads.push({
+        questionKey: canonicalKey,
+        questionLabel,
+        answer,
+        answerType,
+        source: "extension_capture",
+        lastUsed: new Date().toISOString(),
+      });
+      syncedAnswerRef.current[canonicalKey] = answer;
+      updatedAnswers[canonicalKey] = answer;
+      updatedAnswers[normalizeLabel(questionLabel)] = answer;
+      updatedLabels[canonicalKey] = questionLabel;
+      updatedTypes[canonicalKey] = answerType;
+    }
+
+    if (!payloads.length) return;
+
+    try {
+      await fetch("/api/user/screening/answers", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloads),
+      });
+
+      setSiteScreeningAnswers((prev) => ({ ...prev, ...updatedAnswers }));
+      setSiteQuestionLabels((prev) => ({ ...prev, ...updatedLabels }));
+      setSiteAnswerTypes((prev) => ({ ...prev, ...updatedTypes }));
+    } catch {
+      // Keep running if sync fails
     }
   };
 
@@ -889,15 +1464,15 @@ export default function Jobs() {
         providers: {
           linkedin: snapshot.providers.linkedin
             ? {
-                installed: Boolean(snapshot.providers.linkedin.installed),
-                version: snapshot.providers.linkedin.version,
-              }
+              installed: Boolean(snapshot.providers.linkedin.installed),
+              version: snapshot.providers.linkedin.version,
+            }
             : undefined,
           indeed: snapshot.providers.indeed
             ? {
-                installed: Boolean(snapshot.providers.indeed.installed),
-                version: snapshot.providers.indeed.version,
-              }
+              installed: Boolean(snapshot.providers.indeed.installed),
+              version: snapshot.providers.indeed.version,
+            }
             : undefined,
         },
         linkedIn: snapshot.linkedIn || undefined,
@@ -931,7 +1506,7 @@ export default function Jobs() {
                   questionLabel: q.questionLabel,
                   validationMessage: q.validationMessage || "",
                 }),
-              }).catch(() => {});
+              }).catch(() => { });
             }
           }
         }
@@ -1072,10 +1647,24 @@ export default function Jobs() {
         remoteModeSelected ? preferredLocations : [...preferredLocations, ...preferredCountries],
       );
 
+      const badWordsRaw = pickFirstNonEmpty(mergedAnswers, ["bad_words", "exclude_keywords"]);
+      const badWords = parsePreferenceListInput(badWordsRaw);
+      const blacklistedCompaniesRaw = pickFirstNonEmpty(mergedAnswers, ["blacklisted_companies", "company_blacklist"]);
+      const blacklistedCompanies = parsePreferenceListInput(blacklistedCompaniesRaw);
+      const oneWordRaw = pickFirstNonEmpty(mergedAnswers, ["one_word_keywords", "keywords"]);
+      const oneWordKeywords = parsePreferenceListInput(oneWordRaw);
+      const twoWordsRaw = pickFirstNonEmpty(mergedAnswers, ["two_words_keywords", "search_phrases"]);
+      const twoWordsKeywords = parsePreferenceListInput(twoWordsRaw);
+      const skillsRaw = pickFirstNonEmpty(mergedAnswers, ["core_skills", "skills"]);
+      const skills = parsePreferenceListInput(skillsRaw);
+
       const settingsPayload = {
         currentCity,
         searchLocation: resolvedSearchLocation,
         searchTerms: preferredSearchTerms,
+        oneWordKeywords,
+        twoWordsKeywords,
+        skills,
         filterLocations,
         jobType: preferredJobTypes,
         onSite: preferredWorkMode,
@@ -1097,8 +1686,8 @@ export default function Jobs() {
         submitRateMaxSec: 70,
         maxApplicationsPerRun: 200,
         maxSkipsPerRun: 50,
-        blacklistedCompanies: [],
-        badWords: [],
+        blacklistedCompanies,
+        badWords,
         fullName,
         firstName,
         lastName,
@@ -1459,6 +2048,18 @@ export default function Jobs() {
       .filter((section) => section.fields.length > 0);
   }, [remoteWorkModeSelected, siteScreeningAnswers, siteQuestionLabels, siteAnswerTypes, extensionStatus.pendingQuestions, extensionStatus.screeningAnswers]);
 
+  const currentSearchTerms = useMemo(() => {
+    const raw =
+      answerDrafts["cp_pref_search_terms"] ??
+      answerDrafts["preferred_job_titles"] ??
+      siteScreeningAnswers["cp_pref_search_terms"] ??
+      siteScreeningAnswers["preferred_job_titles"] ??
+      extensionStatus.screeningAnswers?.["cp_pref_search_terms"] ??
+      extensionStatus.screeningAnswers?.["preferred_job_titles"] ??
+      "";
+    return parseSearchTermsInput(raw);
+  }, [answerDrafts, siteScreeningAnswers, extensionStatus.screeningAnswers]);
+
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || null;
 
   const submitAutoApply = async () => {
@@ -1543,7 +2144,7 @@ export default function Jobs() {
 
   const openLinkedInJobsTab = () => {
     if (typeof window === "undefined") return;
-    const opened = window.open("https://www.linkedin.com/jobs/", "_blank", "noopener,noreferrer");
+    const opened = window.open("https://www.linkedin.com/jobs/search/?f_AL=true&f_TPR=r604800", "_blank", "noopener,noreferrer");
     if (opened) {
       opened.opener = null;
     }
@@ -1631,448 +2232,927 @@ export default function Jobs() {
     };
   }, [openInstallGuide]);
 
+  const pendingQuestionsList = extensionStatus.pendingQuestions || [];
+  const pendingCount = pendingQuestionsList.length;
+  const totalScreeningAnswers = Object.keys(siteScreeningAnswers).length;
+
+  const filteredScreeningSections = useMemo(() => {
+    if (!screeningSearchQuery.trim()) return screeningSections;
+    const q = screeningSearchQuery.toLowerCase();
+    return screeningSections
+      .map((sec) => ({
+        ...sec,
+        fields: sec.fields.filter(
+          (f) =>
+            f.questionLabel.toLowerCase().includes(q) ||
+            f.questionKey.toLowerCase().includes(q) ||
+            String(answerDrafts[f.questionKey] || f.answer || "").toLowerCase().includes(q)
+        ),
+      }))
+      .filter((sec) => sec.fields.length > 0);
+  }, [screeningSections, screeningSearchQuery, answerDrafts]);
+
+  const jobsTabs = [
+    {
+      id: "autopilot" as const,
+      label: "Magic AI Autopilot",
+      icon: Sparkles,
+      countBadge: linkedInInstalled ? "Ready" : "Setup",
+    },
+    {
+      id: "dictionary" as const,
+      label: "Keywords Dictionary",
+      icon: BookOpen,
+      countBadge: `${activeSearchTermsList.length + activeOneWordList.length + activeTwoWordsList.length + activeSkillsList.length} Terms`,
+    },
+    {
+      id: "screening" as const,
+      label: "AI Screening Copilot",
+      icon: Sparkles,
+      countBadge: pendingCount > 0 ? `${pendingCount} Missing` : `${totalScreeningAnswers} Synced`,
+    },
+    {
+      id: "queue" as const,
+      label: "Applications Queue",
+      icon: Briefcase,
+      countBadge: `${jobs.length}`,
+    },
+    {
+      id: "settings" as const,
+      label: "Preferences & Targets",
+      icon: SlidersHorizontal,
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
+    <>
+      {/* Mobile Blocker ONLY for this Desktop Browser Extension Page (< 768px) */}
+      <div className="md:hidden">
+        <MobileBlocker />
+      </div>
+
+      {/* Desktop Extension View (≥ 768px) */}
+      <div className="hidden md:block space-y-4">
+        {/* Top Header */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {showLinkedIn ? "LinkedIn Jobs Extension" : "Indeed Jobs Extension Beta"}
-          </h1>
-          <p className="text-gray-600">Showing {jobs.length} real jobs from your backend queue</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold text-gray-900 leading-tight">
+              {showLinkedIn ? "LinkedIn Auto-Apply Copilot" : "Indeed Auto-Apply Copilot Beta"}
+            </h1>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 text-[10px] font-bold border border-purple-200">
+              <Sparkles className="w-3 h-3 text-purple-600" />
+              Magic AI Active
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">Showing {jobs.length} applications from your queue · AI automated screening enabled</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
             {showLinkedIn ? (
-              <>
-                <span ref={versionBadgeRef} className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">
-                  LinkedIn ZIP: {currentPackageFileName || "loading..."}
-                </span>
-                <span className={`rounded-full px-2.5 py-1 font-semibold ${linkedInInstalled ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-700 ring-1 ring-amber-300"}`}>
-                  LinkedIn installed: {linkedInInstalled ? formatExtensionPackageName(linkedInInstalledVersion || "") : "not detected"}
-                </span>
-              </>
+              <span className={`rounded-md px-2 py-0.5 font-semibold ${linkedInInstalled ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+                LinkedIn Extension: {linkedInInstalled ? "Connected & Ready" : "Not Detected"}
+              </span>
             ) : (
-              <>
-                <span className="rounded-full bg-orange-50 px-2.5 py-1 font-semibold text-orange-700">
-                  Indeed ZIP: {indeedExtensionRelease.downloadFileName || "loading..."}
-                </span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">
-                  Indeed installed: {indeedInstalled ? indeedInstalledVersion || "detected" : "not detected"}
-                </span>
-              </>
+              <span className={`rounded-md px-2 py-0.5 font-semibold ${indeedInstalled ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+                Indeed Extension: {indeedInstalled ? "Connected & Ready" : "Not Detected"}
+              </span>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openAiInterventionForJob(selectedJob)}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white rounded-lg text-xs font-bold shadow-xs hover:shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Bot className="w-3.5 h-3.5 text-cyan-200" />
+            <span>✨ AI Agent Fleet Portal</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void autoFillAllWithAI()}
+            disabled={isAutoFillingAI}
+            className="px-3.5 py-1.5 bg-white hover:bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-bold shadow-xs hover:shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-60"
+          >
+            {isAutoFillingAI ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
+            <span>{isAutoFillingAI ? "AI Auto-Filling..." : "Auto-Fill All with AI"}</span>
+          </button>
+
           <button
             onClick={() => void loadJobs()}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
+            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 text-gray-700"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-3.5 h-3.5" />
             Refresh
           </button>
           <button
             onClick={() => void submitAutoApply()}
             disabled={submitting}
-            className="px-6 py-3 gradient-primary text-white rounded-xl font-semibold shadow-premium hover:shadow-premium-lg transition-all disabled:opacity-60"
+            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-all disabled:opacity-60 flex items-center gap-1.5"
           >
-            {submitting ? "Queuing..." : "Create Auto-Apply Job"}
+            <Play className="w-3.5 h-3.5" />
+            {submitting ? "Queuing..." : "Create Job"}
           </button>
         </div>
       </motion.div>
 
+      {/* AI Progress / Success Banners */}
+      {isAutoFillingAI && (
+        <div className="rounded-xl border border-purple-200 bg-purple-50/90 p-3 text-xs text-purple-900 flex items-center gap-2.5 animate-pulse shadow-xs">
+          <Loader2 className="w-4 h-4 text-purple-600 animate-spin shrink-0" />
+          <span className="font-semibold">{aiFillProgress || "Magic AI is resolving all screening questions from your profile..."}</span>
+        </div>
+      )}
+
+      {aiAutoFillSuccess && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 flex items-center justify-between gap-2 shadow-xs">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-semibold">{aiAutoFillSuccess}</span>
+          </div>
+          <button onClick={() => setAiAutoFillSuccess("")} className="text-emerald-600 hover:text-emerald-800 text-xs font-bold">×</button>
+        </div>
+      )}
+
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 text-red-700">
-          <AlertCircle className="w-5 h-5" />
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-xs text-red-700">
+          <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
-      >
-        {/* Header */}
-        <div className="bg-gradient-to-r from-sky-50 to-blue-50 px-6 py-5 border-b border-gray-100">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-sky-600 flex items-center justify-center shadow-sm">
-                <Play className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Extension Workspace</h2>
-                <p className="text-sm text-gray-500">
-                  {showLinkedIn
-                    ? "Install, verify, and sync your LinkedIn extension"
-                    : "Install, verify, and sync your Indeed extension"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                ref={checkExtensionButtonRef}
-                onClick={() => void checkExtensionStatus()}
-                disabled={checkingExtension}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-60 inline-flex items-center gap-2 shadow-sm"
-              >
-                <RefreshCw className={`w-4 h-4 ${checkingExtension ? "animate-spin" : ""}`} />
-                {checkingExtension ? "Checking..." : "Check Status"}
-              </button>
-              {showLinkedIn ? (
-                <button
-                  type="button"
-                  onClick={openInstallGuide}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all inline-flex items-center gap-2 shadow-sm ${
-                    linkedInInstalled
-                      ? "bg-sky-600 text-white hover:bg-sky-700"
-                      : "bg-sky-600 text-white hover:bg-sky-700 ring-2 ring-sky-300 ring-offset-1"
-                  }`}
+      {/* Tabs Navigation Switcher */}
+      <div className="bg-gray-100/80 p-1 rounded-xl flex flex-wrap gap-1 border border-gray-200/60">
+        {jobsTabs.map((tab) => {
+          const isActive = activeJobsTab === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveJobsTab(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${isActive
+                  ? "gradient-primary text-white shadow-2xs"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-white/70"
+                }`}
+            >
+              <Icon className="w-3.5 h-3.5 shrink-0" />
+              <span>{tab.label}</span>
+              {tab.countBadge && (
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
+                    }`}
                 >
-                  <Play className="w-4 h-4" />
-                  Install Guide
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* Extension Info + Status */}
-          {showLinkedIn ? (
-            <div className="space-y-4">
-              {/* Version badge */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 border border-sky-200 px-3 py-1 font-semibold text-sky-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
-                  LinkedIn Extension
+                  {tab.countBadge}
                 </span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
-                  v{linkedInInstalledVersion || "Not detected"}
-                </span>
-                <span className="text-gray-400">|</span>
-                <span className="text-gray-500">Package: <span className="font-semibold text-gray-700">{currentPackageBaseName}</span></span>
-              </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-              {/* Status Cards */}
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className={`rounded-xl border p-4 transition-all ${linkedInInstalled ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {linkedInInstalled ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Extension</span>
+      {/* TAB 1: Magic AI Autopilot */}
+      {activeJobsTab === "autopilot" && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {/* Magic AI Hero Card */}
+          <div className="rounded-xl border border-purple-100 bg-gradient-to-br from-purple-50/90 via-indigo-50/50 to-blue-50/40 text-gray-900 p-4 sm:p-5 shadow-xs relative overflow-hidden">
+            <div className="relative z-10 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 rounded-xl bg-purple-600 text-white shadow-xs">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </span>
+                  <div>
+                    <h2 className="text-sm font-bold text-gray-900 leading-tight">Magic AI Autopilot is Active</h2>
+                    <p className="text-[11px] text-gray-600 mt-0.5">
+                      AI matches your target roles, automatically answers screening questions, and submits Easy Apply runs.
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-600">
-                    {linkedInInstalled ? "Detected and ready" : "Not installed yet"}
-                  </p>
                 </div>
-                <div className={`rounded-xl border p-4 transition-all ${extensionStatus.linkedIn?.hasLinkedInTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {extensionStatus.linkedIn?.hasLinkedInTab ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">LinkedIn</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {extensionStatus.linkedIn?.hasLinkedInTab ? "Signed in and open" : "Open linkedin.com first"}
-                  </p>
-                </div>
-                <div className={`rounded-xl border p-4 transition-all ${extensionStatus.linkedIn?.hasJobsTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {extensionStatus.linkedIn?.hasJobsTab ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Jobs Tab</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {extensionStatus.linkedIn?.hasJobsTab ? "LinkedIn Jobs page open" : "Open LinkedIn Jobs page"}
-                  </p>
+                <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>AI Handling Applications</span>
                 </div>
               </div>
 
-              {/* Quick Actions */}
-              <div className="flex flex-wrap gap-2">
-                <a
-                  ref={storeLinkButtonRef}
-                  href={extensionStoreUrl || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 transition-all inline-flex items-center gap-2 shadow-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Install from Chrome Web Store
-                </a>
+              {/* Status Chips Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                <div className="p-2.5 rounded-lg bg-white/80 border border-gray-200/70 flex items-center justify-between shadow-2xs">
+                  <span className="text-xs font-medium text-gray-600">Extension Bridge</span>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${linkedInInstalled ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+                    {linkedInInstalled ? "Detected & Ready" : "Not Detected"}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white/80 border border-gray-200/70 flex items-center justify-between shadow-2xs">
+                  <span className="text-xs font-medium text-gray-600">LinkedIn Jobs Tab</span>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${extensionStatus.linkedIn?.hasJobsTab ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                    {extensionStatus.linkedIn?.hasJobsTab ? "Jobs Open" : "Open LinkedIn"}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white/80 border border-gray-200/70 flex items-center justify-between shadow-2xs">
+                  <span className="text-xs font-medium text-gray-600">AI Screening Fields</span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                    {totalScreeningAnswers} Synced ({pendingCount} missing)
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-purple-100/70">
                 <a
                   ref={openLinkedInJobsButtonRef}
-                  href="https://www.linkedin.com/jobs/"
+                  href="https://www.linkedin.com/jobs/search/?f_AL=true&f_TPR=r604800"
                   target="_blank"
                   rel="noreferrer"
-                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm"
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1.5 shadow-xs"
                 >
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-3.5 h-3.5" />
                   Open LinkedIn Jobs
                 </a>
                 <button
+                  type="button"
+                  onClick={() => void autoFillAllWithAI()}
+                  disabled={isAutoFillingAI}
+                  className="px-3 py-1.5 bg-white hover:bg-purple-50 text-purple-700 rounded-lg text-xs font-bold border border-purple-200 transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  {isAutoFillingAI ? "AI Auto-Filling..." : "Auto-Fill All with AI"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiDecisionModalOpen(true)}
+                  className="px-3 py-1.5 bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700 text-white rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-xs"
+                >
+                  <Bot className="w-3.5 h-3.5 text-cyan-200" />
+                  ✨ AI Agent Portal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void checkExtensionStatus()}
+                  disabled={checkingExtension}
+                  className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold border border-gray-200 transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${checkingExtension ? "animate-spin" : ""}`} />
+                  Check Status
+                </button>
+                <button
+                  type="button"
                   ref={syncProfileButtonRef}
                   onClick={() => void syncProfileToExtension()}
-                  disabled={syncingSettings}
-                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm disabled:opacity-60"
+                  className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold border border-gray-200 transition-colors inline-flex items-center gap-1.5 shadow-xs"
                 >
-                  <Link2 className="w-4 h-4" />
-                  {syncingSettings ? "Syncing..." : "Sync Profile"}
+                  <Link2 className="w-3.5 h-3.5" />
+                  Sync Extension
                 </button>
               </div>
-
-              {/* Setup Steps - Compact */}
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">Quick Setup</h4>
-                <ol className="space-y-2">
-                  {[
-                    { num: 1, text: <>Open the <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">AutoApply CV LinkedIn Copilot</code> page on the Chrome Web Store and click <strong>Add to Chrome</strong></> },
-                    { num: 2, text: <>Pin the extension, open LinkedIn Jobs, then click <strong>Check Status</strong></> },
-                  ].map((step) => (
-                    <li key={step.num} className="flex items-start gap-3 text-sm text-gray-700">
-                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-sky-100 text-sky-700 text-xs font-bold flex items-center justify-center mt-0.5">{step.num}</span>
-                      <span>{step.text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              {/* Resume Note */}
-              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-start gap-3">
-                <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <span className="text-sm font-semibold text-blue-900">Resume Required?</span>
-                  <p className="text-xs text-blue-700 mt-0.5">
-                    Upload your resume in LinkedIn Easy Apply profile first. The copilot auto-selects the latest attached resume.
-                  </p>
-                </div>
-              </div>
             </div>
-          ) : null}
-
-          {showIndeed ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 border border-orange-200 px-3 py-1 font-semibold text-orange-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                  Indeed Beta
-                </span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
-                  v{indeedInstalledVersion || "Not detected"}
-                </span>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className={`rounded-xl border p-4 transition-all ${indeedInstalled ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {indeedInstalled ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Extension</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {indeedInstalled ? `Detected v${indeedInstalledVersion}` : "Load the Indeed ZIP"}
-                  </p>
-                </div>
-                <div className={`rounded-xl border p-4 transition-all ${extensionStatus.indeed?.hasIndeedTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {extensionStatus.indeed?.hasIndeedTab ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Indeed</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {extensionStatus.indeed?.hasIndeedTab ? "Indeed tab open" : "Open indeed.com first"}
-                  </p>
-                </div>
-                <div className={`rounded-xl border p-4 transition-all ${extensionStatus.indeed?.hasJobsTab ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {extensionStatus.indeed?.hasJobsTab ? (
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /></div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /></div>
-                    )}
-                    <span className="text-sm font-semibold text-gray-900">Jobs Tab</span>
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {extensionStatus.indeed?.hasJobsTab ? "Indeed Jobs open" : "Open Indeed Jobs page"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <a href={indeedExtensionZipUrl} download={indeedExtensionRelease.downloadFileName || undefined} className="px-4 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 transition-all inline-flex items-center gap-2 shadow-sm">
-                  <Download className="w-4 h-4" /> Download ZIP
-                </a>
-                <a href="https://www.indeed.com/jobs" target="_blank" rel="noreferrer" className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm">
-                  <ExternalLink className="w-4 h-4" /> Open Indeed Jobs
-                </a>
-                <button type="button" onClick={() => void checkExtensionStatus()} disabled={checkingExtension} className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all inline-flex items-center gap-2 shadow-sm disabled:opacity-60">
-                  <RefreshCw className={`w-4 h-4 ${checkingExtension ? "animate-spin" : ""}`} /> Refresh Status
-                </button>
-              </div>
-
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">Quick Setup</h4>
-                <ol className="space-y-2">
-                  {[
-                    { num: 1, text: <>Download <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">{indeedExtensionRelease.downloadFileName}</code> and extract it</> },
-                    { num: 2, text: <>Open <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">chrome://extensions</code>, click <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">Load unpacked</code> for the Indeed folder</> },
-                    { num: 3, text: <>Open <code className="px-1.5 py-0.5 bg-white rounded border border-gray-200 text-xs font-mono">indeed.com/jobs</code>, then click <strong>Refresh Status</strong></> },
-                  ].map((step) => (
-                    <li key={step.num} className="flex items-start gap-3 text-sm text-gray-700">
-                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold flex items-center justify-center mt-0.5">{step.num}</span>
-                      <span>{step.text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            </div>
-          ) : null}
-
-          {installMessage ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
-              {installMessage}
-            </div>
-          ) : null}
-
-          {showLinkedIn ? (
-            <ExtensionInstallGuide
-              open={installGuideOpen}
-              steps={installGuideSteps}
-              currentStepIndex={installGuideStepIndex}
-              completedStepIds={installGuideCompletedIds}
-              onClose={closeInstallGuide}
-              onNext={nextInstallGuideStep}
-              onPrevious={previousInstallGuideStep}
-              onStepDone={markInstallGuideStepDone}
-              onJumpToStep={jumpToInstallGuideStep}
-              onStepAction={runInstallGuideStepAction}
-            />
-          ) : null}
-
-        {(extensionStatus.pendingQuestions || []).length > 0 ? (
-          <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
-            <h3 className="font-semibold text-gray-900">Action Needed: Answer Required Fields</h3>
-            {(extensionStatus.pendingQuestions || []).map((q) => {
-              const pendingKey = toQuestionKey(q.questionKey || q.questionLabel);
-              const pendingCatalog = lookupCatalogField(q.questionKey || q.questionLabel, q.questionLabel);
-              const pendingDraftValue = answerDrafts[pendingKey] || "";
-              const pendingAnswerType = pendingCatalog?.answerType || siteAnswerTypes[pendingKey] || inferAnswerType(pendingDraftValue);
-              const hasValidationMessage = Boolean(q.validationMessage);
-              return (
-                <div
-                  key={q.questionKey}
-                  className={`rounded-xl border p-4 ${
-                    hasValidationMessage ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
-                  }`}
-                >
-                  <div className="text-sm font-semibold text-gray-900">{q.questionLabel}</div>
-                  {q.validationMessage ? (
-                    <div className="mt-1 text-xs font-medium text-red-700">{q.validationMessage}</div>
-                  ) : null}
-                  {(q.questionKey === "resume_upload_required" || /resume/i.test(String(q.validationMessage || ""))) ? (
-                    <div className="text-xs text-blue-700 mt-2">
-                      Upload resume in LinkedIn Easy Apply profile. Copilot will auto-select the newest attached resume.
-                    </div>
-                  ) : null}
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <div className="flex-1">
-                      <AnswerValueEditor
-                        answerType={pendingAnswerType}
-                        value={pendingDraftValue}
-                        onChange={(value) =>
-                          setAnswerDrafts((prev) => ({
-                            ...prev,
-                            [pendingKey]: value,
-                          }))
-                        }
-                        options={withCurrentSelectOption(pendingCatalog?.options || (pendingAnswerType === "boolean" ? YES_NO_OPTIONS : []), pendingDraftValue)}
-                        presets={pendingCatalog?.presets || []}
-                        placeholder="Enter answer to reuse in next applications"
-                        variant="amber"
-                      />
-                    </div>
-                    <button
-                      onClick={() => void saveAnswerForQuestion(q.questionKey, q.questionLabel, pendingAnswerType)}
-                      disabled={savingAnswerKey === pendingKey}
-                      className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-60"
-                    >
-                      {savingAnswerKey === pendingKey ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
           </div>
-        ) : null}
 
-        {screeningSections.length > 0 ? (
-          <div className="mt-6 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+
+        </div>
+      )}
+
+      {/* TAB 2: Keywords Dictionary (Applier Filter & Search Engine) */}
+      {activeJobsTab === "dictionary" && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          
+          {/* Top Dictionary HUD & Action Banner */}
+          <div className="rounded-2xl border border-indigo-200 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-indigo-600 text-white shadow-xs">
+                  <BookOpen className="w-4 h-4" />
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 border border-indigo-200 text-indigo-700 text-[10px] font-bold font-mono">
+                  Applier Filter Engine
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-mono font-semibold">
+                  {activeSearchTermsList.length + activeSkillsList.length} Total Terms
+                </span>
+              </div>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-tight">
+                Keywords &amp; Search Terms Dictionary
+              </h2>
+              <p className="text-xs text-gray-600 max-w-xl leading-relaxed">
+                The AI Autopilot and Chrome Extension use this dictionary to filter matching jobs, verify requirements, 
+                and automatically Easy Apply to relevant roles on LinkedIn &amp; Indeed.
+              </p>
+            </div>
+
+            {/* Top Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => void handleGenerate100Keywords()}
+                disabled={isGeneratingAiProfile}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold shadow-xs hover:shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                {isGeneratingAiProfile ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                )}
+                <span>{isGeneratingAiProfile ? "Analyzing Resume..." : "✨ Generate 100 AI Keywords"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await syncProfileToExtension();
+                  setDictionaryToast("⚡ Dictionary synced with Extension & AI Fleet!");
+                  setTimeout(() => setDictionaryToast(null), 3000);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Link2 className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Sync to Extension</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Toast Notification */}
+          {dictionaryToast && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{dictionaryToast}</span>
+              </div>
+              <button type="button" onClick={() => setDictionaryToast(null)} className="text-emerald-700 hover:text-emerald-900 text-xs font-bold">×</button>
+            </div>
+          )}
+
+          {/* Quick Filter Search Bar */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={dictionaryFilterQuery}
+              onChange={(e) => setDictionaryFilterQuery(e.target.value)}
+              placeholder="Search or filter dictionary keywords (e.g. React, Fullstack, Python, Liquid)..."
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-gray-200 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-purple-500 shadow-2xs"
+            />
+            {dictionaryFilterQuery && (
+              <button
+                type="button"
+                onClick={() => setDictionaryFilterQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* ── SECTION 1: Target Job Titles & Search Queries (Applier Filter Engine) ── */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-gray-100 gap-2">
               <div>
-                <h3 className="text-base font-bold text-gray-900">Saved Screening Answers</h3>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  Synced from onboarding and extension — used in Easy Apply forms
+                <h3 className="text-xs sm:text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-indigo-600" />
+                  <span>Target Job Titles &amp; Search Queries</span>
+                  <span className="px-2 py-0.2 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold">
+                    {activeSearchTermsList.length} Active
+                  </span>
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  The bot will scan, filter, and only Easy Apply to jobs matching these specific role titles.
                 </p>
               </div>
-              <div className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
-                {screeningSections.reduce((count, section) => count + section.fields.length, 0)} fields
-              </div>
+
+              {activeSearchTermsList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleClearAllSearchTitles()}
+                  className="text-gray-400 hover:text-rose-600 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 self-start sm:self-center"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All Titles</span>
+                </button>
+              )}
             </div>
 
-            {screeningSections.map((section) => (
-              <div key={section.category} className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-                <div className="bg-gray-50 px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+            {/* Add Title Input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newTitleTermInput}
+                onChange={(e) => setNewTitleTermInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleAddSearchTitleTerm(newTitleTermInput);
+                }}
+                placeholder="e.g. PLC Programmer, SCADA Engineer, Automation Engineer..."
+                className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddSearchTitleTerm(newTitleTermInput)}
+                disabled={!newTitleTermInput.trim()}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Title</span>
+              </button>
+            </div>
+
+            {/* Active Title Tags List */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {activeSearchTermsList
+                .filter((t) => !dictionaryFilterQuery.trim() || t.toLowerCase().includes(dictionaryFilterQuery.toLowerCase()))
+                .map((term) => (
+                  <span
+                    key={term}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 text-xs font-semibold text-indigo-900 shadow-2xs transition-all group"
+                  >
+                    <span>{term}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveSearchTitleTerm(term)}
+                      title={`Remove ${term}`}
+                      className="text-indigo-400 hover:text-rose-600 rounded p-0.5 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              {activeSearchTermsList.length === 0 && (
+                <p className="text-xs text-gray-400 italic py-1">No search titles active. Add one above or click &apos;Generate 100 AI Keywords&apos;.</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── SECTION 2: 1-Word Keywords & Acronyms (Single-Word Precision) ── */}
+          <div className="rounded-2xl border border-cyan-200 bg-cyan-50/20 p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-cyan-100 gap-2">
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-cyan-950 flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-cyan-600" />
+                  <span>1-Word Keywords &amp; Acronyms</span>
+                  <span className="px-2 py-0.2 rounded-full bg-cyan-100 border border-cyan-300 text-cyan-900 text-[10px] font-bold">
+                    {activeOneWordList.length} Terms
+                  </span>
+                </h3>
+                <p className="text-[11px] text-gray-600 mt-0.5">
+                  Single-word core tags, hardware/software acronyms, and foundational technologies.
+                </p>
+              </div>
+
+              {activeOneWordList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleClearAllOneWord()}
+                  className="text-gray-400 hover:text-rose-600 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 self-start sm:self-center"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All 1-Word</span>
+                </button>
+              )}
+            </div>
+
+            {/* Add 1-Word Input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newOneWordInput}
+                onChange={(e) => setNewOneWordInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleAddOneWordTerm(newOneWordInput);
+                }}
+                placeholder="e.g. PLC, SCADA, HMI, VFD, DCS, Siemens, Modbus, Robotics..."
+                className="flex-1 px-3 py-2 rounded-xl bg-white border border-cyan-200 text-xs text-gray-900 focus:outline-none focus:border-cyan-500"
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddOneWordTerm(newOneWordInput)}
+                disabled={!newOneWordInput.trim()}
+                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add 1-Word</span>
+              </button>
+            </div>
+
+            {/* Active 1-Word List */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {activeOneWordList
+                .filter((w) => !dictionaryFilterQuery.trim() || w.toLowerCase().includes(dictionaryFilterQuery.toLowerCase()))
+                .map((word) => (
+                  <span
+                    key={word}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.8 rounded-xl bg-cyan-100/70 hover:bg-cyan-200/80 border border-cyan-300 text-xs font-semibold text-cyan-950 font-mono shadow-2xs transition-all"
+                  >
+                    <span>{word}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveOneWordTerm(word)}
+                      title={`Remove ${word}`}
+                      className="text-cyan-600 hover:text-rose-600 rounded p-0.5 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              {activeOneWordList.length === 0 && (
+                <p className="text-xs text-gray-400 italic py-1">No 1-word terms active. Add one above or click &apos;Generate 100 AI Keywords&apos;.</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── SECTION 3: 2-Word Phrases & Combos (Multi-Word Precision Targets) ── */}
+          <div className="rounded-2xl border border-blue-200 bg-blue-50/20 p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-blue-100 gap-2">
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-blue-950 flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-blue-600" />
+                  <span>2-Word Phrases &amp; Combos</span>
+                  <span className="px-2 py-0.2 rounded-full bg-blue-100 border border-blue-300 text-blue-900 text-[10px] font-bold">
+                    {activeTwoWordsList.length} Phrases
+                  </span>
+                </h3>
+                <p className="text-[11px] text-gray-600 mt-0.5">
+                  High-intent compound phrases used by recruiters and ATS matching engines.
+                </p>
+              </div>
+
+              {activeTwoWordsList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleClearAllTwoWords()}
+                  className="text-gray-400 hover:text-rose-600 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 self-start sm:self-center"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All 2-Word</span>
+                </button>
+              )}
+            </div>
+
+            {/* Add 2-Word Input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newTwoWordsInput}
+                onChange={(e) => setNewTwoWordsInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleAddTwoWordsTerm(newTwoWordsInput);
+                }}
+                placeholder="e.g. PLC Programmer, SCADA Engineer, Industrial Automation, Control Systems..."
+                className="flex-1 px-3 py-2 rounded-xl bg-white border border-blue-200 text-xs text-gray-900 focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddTwoWordsTerm(newTwoWordsInput)}
+                disabled={!newTwoWordsInput.trim()}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add 2-Word</span>
+              </button>
+            </div>
+
+            {/* Active 2-Words List */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {activeTwoWordsList
+                .filter((p) => !dictionaryFilterQuery.trim() || p.toLowerCase().includes(dictionaryFilterQuery.toLowerCase()))
+                .map((phrase) => (
+                  <span
+                    key={phrase}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-100/70 hover:bg-blue-200/80 border border-blue-300 text-xs font-semibold text-blue-950 shadow-2xs transition-all"
+                  >
+                    <span>{phrase}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveTwoWordsTerm(phrase)}
+                      title={`Remove ${phrase}`}
+                      className="text-blue-500 hover:text-rose-600 rounded p-0.5 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              {activeTwoWordsList.length === 0 && (
+                <p className="text-xs text-gray-400 italic py-1">No 2-word phrases active. Add one above or click &apos;Generate 100 AI Keywords&apos;.</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── SECTION 4: Core Technical Skills & Stack (10 Skills) ── */}
+          <div className="rounded-2xl border border-purple-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-gray-100 gap-2">
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-purple-600" />
+                  <span>Core Technical Skills &amp; Stack</span>
+                  <span className="px-2 py-0.2 rounded-full bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold">
+                    {activeSkillsList.length} Skills
+                  </span>
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Used by the Groq matcher to compute match % and auto-answer technical screening questions.
+                </p>
+              </div>
+
+              {activeSkillsList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleClearAllSkills()}
+                  className="text-gray-400 hover:text-rose-600 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 self-start sm:self-center"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All Skills</span>
+                </button>
+              )}
+            </div>
+
+            {/* Add Skill Input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSkillTermInput}
+                onChange={(e) => setNewSkillTermInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleAddSkillTerm(newSkillTermInput);
+                }}
+                placeholder="e.g. React, TypeScript, Next.js, Node.js, GraphQL, AWS..."
+                className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 focus:bg-white focus:outline-none focus:border-purple-500"
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddSkillTerm(newSkillTermInput)}
+                disabled={!newSkillTermInput.trim()}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Skill</span>
+              </button>
+            </div>
+
+            {/* Active Skills List */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {activeSkillsList
+                .filter((s) => !dictionaryFilterQuery.trim() || s.toLowerCase().includes(dictionaryFilterQuery.toLowerCase()))
+                .map((skill) => (
+                  <span
+                    key={skill}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-50 hover:bg-purple-100/80 border border-purple-200/80 text-xs font-semibold text-purple-900 shadow-2xs transition-all group"
+                  >
+                    <span>{skill}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveSkillTerm(skill)}
+                      title={`Remove ${skill}`}
+                      className="text-purple-400 hover:text-rose-600 rounded p-0.5 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              {activeSkillsList.length === 0 && (
+                <p className="text-xs text-gray-400 italic py-1">No technical skills active. Add one above or click &apos;Generate 100 AI Keywords&apos;.</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── SECTION 5: Negative & Exclude Keywords (Auto-Skip Engine) ── */}
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/20 p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-rose-100 gap-2">
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-rose-900 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-rose-600" />
+                  <span>Negative &amp; Exclude Keywords (Auto-Skip)</span>
+                  <span className="px-2 py-0.2 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-[10px] font-bold">
+                    {activeExcludeList.length} Excluded
+                  </span>
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  The applier bot will automatically skip and decline any job containing these words.
+                </p>
+              </div>
+
+              {activeExcludeList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleClearAllExclude()}
+                  className="text-gray-400 hover:text-rose-600 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 self-start sm:self-center"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All Excluded</span>
+                </button>
+              )}
+            </div>
+
+            {/* Add Exclude Term Input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newExcludeTermInput}
+                onChange={(e) => setNewExcludeTermInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleAddExcludeTerm(newExcludeTermInput);
+                }}
+                placeholder="e.g. Internship, Junior, Unpaid, Security Clearance..."
+                className="flex-1 px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs text-gray-900 focus:outline-none focus:border-rose-500"
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddExcludeTerm(newExcludeTermInput)}
+                disabled={!newExcludeTermInput.trim()}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Exclude</span>
+              </button>
+            </div>
+
+            {/* Active Exclude Keywords List */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {activeExcludeList
+                .filter((e) => !dictionaryFilterQuery.trim() || e.toLowerCase().includes(dictionaryFilterQuery.toLowerCase()))
+                .map((term) => (
+                  <span
+                    key={term}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-100 hover:bg-rose-200/80 border border-rose-300 text-xs font-semibold text-rose-900 shadow-2xs transition-all group"
+                  >
+                    <span>🚫 {term}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveExcludeTerm(term)}
+                      title={`Remove ${term}`}
+                      className="text-rose-400 hover:text-rose-800 rounded p-0.5 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              {activeExcludeList.length === 0 && (
+                <p className="text-xs text-gray-400 italic py-1">No excluded keywords. Add one above to automatically skip unwanted roles.</p>
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* TAB 3: AI Screening Copilot */}
+      {activeJobsTab === "screening" && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {/* AI Resolver Banner */}
+          <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-indigo-600 text-white shadow-xs">
+                  <Sparkles className="w-4 h-4" />
+                </span>
+                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">AI Screening Question Copilot</h3>
+              </div>
+              <p className="text-xs text-gray-600 mt-1">
+                Auto-answers Easy Apply screening questions using your resume background and tailored AI models.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void autoFillAllWithAI()}
+              disabled={isAutoFillingAI}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-60"
+            >
+              {isAutoFillingAI ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              <span>{isAutoFillingAI ? "AI Auto-Filling..." : "✨ Auto-Fill All Required Fields with AI"}</span>
+            </button>
+          </div>
+
+          {/* Action Needed (Pending Fields) */}
+          {pendingQuestionsList.length > 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
+                <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                  Action Needed: Required Questions ({pendingQuestionsList.length})
+                </h3>
+                <span className="text-[11px] text-amber-700 font-medium">Auto-fill with AI or save manually</span>
+              </div>
+
+              <div className="space-y-2.5">
+                {pendingQuestionsList.map((q) => {
+                  const pendingKey = toQuestionKey(q.questionKey || q.questionLabel);
+                  const pendingCatalog = lookupCatalogField(q.questionKey || q.questionLabel, q.questionLabel);
+                  const pendingDraftValue = answerDrafts[pendingKey] || "";
+                  const pendingAnswerType = pendingCatalog?.answerType || siteAnswerTypes[pendingKey] || inferAnswerType(pendingDraftValue);
+                  const isFieldAiBusy = fieldAiLoading[pendingKey];
+
+                  return (
+                    <div key={q.questionKey} className="rounded-lg border border-amber-200/80 bg-white p-3 space-y-2 shadow-2xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs font-bold text-gray-900">{q.questionLabel}</div>
+                        <button
+                          type="button"
+                          onClick={() => void generateAIAnswerForField(pendingKey, q.questionLabel, pendingAnswerType, pendingCatalog?.options)}
+                          disabled={isFieldAiBusy}
+                          className="px-2.5 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[11px] font-semibold flex items-center gap-1 transition-colors disabled:opacity-60"
+                        >
+                          {isFieldAiBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-purple-600" />}
+                          <span>AI Suggest</span>
+                        </button>
+                      </div>
+
+                      {q.validationMessage ? (
+                        <div className="text-[11px] text-red-600 font-medium">{q.validationMessage}</div>
+                      ) : null}
+
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex-1">
+                          <AnswerValueEditor
+                            answerType={pendingAnswerType}
+                            value={pendingDraftValue}
+                            onChange={(value) =>
+                              setAnswerDrafts((prev) => ({
+                                ...prev,
+                                [pendingKey]: value,
+                              }))
+                            }
+                            options={withCurrentSelectOption(pendingCatalog?.options || (pendingAnswerType === "boolean" ? YES_NO_OPTIONS : []), pendingDraftValue)}
+                            presets={pendingCatalog?.presets || []}
+                            placeholder="Enter answer or click AI Suggest"
+                            variant="amber"
+                          />
+                        </div>
+                        <button
+                          onClick={() => void saveAnswerForQuestion(q.questionKey, q.questionLabel, pendingAnswerType)}
+                          disabled={savingAnswerKey === pendingKey || !String(pendingDraftValue || "").trim()}
+                          className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold disabled:opacity-50 transition-colors"
+                        >
+                          {savingAnswerKey === pendingKey ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Search Filter for Screening Fields */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="text"
+              value={screeningSearchQuery}
+              onChange={(e) => setScreeningSearchQuery(e.target.value)}
+              placeholder="Search saved screening answers..."
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 outline-none bg-white shadow-xs"
+            />
+          </div>
+
+          {/* Categorized Screening Answers */}
+          <div className="space-y-3">
+            {filteredScreeningSections.map((section) => (
+              <div key={section.category} className="rounded-xl border border-gray-200/80 bg-white overflow-hidden shadow-xs">
+                <div className="bg-gray-50/80 px-4 py-2.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-900">{section.title}</h4>
-                    <p className="text-xs text-gray-500">{section.subtitle}</p>
+                    <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">{section.title}</h4>
+                    <p className="text-[11px] text-gray-500">{section.subtitle}</p>
                   </div>
-                  <span className="text-xs font-medium text-gray-400">{section.fields.length} fields</span>
+                  <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                    {section.fields.length} fields
+                  </span>
                 </div>
 
                 <div className="divide-y divide-gray-100">
                   {section.fields.map((field) => {
                     const draftValue = answerDrafts[field.questionKey] ?? field.answer;
                     const isPending = field.source === "pending";
-                    const sourceBadge =
-                      field.source === "site"
-                        ? "Saved"
-                        : field.source === "extension"
-                          ? "Extension"
-                          : field.source === "pending"
-                            ? "Pending"
-                            : "Merged";
+                    const isFieldAiBusy = fieldAiLoading[field.questionKey];
 
                     return (
-                      <div
-                        key={field.questionKey}
-                        className={`px-5 py-4 ${isPending ? "bg-amber-50/50" : "bg-white"}`}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-900">{field.questionLabel}</span>
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                            isPending ? "bg-amber-100 text-amber-700" :
-                            field.source === "site" ? "bg-emerald-100 text-emerald-700" :
-                            "bg-gray-100 text-gray-600"
-                          }`}>
-                            {sourceBadge}
-                          </span>
+                      <div key={field.questionKey} className={`p-3 space-y-2 ${isPending ? "bg-amber-50/30" : "bg-white"}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-gray-900">{field.questionLabel}</span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${isPending ? "bg-amber-100 text-amber-700" :
+                                field.source === "site" ? "bg-emerald-100 text-emerald-700" :
+                                  "bg-gray-100 text-gray-600"
+                              }`}>
+                              {field.source === "site" ? "Saved" : field.source === "pending" ? "Pending" : "Merged"}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => void generateAIAnswerForField(field.questionKey, field.questionLabel, field.answerType, field.options)}
+                            disabled={isFieldAiBusy}
+                            className="px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-100 text-[10px] font-semibold flex items-center gap-1 transition-colors disabled:opacity-60"
+                          >
+                            {isFieldAiBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-purple-600" />}
+                            <span>AI Suggest</span>
+                          </button>
                         </div>
 
-                        <div className="flex flex-col gap-2 sm:flex-row">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <div className="flex-1">
                             <AnswerValueEditor
                               answerType={field.answerType}
@@ -2085,14 +3165,14 @@ export default function Jobs() {
                               }
                               options={withCurrentSelectOption(field.options || (field.answerType === "boolean" ? YES_NO_OPTIONS : []), draftValue)}
                               presets={field.presets || []}
-                              placeholder="Type answer and click Save"
+                              placeholder="Type answer or click AI Suggest"
                               variant={isPending ? "amber" : "default"}
                             />
                           </div>
                           <button
                             onClick={() => void saveAnswerForQuestion(field.questionKey, field.questionLabel, field.answerType)}
                             disabled={savingAnswerKey === field.questionKey || !String(draftValue || "").trim()}
-                            className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold disabled:opacity-50 transition-colors"
                           >
                             {savingAnswerKey === field.questionKey ? "Saving..." : "Save"}
                           </button>
@@ -2104,221 +3184,389 @@ export default function Jobs() {
               </div>
             ))}
           </div>
-        ) : null}
         </div>
-      </motion.div>
+      )}
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-white rounded-2xl p-6 border-2 border-gray-200 space-y-4"
-      >
-        <div className="flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search queued jobs by id, title, company, status..."
-              className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
-            />
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
-          >
-            <SlidersHorizontal className="w-5 h-5" />
-            Criteria
-          </button>
-        </div>
-
-        {showFilters && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="grid md:grid-cols-2 gap-4">
-            <input
-              value={criteria.keywords}
-              onChange={(e) => setCriteria((p) => ({ ...p, keywords: e.target.value }))}
-              placeholder="Keywords / title"
-              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
-            />
-            <input
-              value={criteria.company}
-              onChange={(e) => setCriteria((p) => ({ ...p, company: e.target.value }))}
-              placeholder="Company"
-              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
-            />
-            <input
-              value={criteria.location}
-              onChange={(e) => setCriteria((p) => ({ ...p, location: e.target.value }))}
-              placeholder="Location / city"
-              className="px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-400 outline-none"
-            />
-            <label className="flex items-center gap-2 px-3">
+      {/* TAB 3: Applications Queue */}
+      {activeJobsTab === "queue" && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl p-3 border border-gray-200/80 shadow-xs flex flex-col sm:flex-row gap-2.5">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <input
-                type="checkbox"
-                checked={criteria.easyApplyOnly}
-                onChange={(e) => setCriteria((p) => ({ ...p, easyApplyOnly: e.target.checked }))}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search queued applications by title, company, status..."
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 outline-none"
               />
-              <span className="text-sm font-medium text-gray-700">Easy Apply only</span>
-            </label>
-          </motion.div>
-        )}
-      </motion.div>
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Criteria Filter</span>
+            </button>
+          </div>
 
-      <div className="grid lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-2 space-y-4 max-h-[800px] overflow-y-auto">
-          {loading ? <div className="text-sm text-gray-500">Loading jobs...</div> : null}
-          {!loading && filteredJobs.length === 0 ? <div className="text-sm text-gray-500">No jobs found.</div> : null}
-          {filteredJobs.map((job, index) => {
-            const company = String(job.criteriaJson?.company || "LinkedIn");
-            const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "Auto-Apply Job");
-            const location = String(job.criteriaJson?.location || job.criteriaJson?.currentCity || "N/A");
-            const reason = getJobReason(job);
-            const displayStatus = displayJobStatus(job);
-            return (
-              <motion.div
-                key={job.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.04 }}
-                onClick={() => setSelectedJobId(job.id)}
-                className={`bg-white rounded-2xl p-6 border-2 cursor-pointer transition-all duration-300 ${
-                  selectedJobId === job.id ? "border-purple-400 shadow-xl" : "border-gray-200 hover:border-purple-300 hover:shadow-lg"
-                }`}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center font-bold text-purple-700">
-                      {company.charAt(0)}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900">{title}</h3>
-                      <p className="text-sm text-gray-600">{company}</p>
-                    </div>
-                  </div>
-                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge(job.status)}`}>{displayStatus}</div>
-                </div>
-                {reason ? (
-                  <div className="mb-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">
-                    Reason: {reason}
-                  </div>
-                ) : null}
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <MapPin className="w-4 h-4" />
-                    {location}
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Clock className="w-4 h-4" />
-                    {formatDate(job.createdAt)}
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Briefcase className="w-4 h-4" />
-                    Attempts {job.attempts}/{job.maxAttempts}
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="lg:col-span-3 bg-white rounded-2xl p-8 border-2 border-gray-200 max-h-[800px] overflow-y-auto sticky top-0"
-        >
-          {!selectedJob ? (
-            <div className="text-sm text-gray-500">Select a job to view details.</div>
-          ) : (
-            <>
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{String(selectedJob.criteriaJson?.title || selectedJob.criteriaJson?.keywords || "Auto-Apply Job")}</h2>
-                  <p className="text-sm text-gray-600 mt-2">Job ID: {selectedJob.id}</p>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${statusBadge(selectedJob.status)}`}>{displayJobStatus(selectedJob)}</div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-purple-50 rounded-xl p-4">
-                  <div className="text-xs uppercase text-purple-700 font-semibold mb-1">Created</div>
-                  <div className="text-sm text-gray-900">{formatDate(selectedJob.createdAt)}</div>
-                </div>
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <div className="text-xs uppercase text-blue-700 font-semibold mb-1">Attempts</div>
-                  <div className="text-sm text-gray-900">
-                    {selectedJob.attempts} / {selectedJob.maxAttempts}
-                  </div>
-                </div>
-              </div>
-
-              {getJobReason(selectedJob) ? (
-                <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
-                  Skipped reason: {getJobReason(selectedJob)}
-                </div>
-              ) : null}
-
-              {selectedJob.errorMessage ? (
-                <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{selectedJob.errorMessage}</div>
-              ) : null}
-
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Criteria
-                </h3>
-                <pre className="text-xs bg-gray-50 border border-gray-200 rounded-xl p-4 overflow-auto">
-{JSON.stringify(selectedJob.criteriaJson || {}, null, 2)}
-                </pre>
-              </div>
-
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-900 mb-3">Recent Logs</h3>
-                <div className="space-y-2">
-                  {(selectedJob.logs || []).length === 0 ? (
-                    <div className="text-sm text-gray-500">No logs available.</div>
-                  ) : (
-                    (selectedJob.logs || []).map((log) => (
-                      <div key={log.id} className="border border-gray-200 rounded-lg px-3 py-2">
-                        <div className="text-xs text-gray-500">{formatDate(log.createdAt)} | {log.step} | {log.level}</div>
-                        <div className="text-sm text-gray-800">{log.message}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-4 mt-8 pt-6 border-t border-gray-200">
-                <button
-                  onClick={() => void submitAutoApply()}
-                  disabled={submitting}
-                  className="flex-1 px-6 py-3 gradient-primary text-white rounded-xl font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  <Play className="w-4 h-4" />
-                  {submitting ? "Queuing..." : "Queue New Job"}
-                </button>
-                <button
-                  onClick={() => void cancelSelected()}
-                  disabled={
-                    cancelling ||
-                    selectedJob.status === "running" ||
-                    selectedJob.status === "succeeded" ||
-                    selectedJob.status === "failed" ||
-                    selectedJob.status === "dead_letter" ||
-                    selectedJob.status === "cancelled"
-                  }
-                  className="px-6 py-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-semibold transition-colors disabled:opacity-60 flex items-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  {cancelling ? "Cancelling..." : "Cancel Job"}
-                </button>
-              </div>
-            </>
+          {showFilters && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="bg-white p-3 rounded-xl border border-gray-200/80 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+              <input
+                value={criteria.keywords}
+                onChange={(e) => setCriteria((p) => ({ ...p, keywords: e.target.value }))}
+                placeholder="Keywords / title"
+                className="px-3 py-1.5 rounded-lg border border-gray-200 focus:border-purple-400 outline-none text-xs"
+              />
+              <input
+                value={criteria.company}
+                onChange={(e) => setCriteria((p) => ({ ...p, company: e.target.value }))}
+                placeholder="Company"
+                className="px-3 py-1.5 rounded-lg border border-gray-200 focus:border-purple-400 outline-none text-xs"
+              />
+              <input
+                value={criteria.location}
+                onChange={(e) => setCriteria((p) => ({ ...p, location: e.target.value }))}
+                placeholder="Location / city"
+                className="px-3 py-1.5 rounded-lg border border-gray-200 focus:border-purple-400 outline-none text-xs"
+              />
+            </motion.div>
           )}
-        </motion.div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            {/* Jobs List */}
+            <div className="lg:col-span-6 space-y-2.5 max-h-[640px] overflow-y-auto pr-1">
+              {loading ? <div className="text-xs text-gray-400 py-6 text-center">Loading applications queue...</div> : null}
+              {!loading && filteredJobs.length === 0 ? (
+                <div className="text-xs text-gray-500 py-8 text-center bg-white rounded-xl border border-gray-200/80">No applications in queue.</div>
+              ) : null}
+
+              {filteredJobs.map((job) => {
+                const company = String(job.criteriaJson?.company || "LinkedIn");
+                const title = String(job.criteriaJson?.title || job.criteriaJson?.keywords || "Auto-Apply Job");
+                const location = String(job.criteriaJson?.location || job.criteriaJson?.currentCity || "N/A");
+                const reason = getJobReason(job);
+                const displayStatus = displayJobStatus(job);
+                const isSelected = selectedJobId === job.id;
+
+                return (
+                  <div
+                    key={job.id}
+                    onClick={() => setSelectedJobId(job.id)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer shadow-2xs ${isSelected ? "border-purple-500 bg-purple-50/40 ring-1 ring-purple-400" : "border-gray-200/80 bg-white hover:border-purple-200"
+                      }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center font-bold text-xs text-purple-700 shrink-0">
+                          {company.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-semibold text-gray-900 truncate">{title}</h4>
+                          <p className="text-[11px] text-gray-500 truncate">{company}</p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${statusBadge(job.status)}`}>
+                        {displayStatus}
+                      </span>
+                    </div>
+
+                    {reason ? (
+                      <div className="mt-1.5 text-[10px] text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1 flex items-center justify-between gap-1">
+                        <span className="truncate">Reason: {reason}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAiInterventionForJob(job);
+                          }}
+                          className="px-2 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-800 text-[9px] font-bold shrink-0 flex items-center gap-1 border border-purple-200 cursor-pointer"
+                        >
+                          <Sparkles className="w-2.5 h-2.5 text-yellow-600" />
+                          Fix with AI
+                        </button>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-2 flex items-center justify-between text-[10px] text-gray-400 border-t border-gray-50 pt-1.5">
+                      <span>{location}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAiInterventionForJob(job);
+                          }}
+                          className="text-purple-600 hover:text-purple-800 font-semibold flex items-center gap-0.5"
+                        >
+                          <Bot className="w-3 h-3 text-cyan-600" />
+                          <span>AI Fleet</span>
+                        </button>
+                        <span>{formatDate(job.createdAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Selected Job Inspect Drawer */}
+            <div className="lg:col-span-6 bg-white rounded-xl p-4 border border-gray-200/80 shadow-xs space-y-3 sticky top-4">
+              {!selectedJob ? (
+                <div className="text-xs text-gray-400 py-12 text-center">Select an application to inspect details and logs.</div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-2 pb-2 border-b border-gray-100">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900 leading-tight">
+                        {String(selectedJob.criteriaJson?.title || selectedJob.criteriaJson?.keywords || "Auto-Apply Job")}
+                      </h3>
+                      <p className="text-[11px] text-gray-500 mt-0.5">{String(selectedJob.criteriaJson?.company || "LinkedIn")}</p>
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${statusBadge(selectedJob.status)}`}>
+                      {displayJobStatus(selectedJob)}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-purple-50/70 rounded-lg p-2 border border-purple-100">
+                      <span className="text-[10px] uppercase font-bold text-purple-700">Created</span>
+                      <div className="font-semibold text-gray-900 mt-0.5">{formatDate(selectedJob.createdAt)}</div>
+                    </div>
+                    <div className="bg-blue-50/70 rounded-lg p-2 border border-blue-100">
+                      <span className="text-[10px] uppercase font-bold text-blue-700">Attempts</span>
+                      <div className="font-semibold text-gray-900 mt-0.5">{selectedJob.attempts} / {selectedJob.maxAttempts}</div>
+                    </div>
+                  </div>
+
+                  {getJobReason(selectedJob) ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-800 flex items-center justify-between gap-2">
+                      <div>
+                        <strong>Skipped:</strong> {getJobReason(selectedJob)}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openAiInterventionForJob(selectedJob)}
+                        className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-[10px] shadow-2xs hover:scale-105 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                      >
+                        <Sparkles className="w-3 h-3 text-yellow-300" />
+                        Resolve Conflict
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {selectedJob.errorMessage ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 text-xs text-red-700">
+                      {selectedJob.errorMessage}
+                    </div>
+                  ) : null}
+
+                  {/* AI Fleet Decision Banner for Selected Job */}
+                  <div className="p-2.5 rounded-xl bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 text-white flex items-center justify-between gap-2 shadow-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Bot className="w-4 h-4 text-cyan-300 shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">11-Agent Neural Fleet Ready</div>
+                        <div className="text-[10px] text-cyan-200 truncate">Optimize resume &amp; auto-submit this job</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAiInterventionForJob(selectedJob)}
+                      className="px-3 py-1 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-extrabold text-[11px] rounded-lg shadow-md hover:scale-105 transition-all shrink-0 cursor-pointer flex items-center gap-1"
+                    >
+                      <Sparkles className="w-3 h-3 text-purple-900" />
+                      AI Decision
+                    </button>
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <FileText className="w-3.5 h-3.5 text-purple-600" />
+                      Criteria
+                    </h4>
+                    <pre className="text-[11px] bg-gray-50 border border-gray-100 rounded-lg p-2.5 max-h-36 overflow-auto font-mono text-gray-700">
+                      {JSON.stringify(selectedJob.criteriaJson || {}, null, 2)}
+                    </pre>
+                  </div>
+
+                  <div className="flex gap-2 pt-2 border-t border-gray-100">
+                    <button
+                      onClick={() => void submitAutoApply()}
+                      disabled={submitting}
+                      className="flex-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      Re-Queue Job
+                    </button>
+                    <button
+                      onClick={() => void cancelSelected()}
+                      disabled={cancelling || selectedJob.status !== "queued"}
+                      className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: Preferences & Targets */}
+      {activeJobsTab === "settings" && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl p-4 border border-gray-200/80 shadow-xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+              <div>
+                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Search & Targeting Preferences</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Parameters synced to the LinkedIn extension for automatic filtering.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void syncProfileToExtension()}
+                className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                Sync Extension
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Preferred Locations</label>
+                <AnswerValueEditor
+                  answerType="multiselect"
+                  value={answerDrafts["cp_pref_search_locations"] ?? siteScreeningAnswers["cp_pref_search_locations"] ?? ""}
+                  onChange={(val) => setAnswerDrafts((prev) => ({ ...prev, cp_pref_search_locations: val }))}
+                  placeholder="e.g. Mohali, Remote, India"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Work Mode</label>
+                <AnswerValueEditor
+                  answerType="choice"
+                  value={answerDrafts["cp_pref_work_mode"] ?? siteScreeningAnswers["cp_pref_work_mode"] ?? "Remote"}
+                  onChange={(val) => setAnswerDrafts((prev) => ({ ...prev, cp_pref_work_mode: val }))}
+                  options={WORK_MODE_OPTIONS}
+                  placeholder="Select mode"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Job Types</label>
+                <AnswerValueEditor
+                  answerType="multiselect"
+                  value={answerDrafts["cp_pref_job_types"] ?? siteScreeningAnswers["cp_pref_job_types"] ?? "Full-time"}
+                  onChange={(val) => setAnswerDrafts((prev) => ({ ...prev, cp_pref_job_types: val }))}
+                  presets={JOB_TYPE_OPTIONS}
+                  placeholder="e.g. Full-time"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Desired Salary / CTC</label>
+                <AnswerValueEditor
+                  answerType="text"
+                  value={answerDrafts["cp_pref_desired_salary"] ?? siteScreeningAnswers["cp_pref_desired_salary"] ?? ""}
+                  onChange={(val) => setAnswerDrafts((prev) => ({ ...prev, cp_pref_desired_salary: val }))}
+                  placeholder="e.g. ₹12,00,000 / $80,000"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guide Modal */}
+      {showLinkedIn ? (
+        <ExtensionInstallGuide
+          open={installGuideOpen}
+          steps={installGuideSteps}
+          currentStepIndex={installGuideStepIndex}
+          completedStepIds={installGuideCompletedIds}
+          onClose={closeInstallGuide}
+          onNext={nextInstallGuideStep}
+          onPrevious={previousInstallGuideStep}
+          onStepDone={markInstallGuideStepDone}
+          onJumpToStep={jumpToInstallGuideStep}
+          onStepAction={runInstallGuideStepAction}
+        />
+      ) : null}
+
+      {/* Magic AI Agent Intervention Decision Modal (Overlay) */}
+      <MagicAiDecisionModal
+        isOpen={aiDecisionModalOpen}
+        onClose={() => setAiDecisionModalOpen(false)}
+        targetJob={targetModalJob}
+        userProfile={{
+          name: (user as any)?.name || "Candidate",
+          email: (user as any)?.email || "candidate@autoapply.app",
+          phone: (user as any)?.phone || "",
+          currentCity: (user as any)?.currentCity || "",
+          linkedinUrl: (user as any)?.linkedinUrl || "",
+          portfolioUrl: (user as any)?.portfolioUrl || "",
+          experienceYears: siteScreeningAnswers["years_of_experience"] || siteScreeningAnswers["total_experience"] || "5+",
+        }}
+        pipelineStats={{
+          total: jobs.length,
+          submitted: jobs.filter((j) => j.status === "succeeded").length,
+          queued: jobs.filter((j) => j.status === "queued" || j.status === "running").length,
+          skipped: jobs.filter((j) => j.status === "cancelled").length,
+          failed: jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length,
+        }}
+        screeningAnswers={siteScreeningAnswers}
+        pendingQuestions={pendingQuestionsList}
+        onAutoCustomize={async () => {
+          await handleGenerate100Keywords();
+        }}
+        onAutoOptimize={async () => {
+          await handleGenerate100Keywords();
+          await autoFillAllWithAI();
+        }}
+        onLaunchAutoApply={async () => {
+          await submitAutoApply();
+        }}
+        onReQueueJob={async (jobId) => {
+          await submitAutoApply();
+          await loadJobs();
+        }}
+        onSkipJob={async (jobId) => {
+          if (jobId) {
+            try {
+              await fetch(`/api/auto-apply/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
+              await loadJobs();
+            } catch (err) {
+              console.error("Cancel failed", err);
+            }
+          }
+        }}
+        onSolveScreening={async () => {
+          await autoFillAllWithAI();
+        }}
+        onSyncExtension={async () => {
+          await syncProfileToExtension();
+          await checkExtensionStatus();
+        }}
+        onSaveCustomTag={async (tag) => {
+          const updated = Array.from(new Set([...currentSearchTerms, tag]));
+          const joined = updated.join(", ");
+          setAnswerDrafts((prev) => ({ ...prev, cp_pref_search_terms: joined, preferred_job_titles: joined }));
+          await saveAnswerToSite("cp_pref_search_terms", "Preferred Job Titles / Search Terms", joined, "multiselect", "manual");
+          await saveAnswerToSite("preferred_job_titles", "Preferred Job Titles / Search Terms", joined, "multiselect", "manual");
+          await syncProfileToExtension();
+        }}
+        searchTerms={currentSearchTerms}
+        pendingQuestionsCount={pendingCount}
+        totalSyncedCount={totalScreeningAnswers}
+        linkedInConnected={linkedInInstalled}
+        extensionVersion={linkedInInstalledVersion || "2.6.0"}
+      />
       </div>
-    </div>
+    </>
   );
 }
 

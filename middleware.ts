@@ -42,19 +42,22 @@ export function middleware(req: NextRequest) {
     }
   }
 
+  const hasAdSense = Boolean(String(process.env.NEXT_PUBLIC_ADSENSE_CLIENT || "").trim());
+  const allowAdSense = hasAdSense || !isProd;
+
   const res = NextResponse.next();
   const csp = [
     "default-src 'self'",
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    `img-src 'self' data: blob: https: https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}`,
+    `img-src 'self' data: blob: https: https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}${allowAdSense ? " https://pagead2.googlesyndication.com https://*.google.com https://*.doubleclick.net" : ""}`,
     "font-src 'self' data: https://fonts.gstatic.com",
     "style-src 'self' 'unsafe-inline'",
     `style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}`,
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}`,
-    `connect-src 'self' https://api.razorpay.com https://*.razorpay.com https://db.prisma.io https://*.upstash.io https://www.clarity.ms https://c.clarity.ms https://l.clarity.ms https://scripts.clarity.ms https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}`,
-    `frame-src https://api.razorpay.com https://checkout.razorpay.com https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.clarity.ms https://c.clarity.ms https://scripts.clarity.ms https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}${allowAdSense ? " https://pagead2.googlesyndication.com https://*.google.com https://*.doubleclick.net https://*.googleadservices.com" : ""}`,
+    `connect-src 'self' https://api.razorpay.com https://*.razorpay.com https://db.prisma.io https://*.upstash.io https://www.clarity.ms https://c.clarity.ms https://l.clarity.ms https://scripts.clarity.ms https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}${allowAdSense ? " https://pagead2.googlesyndication.com https://*.google.com https://*.doubleclick.net https://*.googleadservices.com" : ""}`,
+    `frame-src https://api.razorpay.com https://checkout.razorpay.com https://www.googletagmanager.com${allowGoogleAnalyticsEndpoints ? " https://www.google-analytics.com" : ""}${allowAdSense ? " https://googleads.g.doubleclick.net https://*.google.com" : ""}`,
     "form-action 'self' https://api.razorpay.com https://checkout.razorpay.com",
     ...(isProd ? ["upgrade-insecure-requests"] : []),
   ].join("; ");

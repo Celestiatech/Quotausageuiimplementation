@@ -34,7 +34,7 @@ function offlineReply(latestUserText: string) {
   if (t.includes("sign") && t.includes("up")) {
     add("Signup:");
     add("- Open `/signup` and verify your email with OTP.");
-    add("- New accounts get a free `300 Hires` signup bonus.");
+    add("- New accounts get a free `30 Hires` signup bonus.");
     return lines.join("\n");
   }
 
@@ -56,7 +56,7 @@ function offlineReply(latestUserText: string) {
   if (t.includes("hire") || t.includes("coins") || t.includes("credit")) {
     add("Hires / coins:");
     add("- 1 Hire = 1 Apply (wallet credits).");
-    add("- Signup bonus: 300 Hires.");
+    add("- Signup bonus: 30 Hires.");
     add("- Manage wallet on `/dashboard/billing`.");
     return lines.join("\n");
   }
@@ -122,7 +122,7 @@ function buildAssistantInstructions() {
     "",
     "Known product facts (use these when relevant):",
     "- Site name: AutoApply CV (autoapplycv.in).",
-    "- Signup includes a free bonus of 300 Hires coins (wallet credit).",
+    "- Signup includes a free bonus of 30 Hires coins (wallet credit).",
     "- Free plan has a daily apply/quota limit configured server-side.",
     "- Pro plan is intended to be effectively unlimited.",
     "- Cookie consent banner exists; tracking may depend on consent settings.",

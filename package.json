@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
+    "dev:webpack": "next dev",
     "postinstall": "prisma generate",
     "build": "next build",
     "build:with-migrate": "prisma migrate deploy && next build",

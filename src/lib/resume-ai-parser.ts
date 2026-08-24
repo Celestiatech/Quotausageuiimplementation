@@ -10,9 +10,11 @@ export type AiParsedResume = {
   yearsOfExperience?: string;
   educationLevel?: string;
   skills?: string[];
+  skillsWithYears?: Record<string, number>;
   jobTitles?: string[];
   workAuthorization?: string;
   summary?: string;
+  screeningAnswers?: Record<string, string | number>;
   experience?: Array<{
     title: string;
     company: string;
@@ -42,22 +44,40 @@ export type AiParsedResume = {
   }>;
 };
 
-const SYSTEM_PROMPT = `You extract structured data from resumes. Return ONLY valid JSON with these fields:
+const SYSTEM_PROMPT = `You extract structured data, 100 target search keywords, and LinkedIn screening answers from resumes. Return ONLY valid JSON with these exact fields:
 {
   "name": "Full name",
   "email": "Email address",
-  "phone": "Phone number",
-  "city": "City",
+  "phone": "Phone number with country code",
+  "city": "Current City",
   "state": "State or region",
   "country": "Country",
   "linkedinUrl": "LinkedIn profile URL",
   "portfolioUrl": "Portfolio or personal website URL",
-  "yearsOfExperience": "Total years of professional experience (number only)",
-  "educationLevel": "Highest education level (High School, Bachelor's, Master's, PhD, etc.)",
-  "skills": ["skill1", "skill2", ...],
-  "jobTitles": ["Most recent job titles"],
-  "workAuthorization": "Work authorization status if mentioned",
-  "summary": "Professional summary (2-4 sentences)",
+  "yearsOfExperience": "Total years of professional experience (integer number only as string, e.g. '5')",
+  "educationLevel": "Highest education level (e.g. 'Bachelor\\'s Degree', 'Master\\'s Degree', 'Doctorate / PhD', 'Associate Degree', 'High School')",
+  "skills": ["Array of EXACTLY 50 single-word technical skills, tools, frameworks, protocols, and domain keywords extracted from and relevant to the resume (e.g. 'PLC', 'SCADA', 'Automation', 'Wiring', 'Schematics', 'Switchgear', 'Earthing', 'Voltage', 'Relays', 'Motors', 'Drives', 'VFD', 'Modbus', 'Profibus', 'Ethernet', 'Safety', 'Python', 'MATLAB', 'Simulink', 'AutoCAD')"],
+  "skillsWithYears": {
+    "JavaScript": 5,
+    "React": 4,
+    "WordPress": 3,
+    "Adobe XD": 3
+  },
+  "jobTitles": ["Array of EXACTLY 50 specific multi-word job titles and search terms matching the candidate's exact tech stack, variations, and seniority (e.g. 'PLC Programmer', 'SCADA Engineer', 'Industrial Automation Engineer', 'Control Systems Engineer', 'Electrical Engineer', 'Junior Electrical Engineer', 'Automation Engineer', 'Instrumentation Engineer', etc.)"],
+  "workAuthorization": "Authorized to work without sponsorship",
+  "summary": "High-impact keyword-rich professional summary (3-4 sentences) highlighting core stack, years of experience, and key accomplishments",
+  "screeningAnswers": {
+    "bachelors_degree_completed": "Yes",
+    "masters_degree_completed": "No",
+    "require_visa_sponsorship": "No",
+    "authorized_to_work": "Yes",
+    "comfortable_commuting": "Yes",
+    "comfortable_working_onsite": "Yes",
+    "willing_background_check": "Yes",
+    "valid_drivers_license": "Yes",
+    "english_proficiency": "Professional",
+    "notice_period_days": 30
+  },
   "experience": [
     {
       "title": "Job title",
@@ -78,8 +98,8 @@ const SYSTEM_PROMPT = `You extract structured data from resumes. Return ONLY val
   ],
   "education": [
     {
-      "degree": "Degree name (e.g., B.Tech, M.S., PhD)",
-      "field": "Field of study",
+      "degree": "Degree name (e.g., Bachelor of Technology, Master of Science)",
+      "field": "Field of study (e.g., Computer Science)",
       "institution": "University/Institution name",
       "location": "City, State, Country (optional)",
       "startDate": "YYYY or Month YYYY (optional)",
@@ -95,15 +115,11 @@ const SYSTEM_PROMPT = `You extract structured data from resumes. Return ONLY val
   ]
 }
 
-  }
-}
-
-Use null only when a field truly does not exist in the resume. Do not include any text outside the JSON.
-Extract ALL experience entries, ALL projects, ALL education, ALL certifications, and ALL skills completely. Do not skip or summarize any items.
-For experience: include every bullet point from each entry.
-For projects: extract the description from any surrounding text (bullet points, paragraphs, context). If there is no explicit description, infer a brief 1-sentence description from the project name and technologies used. Never leave project.description as null — use an empty string only if absolutely nothing can be inferred.
-For skills: include every skill mentioned anywhere in the resume (technical skills, tools, platforms, languages, frameworks).
-The output JSON must contain the complete data from the resume without omission.`;
+Rules:
+1. Generate a total of 100 rich, unique keywords across 'jobTitles' (30-50 titles/search queries) and 'skills' (50-70 technical skills/tools/frameworks).
+2. Populate 'summary' with a compelling ATS summary tailored to the candidate's actual projects and experience.
+3. Populate screeningAnswers with standard answers matching typical LinkedIn Easy Apply questions.
+4. Return ONLY the JSON object. Do not include markdown explanation.`;
 
 export async function parseResumeWithAi(
   resumeText: string,
@@ -123,7 +139,7 @@ export async function parseResumeWithAi(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: `Extract data from this resume:\n\n${truncated}` },

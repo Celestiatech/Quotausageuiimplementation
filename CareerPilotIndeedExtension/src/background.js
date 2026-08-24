@@ -486,7 +486,7 @@ async function refreshPortalScreeningAnswersIntoSettings() {
   const candidates = preferred ? [preferred, ...(await detectPortalOriginsFromTabs()).filter((o) => o !== preferred)] : await detectPortalOriginsFromTabs();
   for (const origin of candidates) {
     try {
-      const res = await fetch(`${origin}/api/user/screening/answers?limit=500&scanLimit=2500`, {
+      const res = await fetch(`${origin}/api/user/screening/answers?limit=100&scanLimit=300`, {
         method: "GET",
         cache: "no-store",
         credentials: "include",

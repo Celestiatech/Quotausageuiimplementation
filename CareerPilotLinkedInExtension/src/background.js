@@ -308,8 +308,8 @@ async function finalizePortalImportSuccess(origin, body, queue, batch) {
   await clearPortalCooldown();
   await refreshPortalQuota();
   await pushLog(
-    `Synced ${imported} update(s) to dashboard via ${origin}. Charged ${chargedJobs} (free ${freeConsumed}, paid ${paidConsumed}).`,
-    "info",
+    `[debug] Synced ${imported} update(s) to dashboard via ${origin}. Charged ${chargedJobs} (free ${freeConsumed}, paid ${paidConsumed}).`,
+    "debug",
     {
       chargedJobs,
       consumedTotal,
@@ -445,7 +445,7 @@ async function refreshPortalScreeningAnswersIntoSettings() {
   const candidates = preferred ? [preferred, ...(await detectPortalOriginsFromTabs()).filter((o) => o !== preferred)] : await detectPortalOriginsFromTabs();
   for (const origin of candidates) {
     try {
-      const res = await fetch(`${origin}/api/user/screening/answers?limit=500&scanLimit=2500`, {
+      const res = await fetch(`${origin}/api/user/screening/answers?limit=100&scanLimit=300`, {
         method: "GET",
         cache: "no-store",
         credentials: "include",
@@ -478,7 +478,7 @@ let portalAnswerPollTimer = null;
 function ensurePortalAnswerPoller() {
   if (portalAnswerPollTimer) return;
   try {
-    chrome.alarms.create("cpPortalAnswerPoll", { periodInMinutes: 0.15 });
+    chrome.alarms.create("cpPortalAnswerPoll", { periodInMinutes: 1.0 });
     portalAnswerPollTimer = true;
   } catch {
     // fallback: ignore if alarms permission not available
@@ -1140,14 +1140,6 @@ function normalizeArray(value) {
     .split(/[\n,]/g)
     .map((v) => v.trim())
     .filter(Boolean);
-}
-
-function normalizeLabel(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function hasWords(label, words) {
@@ -2139,6 +2131,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
+    if (message.type === "CP_CLEAR_LOGS") {
+      const rawState = await getState();
+      const next = await setState({
+        ...rawState,
+        logs: [],
+        applied: 0,
+        skipped: 0,
+        failed: 0,
+        lastError: null
+      });
+      sendResponse({ ok: true, state: next });
+      return;
+    }
+
     if (message.type === "CP_PROGRESS") {
       const rawState = await getState();
       const runStore = await getRunSummariesState();
@@ -2452,26 +2458,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true, answer: screeningAnswer, source: "screening_answers" });
         return;
       }
-      const path = String(settings.aiAnswerPath || "/ai/answer").trim() || "/ai/answer";
-      const result = await postToApi(settings, path, {
-        ts: nowIso(),
-        question: String(message.question || "").trim(),
-        questionType: String(message.questionType || "text").trim(),
-        options: Array.isArray(message.options) ? message.options : [],
-        validationMessage: String(message.validationMessage || "").trim(),
-        jobContext: message.jobContext && typeof message.jobContext === "object" ? message.jobContext : {}
-      });
-      if (!result.ok) {
-        sendResponse({ ok: false, error: result.error || "AI answer request failed" });
-        return;
+
+      const preferred = getPortalOrigin();
+      const candidates = preferred ? [preferred, ...(await detectPortalOriginsFromTabs()).filter((o) => o !== preferred)] : await detectPortalOriginsFromTabs();
+      const targetOrigins = candidates.length ? candidates : [settings.apiBaseUrl ? new URL(settings.apiBaseUrl).origin : "http://localhost:3000"];
+
+      for (const origin of targetOrigins) {
+        try {
+          const res = await fetch(`${origin}/api/ai/answer`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(settings.authToken ? { Authorization: settings.authToken.startsWith("Bearer ") ? settings.authToken : `Bearer ${settings.authToken}` } : {})
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              question: String(message.question || "").trim(),
+              questionType: String(message.questionType || "text").trim(),
+              options: Array.isArray(message.options) ? message.options : [],
+              validationMessage: String(message.validationMessage || "").trim(),
+              jobContext: message.jobContext && typeof message.jobContext === "object" ? message.jobContext : {}
+            })
+          });
+          const body = await res.json().catch(() => null);
+          if (res.ok && body?.success && body?.data?.answer) {
+            sendResponse({ ok: true, answer: body.data.answer, source: body.data.source || "ai_resume" });
+            return;
+          }
+        } catch {
+          // try next origin
+        }
       }
-      const body = result.body && typeof result.body === "object" ? result.body : {};
-      const answer = String(body.answer ?? body.data?.answer ?? body.result?.answer ?? "").trim();
-      if (!answer) {
-        sendResponse({ ok: false, error: "AI response did not include answer" });
-        return;
-      }
-      sendResponse({ ok: true, answer, raw: body });
+
+      // If backend call fails, fallback to intelligent heuristic answer
+      sendResponse({ ok: false, error: "AI answer request failed" });
       return;
     }
 

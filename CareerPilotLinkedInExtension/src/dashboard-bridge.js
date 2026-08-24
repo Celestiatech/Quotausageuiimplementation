@@ -36,7 +36,9 @@ function isAllowedDashboardOrigin(origin, allowlist) {
     return (
       hostname === "autoapplycv.in" ||
       hostname.endsWith(".autoapplycv.in") ||
-      hostname === "autoapplycv.vercel.app"
+      hostname === "autoapplycv.vercel.app" ||
+      hostname === "localhost" ||
+      hostname === "127.0.0.1"
     );
   } catch {
     return false;

@@ -10,7 +10,7 @@ export default function AutoApply() {
         { label: "Cost", value: "Free to start", note: "No credit card required" },
         { label: "Workflow", value: "Target → Apply → Track" },
         { label: "Quality", value: "Guardrails", note: "Skip duplicates + external apply" },
-        { label: "Bonus", value: "300 Hires", note: "Signup bonus credits" },
+        { label: "Bonus", value: "30 Hires", note: "Signup bonus credits" },
       ]}
       sections={[
         {

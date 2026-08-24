@@ -85,7 +85,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <h4 className="text-sm font-semibold text-[#030213] mb-2">Stay on Free ($0) Plan</h4>
                 <p className="text-sm text-gray-600 mb-3">
-                  Free plan includes 3 applies/day, plus a free 300 Hires signup bonus. Or buy Custom Hires (1 Hire = 1 Apply, minimum top-up $0.54).
+                  Free plan includes 3 applies/day, plus a free 30 Hires signup bonus. Or buy Custom Hires (1 Hire = 1 Apply, minimum top-up $0.54).
                 </p>
                 <button
                   onClick={() => onClose()}

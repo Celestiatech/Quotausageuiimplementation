@@ -88,6 +88,71 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Auto-save generated summary / description to screening answers so the extension and dashboard have it instantly
+    if (mergedExtracted.summary) {
+      await writeAuditLog({
+        actorUserId: userId,
+        action: "user.screening_answer_saved",
+        targetType: "screening_answer",
+        targetId: "description",
+        metadataJson: {
+          questionKey: "description",
+          questionLabel: "Professional Description / Summary",
+          answer: mergedExtracted.summary,
+          answerType: "text",
+          source: "resume_parse",
+          lastUsed: new Date().toISOString(),
+        },
+      }).catch(() => null);
+
+      await writeAuditLog({
+        actorUserId: userId,
+        action: "user.screening_answer_saved",
+        targetType: "screening_answer",
+        targetId: "summary",
+        metadataJson: {
+          questionKey: "summary",
+          questionLabel: "Summary of Experience",
+          answer: mergedExtracted.summary,
+          answerType: "text",
+          source: "resume_parse",
+          lastUsed: new Date().toISOString(),
+        },
+      }).catch(() => null);
+    }
+
+    if (Array.isArray(mergedExtracted.jobTitles) && mergedExtracted.jobTitles.length > 0) {
+      await writeAuditLog({
+        actorUserId: userId,
+        action: "user.screening_answer_saved",
+        targetType: "screening_answer",
+        targetId: "preferred_job_titles",
+        metadataJson: {
+          questionKey: "preferred_job_titles",
+          questionLabel: "Preferred Job Titles / Search Terms",
+          answer: mergedExtracted.jobTitles.join(", "),
+          answerType: "multiselect",
+          source: "resume_parse",
+          lastUsed: new Date().toISOString(),
+        },
+      }).catch(() => null);
+
+      await writeAuditLog({
+        actorUserId: userId,
+        action: "user.screening_answer_saved",
+        targetType: "screening_answer",
+        targetId: "cp_pref_search_terms",
+        metadataJson: {
+          questionKey: "cp_pref_search_terms",
+          questionLabel: "Preferred Job Titles / Search Terms",
+          answer: mergedExtracted.jobTitles.join(", "),
+          answerType: "multiselect",
+          source: "resume_parse",
+          lastUsed: new Date().toISOString(),
+        },
+      }).catch(() => null);
+    }
+
     await writeAuditLog({
       actorUserId: userId,
       action: "user.resume_uploaded",
@@ -98,7 +163,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return ok("Resume parsed and profile text saved", {
+    return ok("Resume parsed and 100 keywords generated with Groq AI", {
       fileName: file.name,
       extracted: mergedExtracted,
     });

@@ -61,6 +61,28 @@ let activeSubmitPaceStartMs = 0;
 let warnedDefaultYearsFallback = false;
 let remoteSelectors = null;
 let remoteSelectorsVersion = 0;
+let panelActiveTab = "feed";
+
+const ICONS = {
+  sparkle: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>`,
+  rocket: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>`,
+  skip: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>`,
+  coin: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+  target: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+  search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  edit: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
+  check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  clock: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  alert: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+  bolt: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  play: `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
+  pause: `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`,
+  stop: `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
+  activity: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
+  trash: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+  list: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`
+};
 
 // ── Detailed debug log buffer ──────────────────────────────────────────
 const MAX_DEBUG_LOG_ENTRIES = 2000;
@@ -1084,10 +1106,10 @@ function answerCommonQuestion(label, settings) {
   const currentCity = normalizeCityAnswer(settings.currentCity, currentJobContext.workLocation);
   const yearsValue =
     String(settings.yearsOfExperienceAnswer || "").trim() ||
-    (Number(settings.currentExperience) >= 0 ? String(Number(settings.currentExperience)) : "");
-  const noticeDays = normalizeNumberString(settings.noticePeriodDays);
-  const noticeMonths = noticeDays ? String(Math.floor(Number(noticeDays) / 30)) : "";
-  const noticeWeeks = noticeDays ? String(Math.floor(Number(noticeDays) / 7)) : "";
+    (Number(settings.currentExperience) >= 0 ? String(Number(settings.currentExperience)) : "3");
+  const noticeDays = normalizeNumberString(settings.noticePeriodDays) || "30";
+  const noticeMonths = noticeDays ? String(Math.floor(Number(noticeDays) / 30)) : "1";
+  const noticeWeeks = noticeDays ? String(Math.floor(Number(noticeDays) / 7)) : "4";
 
   const identityKeys = new Set(["full_name", "first_name", "last_name", "phone_number", "email_address", "linkedin_url"]);
   const manualByKey = settings?.screeningAnswers?.[key];
@@ -1096,32 +1118,111 @@ function answerCommonQuestion(label, settings) {
   // Prefer explicit profile fields over screeningAnswers for identity fields to avoid bad/stale overrides.
   if (manualValue && !identityKeys.has(String(key || "").trim())) return manualValue;
 
-  if (l.includes("visa") || l.includes("sponsorship")) return settings.requireVisa || "No";
+  // 1. Visa sponsorship & Work Authorization
+  if (l.includes("visa") || l.includes("sponsorship") || l.includes("require sponsorship") || l.includes("need sponsorship")) {
+    return settings.requireVisa || "No";
+  }
   if (
     l.includes("citizenship") ||
     l.includes("employment eligibility") ||
     l.includes("work authorization") ||
-    (l.includes("authorized") && l.includes("work"))
+    (l.includes("authorized") && l.includes("work")) ||
+    l.includes("legally authorized") ||
+    l.includes("eligible to work")
   ) {
-    return settings.usCitizenship || "";
+    return settings.usCitizenship || "Yes";
   }
-  if (l.includes("protected") && l.includes("veteran")) return settings.veteranStatus || "";
-  if (l.includes("veteran")) return settings.veteranStatus || "";
-  if (l.includes("disability") || l.includes("handicapped")) return settings.disabilityStatus || "";
+
+  // 2. Skill-specific experience matching (e.g. "How many years of work experience do you have with [Skill]?")
+  if (l.includes("experience") || l.includes("years of work") || l.includes("how many years") || l.includes("how many years of")) {
+    const skillMatch = l.match(/(?:with|in|using|experience with|knowledge of|working with)\s+([^?.,]+)/i);
+    if (skillMatch && skillMatch[1]) {
+      const skillName = normalizeLabel(skillMatch[1].trim());
+      const skillKey = questionKeyFromLabel(skillName);
+      if (settings?.screeningAnswers) {
+        if (!isBlankValue(settings.screeningAnswers[skillKey])) return String(settings.screeningAnswers[skillKey]);
+        if (!isBlankValue(settings.screeningAnswers[skillName])) return String(settings.screeningAnswers[skillName]);
+        for (const [k, v] of Object.entries(settings.screeningAnswers)) {
+          const kNorm = normalizeLabel(k);
+          if (kNorm.includes(skillName) || skillName.includes(kNorm)) {
+            if (!isBlankValue(v)) return String(v);
+          }
+        }
+      }
+    }
+    return yearsValue;
+  }
+
+  // 3. Education levels & degree completion
+  if (l.includes("bachelor") || l.includes("undergraduate") || l.includes("b.tech") || l.includes("bs degree") || l.includes("ba degree")) {
+    return settings.screeningAnswers?.["bachelors_degree_completed"] || "Yes";
+  }
+  if (l.includes("master") || l.includes("postgraduate") || l.includes("ms degree") || l.includes("mba")) {
+    return settings.screeningAnswers?.["masters_degree_completed"] || "No";
+  }
+  if (l.includes("high school") || l.includes("ged") || l.includes("secondary education")) {
+    return "Yes";
+  }
+  if (l.includes("highest") && (l.includes("education") || l.includes("degree") || l.includes("level of education"))) {
+    return settings.educationLevel || "Bachelor's Degree";
+  }
+
+  // 4. Commute, On-site, and Relocation
+  if (l.includes("commute") || l.includes("commuting") || l.includes("reliable transportation") || l.includes("travel to")) {
+    return settings.screeningAnswers?.["comfortable_commuting"] || "Yes";
+  }
+  if (l.includes("on-site") || l.includes("onsite") || l.includes("in-person") || l.includes("in office") || l.includes("hybrid") || l.includes("work location")) {
+    return settings.screeningAnswers?.["comfortable_working_onsite"] || "Yes";
+  }
+  if (l.includes("relocate") || l.includes("relocation") || l.includes("willing to move")) {
+    return settings.screeningAnswers?.["comfortable_relocation"] || "Yes";
+  }
+
+  // 5. Background Checks, Drug Test, Driver's License
+  if (l.includes("background check") || l.includes("background screening") || l.includes("background investigation")) {
+    return settings.screeningAnswers?.["willing_background_check"] || "Yes";
+  }
+  if (l.includes("drug test") || l.includes("drug screen") || l.includes("drug screening")) {
+    return settings.screeningAnswers?.["willing_drug_test"] || "Yes";
+  }
+  if (l.includes("driver") || l.includes("driver's license") || l.includes("driving license") || l.includes("valid license")) {
+    return settings.screeningAnswers?.["valid_drivers_license"] || "Yes";
+  }
+
+  // 6. Language & English Proficiency
+  if (l.includes("english") || l.includes("language proficiency") || l.includes("fluent in english") || l.includes("english proficiency")) {
+    return settings.englishProficiency || settings.screeningAnswers?.["english_proficiency"] || "Professional";
+  }
+
+  // 7. Demographics & EEO
+  if (l.includes("protected") && l.includes("veteran")) return settings.veteranStatus || "I am not a protected veteran";
+  if (l.includes("veteran")) return settings.veteranStatus || "No";
+  if (l.includes("disability") || l.includes("handicapped")) return settings.disabilityStatus || "No, I don't have a disability";
   if (l.includes("gender") || l.includes("sex")) return settings.gender || "";
   if (l.includes("ethnicity") || l.includes("race")) return settings.ethnicity || "";
   if (isMarketingConsentQuestion(l)) {
     return settings.marketingConsent || "Yes";
   }
-  if (l.includes("experience") && l.includes("year")) return yearsValue;
+
+  // 8. Notice Period & Availability
   if (l.includes("notice")) {
     if (l.includes("month")) return noticeMonths;
     if (l.includes("week")) return noticeWeeks;
     return noticeDays;
   }
-  if (l.includes("salary") || l.includes("compensation") || l.includes("ctc") || l.includes("pay")) {
+  if (l.includes("available immediately") || l.includes("start immediately") || l.includes("immediate joiner")) {
+    return "Yes";
+  }
+  if (l.includes("start date") || l.includes("when can you start") || l.includes("how soon can you start") || l.includes("earliest start")) {
+    return "Immediately";
+  }
+
+  // 9. Compensation
+  if (l.includes("salary") || l.includes("compensation") || l.includes("ctc") || l.includes("pay") || l.includes("hourly rate")) {
     return getSalaryAnswer(l, settings);
   }
+
+  // 10. Contact & Profile Information
   if (l.includes("location") || l.includes("city") || l.includes("address")) return currentCity || "";
   if (l.includes("email")) return settings.contactEmail || "";
   if (l.includes("phone number") || l === "phone" || l.includes("mobile")) return normalizePhoneForInput(settings.phoneNumber || "");
@@ -1136,13 +1237,34 @@ function answerCommonQuestion(label, settings) {
     return fullName;
   }
   if (l.includes("linkedin")) return settings.linkedinUrl || "";
-  if (l.includes("website") || l.includes("blog") || l.includes("portfolio") || l.includes("link")) return settings.websiteUrl || "";
-  if (l.includes("scale of 1-10") || l.includes("confidence level")) return settings.confidenceLevel || "";
+  if (l.includes("website") || l.includes("blog") || l.includes("portfolio") || l.includes("link") || l.includes("github")) return settings.websiteUrl || "";
+  if (l.includes("scale of 1-10") || l.includes("confidence level")) return settings.confidenceLevel || "8";
   if ((l.includes("hear") || l.includes("come across")) && l.includes("this") && (l.includes("job") || l.includes("position"))) {
-    return settings.websiteUrl || settings.linkedinUrl || "https://github.com/GodsScion/Auto_job_applier_linkedIn";
+    return settings.websiteUrl || settings.linkedinUrl || "LinkedIn";
   }
   if (l.includes("headline")) return settings.linkedinHeadline || "";
-  if (l.includes("summary")) return settings.linkedinSummary || "";
+  if (
+    l.includes("description") ||
+    l.includes("describe your") ||
+    l.includes("brief description") ||
+    l.includes("work description") ||
+    l.includes("job description") ||
+    l.includes("project description") ||
+    l.includes("summary") ||
+    l.includes("about yourself") ||
+    l.includes("about you") ||
+    l.includes("bio") ||
+    l.includes("background")
+  ) {
+    const userSummary =
+      settings.linkedinSummary ||
+      settings.coverLetter ||
+      settings.screeningAnswers?.["description"] ||
+      settings.screeningAnswers?.["summary"] ||
+      settings.screeningAnswers?.["profile_summary"] ||
+      "";
+    if (userSummary) return userSummary;
+  }
   if (l.includes("cover")) return settings.coverLetter || "";
   if (l.includes("street")) return settings.streetAddress || "";
   if (l.includes("state") || l.includes("province")) return settings.stateRegion || "";
@@ -1168,6 +1290,61 @@ async function resilientClick(el, name) {
     }
   }
 }
+
+async function selectJobCardInSearchList(card) {
+  if (!card) return false;
+  const rootCard = card.closest?.(".job-card-container, .jobs-search-results__list-item, li") || card;
+  try {
+    rootCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch {}
+  await sleep(150);
+
+  // Target the container element so LinkedIn's React SPA updates the side-detail pane in-place
+  // without triggering a full browser link navigation to /jobs/view/
+  const clickableTarget =
+    rootCard.querySelector?.(".job-card-container--clickable") ||
+    rootCard.querySelector?.(".job-card-list__entity-lockup") ||
+    rootCard.querySelector?.(".artdeco-entity-lockup__content") ||
+    rootCard.querySelector?.(".job-card-container") ||
+    rootCard;
+
+  // Prevent full page navigation if an anchor receives the click
+  const anchors = Array.from(rootCard.querySelectorAll?.("a[href*='/jobs/view/']") || []);
+  const preventNavHandler = (e) => {
+    if (isJobsSearchPage()) {
+      e.preventDefault();
+    }
+  };
+
+  anchors.forEach((a) => {
+    a.addEventListener("click", preventNavHandler, { capture: true, once: true });
+  });
+
+  try {
+    const target = clickableTarget;
+    target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+    return true;
+  } catch {
+    try {
+      clickableTarget.click();
+      return true;
+    } catch {
+      return false;
+    }
+  } finally {
+    setTimeout(() => {
+      anchors.forEach((a) => {
+        a.removeEventListener("click", preventNavHandler, { capture: true });
+      });
+    }, 1000);
+  }
+}
+
+
 
 function getApplyButtonFromDetailPane() {
   // Scope strictly to job detail/top-card areas to avoid matching filter pills.
@@ -1496,8 +1673,56 @@ function parseListSetting(value) {
     .filter(Boolean);
 }
 
+function cleanJobTitle(raw) {
+  let title = String(raw || "").trim();
+  if (!title) return "Job";
+
+  // Remove common LinkedIn badge and status noise
+  title = title
+    .replace(/\bwith verification\b/gi, "")
+    .replace(/\bactively recruiting\b/gi, "")
+    .replace(/\bbe an early applicant\b/gi, "")
+    .replace(/\bpromoted by hirer\b/gi, "")
+    .replace(/\bpromoted\b/gi, "")
+    .replace(/\bviewed\b/gi, "")
+    .replace(/\beasy apply\b/gi, "")
+    .replace(/\bapplied \d+ .* ago\b/gi, "")
+    .replace(/\bapplied\b/gi, "")
+    .trim();
+
+  // If word is duplicated together without space like "Web DesignerWeb Designer"
+  if (title.length >= 6 && title.length % 2 === 0) {
+    const half = title.length / 2;
+    if (title.slice(0, half).toLowerCase() === title.slice(half).toLowerCase()) {
+      title = title.slice(0, half);
+    }
+  }
+
+  // If words are duplicated with space like "Javascript Developer Javascript Developer"
+  const words = title.split(/\s+/).filter(Boolean);
+  if (words.length >= 2 && words.length % 2 === 0) {
+    const half = words.length / 2;
+    const firstHalf = words.slice(0, half).join(" ");
+    const secondHalf = words.slice(half).join(" ");
+    if (firstHalf.toLowerCase() === secondHalf.toLowerCase()) {
+      title = firstHalf;
+    }
+  }
+
+  return title.replace(/\s+/g, " ").trim() || "Job";
+}
+
 function extractCardMeta(card) {
-  const titleRaw = String(getCardAnchor(card)?.textContent || card?.querySelector("a span")?.textContent || "").trim();
+  const anchor = getCardAnchor(card);
+  const rawTitle = String(
+    anchor?.querySelector(".job-card-list__title--link span[aria-hidden='true']")?.textContent ||
+    anchor?.querySelector("span[aria-hidden='true']")?.textContent ||
+    anchor?.querySelector("strong")?.textContent ||
+    anchor?.textContent ||
+    card?.querySelector("a span")?.textContent ||
+    ""
+  ).trim();
+  const titleRaw = cleanJobTitle(rawTitle);
   const title = normalizeLabel(titleRaw);
   const companyCandidates = [
     card?.querySelector(".artdeco-entity-lockup__subtitle"),
@@ -1517,8 +1742,625 @@ function extractCardMeta(card) {
   return { title, titleRaw, company, companyRaw, workLocation, workLocationRaw };
 }
 
+function getCardElementContainer(card) {
+  if (!card) return null;
+  return (
+    card.closest(".job-card-container, li.jobs-search-results__list-item, .jobs-search-results-list__list-item, div[data-job-id], [data-occludable-job-id]") ||
+    card
+  );
+}
+
+function clearActiveJobCardHighlights() {
+  try {
+    const highlighted = document.querySelectorAll(".cp-active-eval-card");
+    for (const el of highlighted) {
+      el.classList.remove("cp-active-eval-card");
+      const existingBadge = el.querySelector(".cp-card-live-badge");
+      if (existingBadge) existingBadge.remove();
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function highlightActiveJobCard(card, badgeText = "AI Evaluating...") {
+  try {
+    const container = getCardElementContainer(card);
+    if (!container) return;
+
+    clearActiveJobCardHighlights();
+    container.classList.add("cp-active-eval-card");
+
+    try {
+      container.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    } catch {
+      // ignore
+    }
+
+    let badge = container.querySelector(".cp-card-live-badge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "cp-card-live-badge";
+      container.appendChild(badge);
+    }
+    badge.innerHTML = `<span class="cp-badge-pulse"></span><span>${escapeHtml(badgeText)}</span>`;
+  } catch {
+    // ignore
+  }
+}
+
+function formatFriendlySkipReason(label) {
+  const norm = normalizeLabel(label);
+  if (!norm) return "Filtered";
+  if (norm.includes("already applied") || norm.includes("applied_cache_hit")) return "Already Applied";
+  if (norm.includes("keyword") || norm.includes("mismatch")) return "Keyword Mismatch";
+  if (norm.includes("experience") || norm.includes("years") || norm.includes("too_high")) return "Experience > Allowed";
+  if (norm.includes("blacklisted") || norm.includes("company")) return "Company Blocked";
+  if (norm.includes("bad_word") || norm.includes("excluded word")) return "Title Blocked";
+  if (norm.includes("external")) return "External Apply";
+  if (norm.includes("modal_not_found") || norm.includes("no easy apply")) return "No Easy Apply";
+  if (norm.includes("resume")) return "Resume Required";
+  if (norm.includes("phone")) return "Phone Validation";
+  if (norm.includes("input") || norm.includes("selection") || norm.includes("pending_user_input")) return "Custom Input Required";
+  return label.length > 25 ? `${label.slice(0, 22)}...` : label;
+}
+
+function markJobCardStatus(card, status = "applied", label = "") {
+  try {
+    const container = getCardElementContainer(card);
+    if (!container) return;
+
+    container.classList.remove("cp-active-eval-card");
+    const liveBadge = container.querySelector(".cp-card-live-badge");
+    if (liveBadge) liveBadge.remove();
+
+    // Remove any previous outcome tag on this card
+    const existingTag = container.querySelector(".cp-card-outcome-tag");
+    if (existingTag) existingTag.remove();
+
+    const tag = document.createElement("div");
+    tag.className = `cp-card-outcome-tag ${status === "applied" ? "cp-tag-applied" : "cp-tag-skipped"}`;
+
+    if (status === "applied") {
+      container.classList.add("cp-card-completed-applied");
+      tag.innerHTML = `<span>✅</span><span>APPLIED</span>`;
+    } else {
+      container.classList.add("cp-card-completed-skipped");
+      const reasonText = formatFriendlySkipReason(label);
+      tag.innerHTML = `<span>⏭️</span><span>SKIPPED: ${escapeHtml(reasonText)}</span>`;
+    }
+
+    // Inject into the title/entity area of the card
+    const targetArea =
+      container.querySelector(".artdeco-entity-lockup__content") ||
+      container.querySelector(".job-card-list__entity-lockup") ||
+      container.querySelector(".job-card-container__primary-description")?.parentElement ||
+      container;
+    targetArea.appendChild(tag);
+  } catch {
+    // ignore
+  }
+}
+
+function highlightDetailPane(jobTitle = "") {
+  try {
+    const pane =
+      document.querySelector(".jobs-search__job-details") ||
+      document.querySelector(".jobs-details") ||
+      document.querySelector(".job-details-jobs-unified-top-card") ||
+      document.querySelector(".scaffold-layout__detail");
+    if (!pane) return;
+
+    let indicator = pane.querySelector(".cp-detail-live-indicator");
+    if (!indicator) {
+      indicator = document.createElement("div");
+      indicator.className = "cp-detail-live-indicator";
+      pane.prepend(indicator);
+    }
+    indicator.innerHTML = `<span style="color:#6366f1;">✨</span><span><strong>AutoApply CV Copilot</strong> is analyzing: <em>${escapeHtml(jobTitle || "Current Opportunity")}</em></span>`;
+  } catch {
+    // ignore
+  }
+}
+
+const KEYWORD_SYNONYM_DICTIONARY = {
+  joomla: [
+    "joomla developer",
+    "wordpress developer",
+    "php developer",
+    "cms developer",
+    "drupal developer",
+    "web developer",
+    "backend developer",
+    "full stack developer"
+  ],
+  drupal: [
+    "drupal developer",
+    "php developer",
+    "cms developer",
+    "wordpress developer",
+    "backend developer",
+    "web developer"
+  ],
+  wordpress: [
+    "wordpress developer",
+    "wordpress engineer",
+    "php developer",
+    "woocommerce developer",
+    "elementor developer",
+    "cms developer",
+    "web developer",
+    "frontend developer"
+  ],
+  php: [
+    "php developer",
+    "laravel developer",
+    "wordpress developer",
+    "backend developer",
+    "web developer",
+    "full stack developer"
+  ],
+  react: [
+    "react developer",
+    "react js developer",
+    "frontend developer",
+    "frontend engineer",
+    "next.js developer",
+    "full stack developer",
+    "javascript developer",
+    "ui developer"
+  ],
+  angular: [
+    "angular developer",
+    "frontend developer",
+    "frontend engineer",
+    "typescript developer",
+    "javascript developer",
+    "web developer"
+  ],
+  vue: [
+    "vue developer",
+    "vue.js developer",
+    "frontend developer",
+    "nuxt developer",
+    "javascript developer",
+    "web developer"
+  ],
+  javascript: [
+    "javascript developer",
+    "frontend developer",
+    "react developer",
+    "node.js developer",
+    "full stack developer",
+    "web developer"
+  ],
+  typescript: [
+    "typescript developer",
+    "frontend developer",
+    "full stack developer",
+    "backend developer",
+    "react developer",
+    "node developer"
+  ],
+  python: [
+    "python developer",
+    "backend developer",
+    "django developer",
+    "fastapi developer",
+    "data engineer",
+    "python engineer",
+    "software engineer"
+  ],
+  node: [
+    "node.js developer",
+    "nodejs developer",
+    "backend engineer",
+    "full stack developer",
+    "express developer",
+    "backend developer"
+  ],
+  java: [
+    "java developer",
+    "backend developer",
+    "spring boot developer",
+    "software engineer",
+    "java software engineer"
+  ],
+  "c#": [
+    "c# developer",
+    ".net developer",
+    "dotnet developer",
+    "asp.net developer",
+    "backend developer",
+    "software engineer"
+  ],
+  ".net": [
+    ".net developer",
+    "dotnet developer",
+    "c# developer",
+    "asp.net developer",
+    "backend developer"
+  ],
+  flutter: [
+    "flutter developer",
+    "mobile app developer",
+    "dart developer",
+    "android developer",
+    "ios developer"
+  ],
+  "react native": [
+    "react native developer",
+    "mobile app developer",
+    "frontend developer",
+    "cross platform developer"
+  ],
+  android: [
+    "android developer",
+    "mobile app developer",
+    "kotlin developer",
+    "flutter developer"
+  ],
+  ios: [
+    "ios developer",
+    "swift developer",
+    "mobile app developer",
+    "flutter developer"
+  ],
+  "software engineer": [
+    "software developer",
+    "full stack engineer",
+    "full stack developer",
+    "backend engineer",
+    "frontend engineer",
+    "web developer"
+  ],
+  "software developer": [
+    "software engineer",
+    "full stack developer",
+    "backend developer",
+    "frontend developer",
+    "web developer"
+  ],
+  "full stack": [
+    "full stack developer",
+    "full stack engineer",
+    "software developer",
+    "web developer",
+    "backend developer",
+    "frontend developer"
+  ],
+  frontend: [
+    "frontend developer",
+    "frontend engineer",
+    "ui developer",
+    "web developer",
+    "react developer",
+    "javascript developer"
+  ],
+  backend: [
+    "backend developer",
+    "backend engineer",
+    "api developer",
+    "software engineer",
+    "server side developer"
+  ],
+  "data analyst": [
+    "data analyst",
+    "business analyst",
+    "bi analyst",
+    "analytics engineer",
+    "sql analyst",
+    "data reporting analyst"
+  ],
+  "business analyst": [
+    "business analyst",
+    "data analyst",
+    "product analyst",
+    "business systems analyst",
+    "operations analyst"
+  ],
+  "data engineer": [
+    "data engineer",
+    "etl developer",
+    "big data engineer",
+    "analytics engineer",
+    "python data engineer"
+  ],
+  "data scientist": [
+    "data scientist",
+    "machine learning engineer",
+    "ai engineer",
+    "data analyst",
+    "quantitative analyst"
+  ],
+  "machine learning": [
+    "machine learning engineer",
+    "ai engineer",
+    "data scientist",
+    "nlp engineer",
+    "deep learning engineer"
+  ],
+  "ai": [
+    "ai engineer",
+    "artificial intelligence engineer",
+    "machine learning engineer",
+    "data scientist",
+    "python engineer"
+  ],
+  "ui/ux": [
+    "ui/ux designer",
+    "product designer",
+    "ux designer",
+    "ui designer",
+    "web designer",
+    "figma designer"
+  ],
+  "ux designer": [
+    "ux designer",
+    "product designer",
+    "ui/ux designer",
+    "interaction designer",
+    "user researcher"
+  ],
+  "graphic designer": [
+    "graphic designer",
+    "visual designer",
+    "brand designer",
+    "digital designer",
+    "creative designer"
+  ],
+  devops: [
+    "devops engineer",
+    "cloud engineer",
+    "site reliability engineer",
+    "sre",
+    "aws engineer",
+    "infrastructure engineer"
+  ],
+  cloud: [
+    "cloud engineer",
+    "aws engineer",
+    "azure engineer",
+    "devops engineer",
+    "cloud architect"
+  ],
+  qa: [
+    "qa engineer",
+    "qa tester",
+    "quality assurance engineer",
+    "software tester",
+    "automation tester",
+    "sdet"
+  ],
+  tester: [
+    "software tester",
+    "qa engineer",
+    "qa analyst",
+    "automation tester",
+    "manual tester"
+  ],
+  "digital marketing": [
+    "digital marketing specialist",
+    "seo specialist",
+    "performance marketer",
+    "growth marketer",
+    "social media manager",
+    "content marketer"
+  ],
+  marketing: [
+    "marketing specialist",
+    "digital marketer",
+    "performance marketer",
+    "growth marketer",
+    "marketing coordinator"
+  ],
+  seo: [
+    "seo specialist",
+    "seo expert",
+    "search engine optimization",
+    "content marketer",
+    "digital marketing specialist"
+  ],
+  "social media": [
+    "social media manager",
+    "social media specialist",
+    "content creator",
+    "community manager",
+    "digital marketing specialist"
+  ],
+  content: [
+    "content writer",
+    "copywriter",
+    "content strategist",
+    "technical writer",
+    "content creator"
+  ],
+  "appointment setter": [
+    "appointment setter",
+    "lead generation specialist",
+    "cold caller",
+    "inside sales representative",
+    "sales development representative"
+  ],
+  sales: [
+    "sales representative",
+    "business development representative",
+    "bdr",
+    "sdr",
+    "account executive",
+    "inside sales"
+  ],
+  "customer support": [
+    "customer support specialist",
+    "customer service representative",
+    "customer success manager",
+    "technical support specialist"
+  ],
+  "human resources": [
+    "hr specialist",
+    "hr generalist",
+    "recruiter",
+    "talent acquisition specialist",
+    "hr coordinator"
+  ],
+  recruiter: [
+    "technical recruiter",
+    "talent acquisition specialist",
+    "it recruiter",
+    "hr recruiter",
+    "sourcer"
+  ],
+  "project manager": [
+    "project manager",
+    "scrum master",
+    "product manager",
+    "technical project manager",
+    "program manager"
+  ],
+  "product manager": [
+    "product manager",
+    "associate product manager",
+    "product owner",
+    "technical product manager"
+  ],
+  sql: [
+    "sql developer",
+    "database developer",
+    "database administrator",
+    "sql engineer",
+    "data engineer",
+    "data analyst",
+    "bi developer",
+    "backend developer",
+    "mysql developer",
+    "postgresql developer"
+  ],
+  database: [
+    "database developer",
+    "database administrator",
+    "dba",
+    "sql developer",
+    "data engineer",
+    "data analyst",
+    "backend developer"
+  ],
+  mysql: [
+    "mysql developer",
+    "database developer",
+    "sql developer",
+    "backend developer",
+    "php developer"
+  ],
+  postgresql: [
+    "postgresql developer",
+    "database developer",
+    "sql developer",
+    "backend developer"
+  ],
+  mongodb: [
+    "mongodb developer",
+    "nosql developer",
+    "backend developer",
+    "full stack developer"
+  ]
+};
+
+const COMMON_ROLE_MODIFIERS = new Set([
+  "developer", "engineer", "specialist", "expert", "consultant", "analyst",
+  "manager", "lead", "senior", "junior", "intern", "associate", "staff",
+  "principal", "director", "head", "remote", "hybrid", "onsite", "freelance",
+  "contract", "full-time", "part-time", "job", "role", "position"
+]);
+
+function getAlternativeKeywordsForTerm(term) {
+  const norm = normalizeLabel(term);
+  if (!norm) return [];
+  for (const [key, synonyms] of Object.entries(KEYWORD_SYNONYM_DICTIONARY)) {
+    const keyNorm = normalizeLabel(key);
+    if (norm === keyNorm || norm.includes(keyNorm) || keyNorm.includes(norm)) {
+      return synonyms;
+    }
+  }
+  return [];
+}
+
+function isKnownDictionaryRole(jobTitleRaw) {
+  const title = normalizeLabel(jobTitleRaw);
+  if (!title) return false;
+
+  // 1. Direct dictionary key/synonym check
+  for (const [key, synonyms] of Object.entries(KEYWORD_SYNONYM_DICTIONARY)) {
+    const keyNorm = normalizeLabel(key);
+    if (keyNorm && (title.includes(keyNorm) || keyNorm.includes(title))) return true;
+    for (const syn of synonyms) {
+      const synNorm = normalizeLabel(syn);
+      if (synNorm && (title.includes(synNorm) || synNorm.includes(title))) return true;
+    }
+  }
+
+  // 2. Universal recognized professional / tech domain stems
+  const UNIVERSAL_DICTIONARY_ROLES = [
+    "developer", "software engineer", "programmer", "coder", "full stack",
+    "frontend", "backend", "web developer", "web designer", "ui designer",
+    "ux designer", "ui/ux", "product designer", "data analyst", "data scientist",
+    "data engineer", "database", "sql", "mysql", "postgresql", "mongodb", "devops", "cloud engineer", "qa engineer",
+    "software tester", "qa tester", "product manager", "project manager", "scrum master",
+    "joomla", "drupal", "cms", "wordpress", "php", "laravel", "react", "next.js", "node", "nodejs",
+    "python", "django", "fastapi", "java", "spring boot", ".net", "c#", "flutter",
+    "android", "ios", "angular", "vue", "nuxt", "typescript", "javascript", "html", "css"
+  ];
+
+  return UNIVERSAL_DICTIONARY_ROLES.some((kw) => title.includes(normalizeLabel(kw)));
+}
+
+function isJobMatchingSearchKeywords(jobTitleRaw, activeKeyword, settings) {
+  const title = normalizeLabel(jobTitleRaw);
+  if (!title) return true;
+  const active = normalizeLabel(activeKeyword);
+  if (!active) return true;
+
+  // 1. Direct exact/substring match
+  if (title.includes(active) || active.includes(title)) return true;
+
+  // 2. Split active keyword into core domain keywords (excluding generic words like developer/engineer/senior)
+  const activeWords = active.split(/\s+/).filter((w) => w.length >= 3 && !COMMON_ROLE_MODIFIERS.has(w));
+  if (activeWords.length > 0 && activeWords.some((w) => title.includes(w))) {
+    return true;
+  }
+
+  // 3. Check synonym dictionary for matches
+  const synonyms = getAlternativeKeywordsForTerm(active);
+  for (const syn of synonyms) {
+    const synNorm = normalizeLabel(syn);
+    if (title.includes(synNorm) || synNorm.includes(title)) return true;
+    const synWords = synNorm.split(/\s+/).filter((w) => w.length >= 3 && !COMMON_ROLE_MODIFIERS.has(w));
+    if (synWords.length > 0 && synWords.some((w) => title.includes(w))) {
+      return true;
+    }
+  }
+
+  // 4. Check user-configured searchTerms
+  const userTerms = parseListSetting(settings?.searchTerms);
+  for (const ut of userTerms) {
+    const utNorm = normalizeLabel(ut);
+    if (utNorm && (title.includes(utNorm) || utNorm.includes(title))) return true;
+    const utWords = utNorm.split(/\s+/).filter((w) => w.length >= 3 && !COMMON_ROLE_MODIFIERS.has(w));
+    if (utWords.length > 0 && utWords.some((w) => title.includes(w))) {
+      return true;
+    }
+  }
+
+  // 5. Smart Cross-Dictionary Match:
+  // If the job title matches ANY recognized role/skill in our dictionary (e.g. WordPress, PHP, React, SQL, Full Stack, Software Engineer, Data Analyst, etc.), accept it!
+  if (isKnownDictionaryRole(title)) {
+    return true;
+  }
+
+  return false;
+}
+
 function shouldSkipByRules(card, settings) {
-  const { title, company } = extractCardMeta(card);
+  const { title, titleRaw, company } = extractCardMeta(card);
   const blacklistCompanies = parseListSetting(settings.blacklistedCompanies).map((s) => normalizeLabel(s));
   const badWords = parseListSetting(settings.badWords).map((s) => normalizeLabel(s));
 
@@ -1526,8 +2368,18 @@ function shouldSkipByRules(card, settings) {
     return { skip: true, reasonCode: "BLACKLISTED_COMPANY", reason: `Company blacklisted: ${company}` };
   }
   if (title && badWords.some((w) => w && title.includes(w))) {
-    return { skip: true, reasonCode: "BAD_WORD_TITLE", reason: "Blocked by title bad word rule" };
+    return { skip: true, reasonCode: "BAD_WORD_TITLE", reason: `Title contains excluded word: ${title}` };
   }
+
+  const activeKeyword = getCurrentSearchKeyword() || parseListSetting(settings?.searchTerms)[0] || "";
+  if (activeKeyword && !isJobMatchingSearchKeywords(titleRaw || title, activeKeyword, settings)) {
+    return {
+      skip: true,
+      reasonCode: "KEYWORD_MISMATCH",
+      reason: `Title "${titleRaw || title}" does not match active keyword "${activeKeyword}" or related dictionary skills`
+    };
+  }
+
   return { skip: false, reasonCode: "", reason: "" };
 }
 
@@ -1708,27 +2560,39 @@ function shouldSkipByAboutCompany(aboutCompanyText, settings) {
 let lastDailyEasyApplyLimitEvidence = "";
 
 function hasDailyEasyApplyLimitSignal(root = document) {
+  const targetRoot = root || document;
   const candidates = getAllBySelectorList(
     [
       ".artdeco-inline-feedback__message",
+      ".artdeco-inline-feedback",
       "[role='alert']",
       "[aria-live='polite']",
       "[aria-live='assertive']",
       ".artdeco-toast-item__message",
       ".artdeco-toast-item",
+      ".jobs-easy-apply-modal",
+      ".artdeco-modal",
+      "[role='dialog']",
       ".jobs-apply-button--top-card + .artdeco-inline-feedback__message",
-      ".jobs-unified-top-card .artdeco-inline-feedback__message"
+      ".jobs-unified-top-card .artdeco-inline-feedback__message",
+      ".jobs-s-apply",
+      ".jobs-unified-top-card",
+      ".job-details-jobs-unified-top-card__container--two-pane"
     ],
-    root
+    targetRoot
   );
+
   const scopedText = normalizeLabel(candidates.map((el) => String(el?.textContent || "")).join(" "));
-  // Important: do not fall back to scanning the entire page body text.
-  // It causes false-positives when job descriptions or company pages mention "bots", "quality", or "apply tomorrow".
   lastDailyEasyApplyLimitEvidence = "";
   if (!scopedText) return false;
-  // Keep this detection strict: LinkedIn UIs frequently contain "apply tomorrow" or "quality" text in unrelated areas.
-  // Only treat it as a daily limit when we see the core "limit the number of applications you can submit in a day"
-  // wording (or close variants), plus a "try again tomorrow" signal.
+
+  const isExactDailyLimitMsg =
+    scopedText.includes("we limit daily submissions") ||
+    scopedText.includes("limit daily submissions") ||
+    (scopedText.includes("maintain quality and prevent bots") && scopedText.includes("tomorrow")) ||
+    (scopedText.includes("save this job") && scopedText.includes("apply tomorrow")) ||
+    scopedText.includes("helping each application get the right attention");
+
   const coreLimitPhrases = [
     "we limit the number of applications you can submit in a day",
     "limit the number of applications you can submit in a day",
@@ -1736,27 +2600,31 @@ function hasDailyEasyApplyLimitSignal(root = document) {
     "limit the number of applications you can submit per day",
     "daily application limit",
     "exceeded the daily application limit",
-    "we limit daily submissions"
+    "we limit daily submissions",
+    "limit daily submissions"
   ];
+
   const coreMatch = coreLimitPhrases.find((phrase) => scopedText.includes(phrase));
-  const hasTryTomorrow =
+  const hasTomorrowSignal =
+    scopedText.includes("apply tomorrow") ||
     scopedText.includes("try again tomorrow") ||
     scopedText.includes("please try again tomorrow") ||
-    (scopedText.includes("tomorrow") && scopedText.includes("try again"));
-  if (coreMatch && (hasTryTomorrow || scopedText.includes("submit in a day") || scopedText.includes("per day"))) {
-    lastDailyEasyApplyLimitEvidence = `matched:${coreMatch}${hasTryTomorrow ? "+tomorrow" : ""}`;
+    scopedText.includes("tomorrow");
+
+  if (isExactDailyLimitMsg || (coreMatch && (hasTomorrowSignal || scopedText.includes("submit in a day") || scopedText.includes("per day")))) {
+    lastDailyEasyApplyLimitEvidence = `matched:${coreMatch || "exact_daily_limit_message"}${hasTomorrowSignal ? "+tomorrow" : ""}`;
     return true;
   }
   return false;
 }
 
-async function pauseRunForDailyEasyApplyLimit(settings, reason = "LinkedIn daily Easy Apply limit reached") {
+async function pauseRunForDailyEasyApplyLimit(settings, reason = "LinkedIn daily submission limit reached: We limit daily submissions to maintain quality and prevent bots. Save this job and apply tomorrow.") {
   const runId = String(lastRunStartedAt || "");
   if (runId && dailyLimitHandledRunId === runId) return false;
   if (runId) dailyLimitHandledRunId = runId;
 
   runStats.skipped += 1;
-  await logOutcome("warn", "LinkedIn daily Easy Apply limit detected. Run paused.", "DAILY_EASY_APPLY_LIMIT");
+  await logOutcome("warn", "🛑 LinkedIn daily Easy Apply limit reached ('We limit daily submissions...'). Safe stop activated.", "DAILY_EASY_APPLY_LIMIT");
   await recordOutcome("SKIPPED", {
     reasonCode: "DAILY_EASY_APPLY_LIMIT",
     reason,
@@ -1765,7 +2633,7 @@ async function pauseRunForDailyEasyApplyLimit(settings, reason = "LinkedIn daily
   await reportProgress();
   await sendMessage({ type: "CP_PAUSE" });
   await botChat(
-    "LinkedIn shows an Easy Apply daily submission limit message, so the run is paused. If you can still submit manually, click Resume and I’ll retry.",
+    "🛑 LinkedIn daily submission limit reached ('We limit daily submissions to maintain quality and prevent bots... Save this job and apply tomorrow.'). The run has been safely stopped to protect your account.",
     "warn"
   );
   await debugLog(settings, "Paused due daily limit", { reason, evidence: lastDailyEasyApplyLimitEvidence });
@@ -2105,7 +2973,14 @@ async function logOutcome(kind, message, reasonCode = "", meta = undefined) {
 }
 
 function getConfiguredSearchTerms(settings) {
-  return parseListSetting(settings.searchTerms);
+  const userTerms = parseListSetting(settings?.searchTerms);
+  const activeKeyword = getCurrentSearchKeyword();
+  const baseTerm = userTerms.length > 0 ? userTerms[0] : activeKeyword;
+  if (!baseTerm) return userTerms;
+
+  const alternatives = getAlternativeKeywordsForTerm(baseTerm);
+  const combined = new Set([...userTerms, ...alternatives]);
+  return Array.from(combined);
 }
 
 function getSwitchNumber(settings) {
@@ -2478,6 +3353,25 @@ function getResumableSearchUrl(settings, options = {}) {
   return resumeUrl.toString();
 }
 
+function isSameSearchUrl(urlA, urlB) {
+  try {
+    const a = urlA instanceof URL ? urlA : new URL(String(urlA || ""));
+    const b = urlB instanceof URL ? urlB : new URL(String(urlB || ""));
+    if (a.origin !== b.origin || a.pathname !== b.pathname) return false;
+    const meaningfulKeys = ["keywords", "geoId", "location", "f_AL", "f_TPR", "f_WT", "f_E", "f_JT", "start", "sortBy"];
+    for (const key of meaningfulKeys) {
+      const valA = normalizeLabel(String(a.searchParams.get(key) || ""));
+      const valB = normalizeLabel(String(b.searchParams.get(key) || ""));
+      if (valA !== valB) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let lastSearchRedirectTimestamp = 0;
+
 async function ensureSearchQueryParams(settings) {
   if (!isJobsSearchPage()) return true;
   try {
@@ -2488,12 +3382,21 @@ async function ensureSearchQueryParams(settings) {
 
     const after = url.toString();
     if (after !== before) {
-      if (after === transientOnlyUrl.toString()) {
+      if (isSameSearchUrl(before, after) || after === transientOnlyUrl.toString()) {
         window.history.replaceState(null, "", after);
         writeStoredSearchResultsUrl(after);
         await debugLog(settings, "Normalized search URL without reload", { before, after });
         return true;
       }
+
+      const now = Date.now();
+      if (now - lastSearchRedirectTimestamp < 4000) {
+        window.history.replaceState(null, "", after);
+        writeStoredSearchResultsUrl(after);
+        return true;
+      }
+      lastSearchRedirectTimestamp = now;
+
       writeStoredSearchResultsUrl(after);
       await logLine("Applied search query preferences (date/sort/work mode)", "info");
       window.location.href = after;
@@ -2529,12 +3432,36 @@ async function ensureSearchTermIfNeeded(settings) {
   if (!isJobsSearchPage()) return true;
   const terms = getConfiguredSearchTerms(settings);
   if (!terms.length) return true;
+
+  const currentKeyword = getCurrentSearchKeyword();
+  const currentNorm = normalizeLabel(currentKeyword);
+
+  // If current page keyword matches any of the configured terms/synonyms, align cursor and do not reload
+  if (currentNorm) {
+    const matchingIndex = terms.findIndex((t) => normalizeLabel(t) === currentNorm);
+    if (matchingIndex >= 0) {
+      runSearchTermCursor = matchingIndex;
+      return true;
+    }
+    // If user didn't specify explicit searchTerms in settings, accept whatever LinkedIn has
+    const userTerms = parseListSetting(settings?.searchTerms);
+    if (!userTerms.length) {
+      return true;
+    }
+  }
+
   if (runSearchTermCursor < 0 || runSearchTermCursor >= terms.length) {
     runSearchTermCursor = 0;
   }
   const selected = terms[runSearchTermCursor];
-  const currentKeyword = getCurrentSearchKeyword();
-  if (normalizeLabel(currentKeyword) === normalizeLabel(selected)) return true;
+  if (currentNorm === normalizeLabel(selected)) return true;
+
+  const now = Date.now();
+  if (now - lastSearchRedirectTimestamp < 4000) {
+    return true;
+  }
+  lastSearchRedirectTimestamp = now;
+
   await logLine(`Switching search term: ${selected}`);
   resetRemoteLocationKeywordCursor();
   window.location.href = getActiveRunSearchUrl(settings);
@@ -2549,8 +3476,10 @@ async function rotateSearchTerm(settings) {
   runSearchTermSuccessCount = 0;
   resetRemoteLocationKeywordCursor();
   const nextTerm = terms[runSearchTermCursor];
+  lastSearchRedirectTimestamp = Date.now();
   captureDebugEvent("search", "TERM_ROTATED", { from: terms[prevCursor], to: nextTerm, cursor: runSearchTermCursor, totalTerms: terms.length });
-  await logLine(`Moving to next search term: ${nextTerm}`, "info");
+  await logLine(`Switching to alternative keyword: "${nextTerm}"`, "info");
+  await botChat(`Switching search to related keyword: "${nextTerm}"...`);
   window.location.href = getActiveRunSearchUrl(settings);
   return true;
 }
@@ -2573,66 +3502,113 @@ function buildNextPageUrlByStart(settings, currentUrl, step = 25) {
 }
 
 async function gotoNextResultsPage(settings) {
-  const fallbackNextUrl = buildNextPageUrlByStart(settings, window.location.href, 25);
-  if (fallbackNextUrl && fallbackNextUrl !== window.location.href && hasTransientSearchQueryParams(window.location.href)) {
-    await logLine("Moving to next results page using clean URL offset.", "info");
-    window.location.href = fallbackNextUrl;
-    return true;
-  }
-  // Pagination is often not clickable until scrolled into view.
+  const currentKeyword = getCurrentSearchKeyword() || "current search";
+
+  // Scroll down to the bottom of the list container to reveal pagination
   try {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-    await sleep(900);
+    const listScrollRoot = getJobListScrollContainer();
+
+    if (listScrollRoot && typeof listScrollRoot.scrollTo === "function") {
+      listScrollRoot.scrollTo({ top: listScrollRoot.scrollHeight || 10000, behavior: "smooth" });
+    } else if (listScrollRoot && typeof listScrollRoot.scrollBy === "function") {
+      listScrollRoot.scrollBy({ top: 3500, behavior: "smooth" });
+    }
+    window.scrollTo({ top: document.body.scrollHeight || 10000, behavior: "smooth" });
+    await sleep(800);
   } catch {
     // ignore
   }
+
+  // Check if LinkedIn pagination component exists in DOM (matches Untitled-2.xml)
+  const paginationContainer = getBySelectorList([
+    ".jobs-search-pagination",
+    ".jobs-search-results-list__pagination",
+    ".jobs-search-results-list__pagination-container",
+    ".artdeco-pagination"
+  ]);
+
+  // Parse page state text like "Page 1 of 9" or "Page 2 of 8"
+  const pageStateElem = document.querySelector(".jobs-search-pagination__page-state");
+  const pageStateText = pageStateElem?.textContent || "";
+  const pageStateMatch = pageStateText.match(/Page\s+(\d+)\s+of\s+(\d+)/i);
+  const currentPageFromState = pageStateMatch ? Number(pageStateMatch[1]) : 0;
+  const totalPagesFromState = pageStateMatch ? Number(pageStateMatch[2]) : 0;
+
   const currentPageButton = getBySelectorList([
+    "button.jobs-search-pagination__indicator-button--active",
+    "button.jobs-search-pagination__indicator-button[aria-current='page']",
     ".artdeco-pagination__indicator--number.active button",
     ".artdeco-pagination__indicator--number.selected button",
-    "li.artdeco-pagination__indicator--number.active button"
+    "li.artdeco-pagination__indicator--number.active button",
+    "li.artdeco-pagination__indicator--number.selected button"
   ]);
-  const currentPage = Number(String(currentPageButton?.textContent || "").trim() || "0");
+  const currentPage = currentPageFromState || Number(String(currentPageButton?.textContent || "").trim() || "0") || 1;
 
-  let nextButton = null;
-  if (Number.isFinite(currentPage) && currentPage > 0) {
+  // If page state clearly says we are on the last page (e.g. Page 9 of 9), then this keyword is exhausted
+  if (totalPagesFromState > 0 && currentPage >= totalPagesFromState) {
+    await debugLog(settings, `Reached last page (${currentPage}/${totalPagesFromState}) for keyword "${currentKeyword}"`);
+    return false;
+  }
+
+  // Find Next button using exact LinkedIn selectors from Untitled-2.xml
+  let nextButton = getBySelectorList([
+    "button.jobs-search-pagination__button--next",
+    "button[aria-label='View next page']",
+    "button[aria-label='Next']",
+    "button[aria-label='Page next']",
+    "button.artdeco-pagination__button--next",
+    ".jobs-search-pagination__button--next"
+  ]);
+
+  if (!nextButton && currentPage > 0) {
     nextButton = getBySelectorList([
+      `button.jobs-search-pagination__indicator-button[aria-label='Page ${currentPage + 1}']`,
+      `button[aria-label='Page ${currentPage + 1}']`,
       `.artdeco-pagination__pages button[aria-label='Page ${currentPage + 1}']`,
       `.artdeco-pagination__pages button[aria-label='page ${currentPage + 1}']`
     ]);
   }
-  if (!nextButton) {
-    nextButton = getBySelectorList([
-      "button[aria-label='Next']",
-      "button[aria-label='Page next']",
-      "button.artdeco-pagination__button--next"
-    ]);
-  }
-  if (!nextButton || nextButton.disabled) {
-    await debugLog(settings, "Next page button not available", {
-      currentPage: Number.isFinite(currentPage) ? currentPage : null,
-      disabled: Boolean(nextButton?.disabled),
-      url: window.location.href
-    });
-    if (fallbackNextUrl && fallbackNextUrl !== window.location.href) {
-      await logLine("Next page button missing. Moving using URL offset.", "info");
-      window.location.href = fallbackNextUrl;
-      return true;
-    }
+
+  const hasNextPageButton = Boolean(
+    nextButton &&
+    !nextButton.disabled &&
+    !nextButton.classList.contains("artdeco-button--disabled") &&
+    !nextButton.classList.contains("disabled") &&
+    nextButton.getAttribute("aria-disabled") !== "true"
+  );
+
+  // If no pagination exists or next button is disabled, there are no more pages for this keyword
+  if (!paginationContainer && !hasNextPageButton) {
+    await debugLog(settings, "No pagination container found; search has only 1 page", { keyword: currentKeyword });
     return false;
   }
 
-  const clicked = await resilientClick(nextButton, "Next page");
-  if (!clicked) return false;
-  await sleep(1400);
-  if (fallbackNextUrl && fallbackNextUrl !== window.location.href && hasTransientSearchQueryParams(window.location.href)) {
-    await logLine("Pagination kept sticky job selection. Moving using clean URL offset.", "info");
+  if (nextButton && (nextButton.disabled || nextButton.classList.contains("artdeco-button--disabled") || nextButton.getAttribute("aria-disabled") === "true")) {
+    await debugLog(settings, "Next page button is disabled; all pages exhausted for keyword", { keyword: currentKeyword });
+    return false;
+  }
+
+  const fallbackNextUrl = buildNextPageUrlByStart(settings, window.location.href, 25);
+
+  if (nextButton && hasNextPageButton && isVisibleElement(nextButton)) {
+    const nextPageNum = currentPage + 1;
+    await logLine(`📄 Finished page ${currentPage}. Loading page ${nextPageNum}${totalPagesFromState ? ` of ${totalPagesFromState}` : ""} for "${currentKeyword}"...`, "info");
+    await botChat(`Loading page ${nextPageNum}${totalPagesFromState ? ` of ${totalPagesFromState}` : ""} for "${currentKeyword}"...`);
+    const clicked = await resilientClick(nextButton, "Next page");
+    if (clicked) {
+      await sleep(1500);
+      await loadAllJobCardsOnPage(settings);
+      return true;
+    }
+  }
+
+  if (fallbackNextUrl && fallbackNextUrl !== window.location.href && hasNextPageButton) {
+    await logLine(`📄 Loading next page of jobs for "${currentKeyword}"...`, "info");
     window.location.href = fallbackNextUrl;
     return true;
   }
-  await waitForJobsToRender(settings, 5000);
-  await logLine("Navigated to next results page", "info");
-  await botChat("Loading more opportunities...");
-  return true;
+
+  return false;
 }
 
 async function setSearchLocationIfNeeded(settings, locationOverride = "") {
@@ -3102,10 +4078,16 @@ async function prepareRun(settings) {
     return false;
   }
   if (isPostApplySearchPage()) {
-    await logLine("Returning to Jobs Search after previous submission.", "info");
-    await debugLog(settings, "Redirecting out of post-apply page", { path: window.location.pathname });
+    const cleanUrl = getResumableSearchUrl(settings);
+    window.history.replaceState(null, "", cleanUrl);
+    const hasCardsInDom = document.querySelectorAll(".job-card-container, [data-occludable-job-id], li.jobs-search-results__list-item").length > 0;
+    if (hasCardsInDom) {
+      preparedRun = true;
+      return true;
+    }
+    await logLine("Returning to Jobs Search results.", "info");
     resetRemoteLocationKeywordCursor();
-    window.location.href = getResumableSearchUrl(settings);
+    window.location.href = cleanUrl;
     return false;
   }
   if (!isJobsPage()) {
@@ -3117,13 +4099,8 @@ async function prepareRun(settings) {
     return false;
   }
   if (!isJobsSearchPage()) {
-    if (isJobsViewPage()) {
-      await debugLog(settings, "On jobs view page; continuing without redirect", { url: window.location.href });
-      preparedRun = true;
-      return true;
-    }
-    await logLine("Opening Jobs Search results page.", "info");
-    await debugLog(settings, "Redirecting to jobs search (landing page)", { url: window.location.href });
+    await logLine("Opening LinkedIn Jobs Search results page.", "info");
+    await debugLog(settings, "Redirecting to jobs search", { url: window.location.href });
     captureDebugEvent("search", "NAVIGATE_TO_SEARCH", { reason: "not-search-page", currentUrl: window.location.href });
     resetRemoteLocationKeywordCursor();
     window.location.href = getActiveRunSearchUrl(settings);
@@ -3443,21 +4420,40 @@ function ensurePanel() {
       <div class="cp-brand">
         <div class="cp-orb"><img class="cp-orb-img" alt="" /></div>
         <div>
-          <div class="cp-title">AutoApply CV Copilot</div>
-          <div class="cp-sub">LinkedIn job assistant</div>
+          <div class="cp-title">AutoApply CV <span class="cp-ai-sparkle">${ICONS.sparkle}</span></div>
+          <div class="cp-sub">AI Application Assistant</div>
         </div>
       </div>
       <div class="cp-head-right">
         <div class="cp-badge" id="cp-status-badge">Idle</div>
         <div class="cp-window-actions">
-          <button id="cp-minimize" title="Minimize">-</button>
+          <button id="cp-clear-logs" class="cp-icon-btn" title="Clear logs & reset counters">${ICONS.trash}</button>
+          <button id="cp-minimize" title="Minimize">–</button>
           <button id="cp-maximize" title="Maximize">+</button>
         </div>
       </div>
     </div>
-    <div class="cp-now" id="cp-now-card">
-      <div class="cp-now-title" id="cp-now-title">Ready to apply</div>
-      <div class="cp-now-detail" id="cp-now-detail">Press Start or type a command below.</div>
+    <div class="cp-hero" id="cp-now-card">
+      <div class="cp-hero-header">
+        <div class="cp-hero-status-pulse"></div>
+        <span class="cp-hero-status-title" id="cp-now-title">AI Copilot Ready</span>
+      </div>
+      <div class="cp-hero-job-title" id="cp-now-job-title">Standing by for next task</div>
+      <div class="cp-hero-job-sub" id="cp-now-detail">Press Start or toggle Live Auto Submit</div>
+      <div class="cp-hero-metrics">
+        <div class="cp-metric-pill" id="cp-applied-pill">
+          <span class="cp-svg-icon cp-icon-success">${ICONS.rocket}</span>
+          <span class="cp-metric-val" id="cp-applied-count">0</span> applied
+        </div>
+        <div class="cp-metric-pill" id="cp-skipped-pill">
+          <span class="cp-svg-icon cp-icon-warning">${ICONS.skip}</span>
+          <span class="cp-metric-val" id="cp-skipped-count">0</span> skipped
+        </div>
+        <div class="cp-metric-pill cp-metric-quota" id="cp-wallet">
+          <span class="cp-svg-icon cp-icon-primary">${ICONS.coin}</span>
+          <span id="cp-wallet-text">Free Quota</span>
+        </div>
+      </div>
     </div>
     <div class="cp-controls">
       <div class="cp-run-mode">
@@ -3469,18 +4465,19 @@ function ensurePanel() {
         <span class="cp-run-mode-chip" id="cp-run-mode-chip">Dry Run</span>
       </div>
       <div class="cp-quick">
-        <button id="cp-start">Start</button>
-        <button id="cp-pause">Pause</button>
-        <button id="cp-stop">Stop</button>
+        <button id="cp-start" class="cp-btn-start">${ICONS.play} <span>Start</span></button>
+        <button id="cp-pause" class="cp-btn-pause">${ICONS.pause} <span>Pause</span></button>
+        <button id="cp-stop" class="cp-btn-stop">${ICONS.stop} <span>Stop</span></button>
       </div>
-      <div class="cp-info-row">
-        <span id="cp-wallet" class="cp-info-pill"></span>
-        <span id="cp-rate" class="cp-info-pill"></span>
-      </div>
+    </div>
+    <div class="cp-tab-bar">
+      <button id="cp-tab-feed" class="cp-tab cp-active">${ICONS.sparkle} <span>Activity</span></button>
+      <button id="cp-tab-debug" class="cp-tab">${ICONS.activity} <span>Decision Chain</span></button>
+      <button id="cp-tab-logs" class="cp-tab">${ICONS.list} <span>Logs</span></button>
     </div>
     <div class="cp-log" id="cp-log" aria-live="polite"></div>
     <div class="cp-composer">
-      <input id="cp-chat-input" type="text" placeholder="Type a command..." />
+      <input id="cp-chat-input" type="text" placeholder="Type a command (e.g. pause, start, resume)..." />
       <button id="cp-chat-send">Send</button>
     </div>
   `;
@@ -3499,6 +4496,32 @@ function ensurePanel() {
   panel.querySelector("#cp-start").addEventListener("click", async () => handleChatCommand("start"));
   panel.querySelector("#cp-pause").addEventListener("click", async () => handleChatCommand("pause"));
   panel.querySelector("#cp-stop").addEventListener("click", async () => handleChatCommand("stop"));
+
+  const tabFeedBtn = panel.querySelector("#cp-tab-feed");
+  const tabDebugBtn = panel.querySelector("#cp-tab-debug");
+  const tabLogsBtn = panel.querySelector("#cp-tab-logs");
+  const setTab = (tab) => {
+    panelActiveTab = tab;
+    tabFeedBtn?.classList.toggle("cp-active", tab === "feed");
+    tabDebugBtn?.classList.toggle("cp-active", tab === "debug");
+    tabLogsBtn?.classList.toggle("cp-active", tab === "logs");
+    lastLogRenderSignature = "";
+    void getBootstrap().then((b) => renderState(b.state));
+  };
+  tabFeedBtn?.addEventListener("click", () => setTab("feed"));
+  tabDebugBtn?.addEventListener("click", () => setTab("debug"));
+  tabLogsBtn?.addEventListener("click", () => setTab("logs"));
+
+  panel.querySelector("#cp-clear-logs")?.addEventListener("click", async () => {
+    const res = await sendMessage({ type: "CP_CLEAR_LOGS" });
+    if (res?.ok) {
+      runStats = { applied: 0, skipped: 0, failed: 0 };
+      lastLogRenderSignature = "";
+      renderState(res.state || { applied: 0, skipped: 0, failed: 0, logs: [] });
+      await botChat("Logs and run counters cleared.");
+    }
+  });
+
   const logEl = panel.querySelector("#cp-log");
   if (logEl) {
     logAutoScrollPinnedToBottom = true;
@@ -3600,6 +4623,114 @@ function summarizeMeta(meta) {
   }
 }
 
+function isUserFacingAiLog(entry) {
+  const msg = String(entry?.message || "").trim();
+  const norm = normalizeLabel(msg);
+  // Hide internal billing/dashboard syncs and json telemetry
+  if (norm.includes("synced") && norm.includes("update(s) to dashboard")) return false;
+  if (msg.startsWith("{") && msg.endsWith("}")) return false;
+  if (norm.includes("automation engine initialized")) return false;
+  if (norm.includes("disabled follow-company")) return false;
+  if (msg.startsWith("[debug]")) return false;
+  // Hide raw selector counts that are immediately followed by botChat
+  if (/^found \d+ job cards$/i.test(msg)) return false;
+  return true;
+}
+
+function formatAiFeedCard(entry) {
+  const rawMsg = trimLogPrefix(entry?.message || "");
+  const norm = normalizeLabel(rawMsg);
+  const time = String(entry?.ts?.slice(11, 19) || "");
+  const level = String(entry?.level || "info").toLowerCase();
+
+  let icon = ICONS.sparkle;
+  let cardClass = "";
+  let formattedHtml = escapeHtml(rawMsg);
+
+  if (norm.startsWith("opening:") || norm.startsWith("targeting")) {
+    icon = ICONS.target;
+    const title = cleanJobTitle(rawMsg.replace(/^opening:\s*/i, "").replace(/^targeting\s*/i, ""));
+    formattedHtml = `Targeting <strong>${escapeHtml(title)}</strong>`;
+  } else if (norm.startsWith("reading job details for") || norm.startsWith("analyzing requirements")) {
+    icon = ICONS.search;
+    const title = cleanJobTitle(rawMsg.replace(/^reading job details for\s*"?/i, "").replace(/"?\.\.\.$/, ""));
+    formattedHtml = `Analyzing requirements for <strong>${escapeHtml(title)}</strong>`;
+  } else if (norm.includes("application submitted successfully") || norm.includes("application submitted")) {
+    icon = ICONS.check;
+    cardClass = "cp-submitted";
+    formattedHtml = `<strong>Application Submitted Successfully!</strong>`;
+  } else if (norm.startsWith("selected resume option:") || norm.includes("attached resume")) {
+    icon = ICONS.file;
+    const resumeName = rawMsg.replace(/^selected resume option:\s*/i, "").replace(/^select resume\s*/i, "");
+    formattedHtml = `Attached Resume: <strong>${escapeHtml(resumeName)}</strong>`;
+  } else if (norm.startsWith("answered:")) {
+    icon = ICONS.edit;
+    const parts = rawMsg.replace(/^answered:\s*/i, "").split("->");
+    const question = (parts[0] || "").trim();
+    const answer = (parts[1] || "").trim();
+    formattedHtml = `Auto-answered: <em>${escapeHtml(question)}</em> ➔ <strong>${escapeHtml(answer)}</strong>`;
+  } else if (norm.includes("skipped")) {
+    icon = ICONS.skip;
+    cardClass = "cp-skipped";
+    formattedHtml = `Skipped: <strong>${escapeHtml(rawMsg.replace(/^skipped:?\s*/i, ""))}</strong>`;
+  } else if (norm.includes("rate limit") || norm.includes("waiting")) {
+    icon = ICONS.clock;
+    formattedHtml = `Pacing Protection: <strong>${escapeHtml(rawMsg.replace(/^rate limit:?\s*/i, ""))}</strong>`;
+  } else if (norm.includes("easy apply filter")) {
+    icon = ICONS.bolt;
+    formattedHtml = `Easy Apply filter activated`;
+  } else if (level === "error") {
+    icon = ICONS.alert;
+    cardClass = "cp-error";
+  } else if (level === "warn") {
+    icon = ICONS.alert;
+  }
+
+  return `<div class="cp-ai-card ${cardClass}"><span class="cp-ai-icon">${icon}</span><span class="cp-ai-text">${formattedHtml}</span><span class="cp-ai-time">${escapeHtml(time)}</span></div>`;
+}
+
+function formatDecisionChainCard(entry) {
+  const rawMsg = trimLogPrefix(entry?.message || "");
+  const norm = normalizeLabel(rawMsg);
+  const time = String(entry?.ts?.slice(11, 19) || "");
+  const meta = entry?.meta && typeof entry.meta === "object" ? entry.meta : {};
+  const reasonCode = String(meta?.reasonCode || "").toUpperCase();
+
+  let chainClass = "cp-diag-info";
+  let badge = "DECISION";
+  let icon = ICONS.activity;
+
+  if (norm.includes("application submitted") || norm.includes("submitted successfully")) {
+    chainClass = "cp-diag-success";
+    badge = "SUBMITTED";
+    icon = ICONS.check;
+  } else if (norm.includes("mismatch") || norm.includes("does not match")) {
+    chainClass = "cp-diag-warn";
+    badge = "KEYWORD FILTER";
+    icon = ICONS.search;
+  } else if (norm.includes("already applied") || reasonCode === "APPLIED_CACHE_HIT") {
+    chainClass = "cp-diag-muted";
+    badge = "DUPLICATE GUARD";
+    icon = ICONS.check;
+  } else if (norm.includes("experience") || reasonCode === "EXPERIENCE_TOO_HIGH") {
+    chainClass = "cp-diag-warn";
+    badge = "EXPERIENCE RULE";
+    icon = ICONS.target;
+  } else if (norm.includes("modal") || norm.includes("easy apply")) {
+    chainClass = "cp-diag-warn";
+    badge = "APPLY FLOW";
+    icon = ICONS.bolt;
+  } else if (entry?.level === "error") {
+    chainClass = "cp-diag-error";
+    badge = "ERROR";
+    icon = ICONS.alert;
+  }
+
+  const metaHtml = reasonCode ? `<span class="cp-diag-code">${escapeHtml(reasonCode)}</span>` : "";
+
+  return `<div class="cp-diag-card ${chainClass}"><div class="cp-diag-head"><span class="cp-diag-badge">${badge}</span>${metaHtml}<span class="cp-diag-time">${escapeHtml(time)}</span></div><div class="cp-diag-body"><span class="cp-diag-icon">${icon}</span><span class="cp-diag-msg">${escapeHtml(rawMsg)}</span></div></div>`;
+}
+
 const AI_KIND_KEYWORDS = [
   "analyzing", "reviewing", "processing", "evaluating", "preparing",
   "checking", "scanning", "optimizing", "verifying", "reading",
@@ -3673,50 +4804,52 @@ function deriveNowCard(state, logs) {
   const latestMessage = trimLogPrefix(latestNonDebug?.message || "");
   const norm = normalizeLabel(latestMessage);
 
-  const s = lastBootstrapSettings || {};
-  const modeLine = s?.dryRun
-    ? "Mode: Dry Run (no submit)."
-    : s?.autoSubmit
-    ? "Mode: Auto Submit (will click Submit)."
-    : "Mode: Manual Submit (fills forms; submit manually).";
+  let title = "AI Copilot Ready";
+  let jobTitle = "Standing by for next task";
+  let detail = "Press Start or toggle Live Auto Submit";
 
-  let title = pickAiTitle(AI_IDLE_TITLES, "Idle. Waiting for command.");
+  if (!isJobsSearchPage() && isJobsPage() && !isJobsViewPage()) {
+    jobTitle = "LinkedIn Jobs Hub";
+    detail = "Click Start to search matching jobs and begin auto-applying.";
+  }
+
   if (state.paused) {
-    title = "Paused. Awaiting your input...";
+    title = "Paused";
+    detail = "Awaiting your input or resume command.";
   } else if (state.running) {
-    if (norm.includes("preparing run")) {
-      title = "Setting up search filters and preferences...";
-    } else if (norm.includes("found") && norm.includes("job cards")) {
-      title = pickAiTitle(AI_THINKING_TITLES, "Scanning jobs on this page.");
-    } else if (norm.includes("opening:")) {
-      title = "Opening job and reading details...";
-    } else if (norm.includes("modal step")) {
-      title = pickAiTitle(AI_THINKING_TITLES, "Filling Easy Apply steps.");
+    title = "AI Copilot Active";
+    if (!isJobsSearchPage() && isJobsPage() && !isJobsViewPage()) {
+      jobTitle = "Navigating to Job Search...";
+      detail = "Opening search results with Easy Apply filters...";
+    } else if (norm.includes("preparing run")) {
+      jobTitle = "Setting up search filters...";
+      detail = "Configuring keywords & Easy Apply";
+    } else if (norm.includes("found") && norm.includes("job")) {
+      jobTitle = "Scanning Matching Opportunities";
+      detail = "Analyzing positions on current page";
+    } else if (norm.includes("opening:") || norm.includes("reading job details")) {
+      const cleanTitleText = cleanJobTitle(latestMessage.replace(/^opening:\s*/i, "").replace(/^reading job details for\s*"?/i, ""));
+      jobTitle = cleanTitleText || "Opening Job Position";
+      detail = "Reading requirements & matching qualifications";
+    } else if (norm.includes("easy apply") || norm.includes("modal step") || norm.includes("filling")) {
+      jobTitle = currentJobContext.title ? cleanJobTitle(currentJobContext.title) : "Filling Application";
+      detail = "Smart-answering screening questions & attaching resume";
     } else if (norm.includes("application submitted")) {
-      title = "Application submitted successfully!";
-    } else if (norm.includes("submit click did not complete")) {
-      title = "Analyzing blocked submit. Trying smart fallbacks...";
+      jobTitle = currentJobContext.title ? cleanJobTitle(currentJobContext.title) : "Application Submitted";
+      detail = "Submitted successfully! Moving to next job.";
+    } else if (norm.includes("rate limit") || norm.includes("waiting")) {
+      jobTitle = "Pacing Protection Active";
+      detail = latestMessage || "Resting safely between submissions";
     } else if (norm.includes("skipped")) {
-      title = pickAiTitle(["Skipping. Moving to next opportunity...", "Job skipped. Scanning next..."], "Skipping current job.");
-    } else if (norm.includes("error")) {
-      title = "Error detected. Attempting recovery...";
-    } else if (norm.includes("search location")) {
-      title = "Configuring search location...";
-    } else if (norm.includes("easy apply")) {
-      title = "Enabling Easy Apply filter...";
-    } else if (norm.includes("next page") || norm.includes("pagination")) {
-      title = "Loading next page of results...";
-    } else if (norm.includes("rate limit")) {
-      title = "Rate limit pause. Resuming shortly...";
+      jobTitle = "Skipped Current Position";
+      detail = latestMessage || "Scanning next opportunity";
     } else {
-      title = pickAiTitle(AI_THINKING_TITLES, "Automation running.");
+      jobTitle = currentJobContext.title ? cleanJobTitle(currentJobContext.title) : "Automating Application Process";
+      detail = latestMessage || "Analyzing next action...";
     }
   }
 
-  const baseDetail = latestMessage || (state.running ? "Analyzing next step..." : "Press Start to begin.");
-  const detail = baseDetail;
-  const meta = `Applied: ${Number(state.applied || 0)} | Skipped: ${Number(state.skipped || 0)} | Failed: ${Number(state.failed || 0)}`;
-  return { title, detail, meta };
+  return { title, jobTitle, detail };
 }
 
 function isLogNearBottom(logEl, threshold = 36) {
@@ -3726,16 +4859,19 @@ function isLogNearBottom(logEl, threshold = 36) {
   return maxScrollTop - current <= Math.max(0, Number(threshold || 0));
 }
 
-function buildLogRenderSignature(logs, state, settings) {
+function buildLogRenderSignature(logs, state, settings, activeTab) {
   const list = Array.isArray(logs) ? logs.slice(-80) : [];
   const last = list.length ? list[list.length - 1] : null;
   return [
+    activeTab || "feed",
     list.length,
     String(last?.ts || ""),
     String(last?.message || ""),
     String(last?.level || ""),
     Number(state?.running ? 1 : 0),
     Number(state?.paused ? 1 : 0),
+    Number(state?.applied || 0),
+    Number(state?.skipped || 0),
     Number(settings?.dryRun ? 1 : 0),
     Number(settings?.autoSubmit ? 1 : 0),
   ].join("|");
@@ -3766,73 +4902,59 @@ function renderState(state) {
     modeChip.className = `cp-run-mode-chip ${liveAutoSubmitEnabled ? "cp-live" : s?.dryRun ? "cp-dry" : "cp-manual"}`;
   }
 
-  const walletEl = panelEl.querySelector("#cp-wallet");
-  if (walletEl) {
+  // Update hero stats
+  const appliedCountEl = panelEl.querySelector("#cp-applied-count");
+  if (appliedCountEl) appliedCountEl.textContent = String(Number(state.applied || 0));
+  const skippedCountEl = panelEl.querySelector("#cp-skipped-count");
+  if (skippedCountEl) skippedCountEl.textContent = String(Number(state.skipped || 0));
+
+  const walletTextEl = panelEl.querySelector("#cp-wallet-text");
+  if (walletTextEl) {
     const q = lastPortalQuota || {};
-    const plan = String(q.plan || "").toLowerCase();
+    const hireBalance = Number(q.hireBalance ?? NaN);
     const quotaUsed = Number(q.quotaUsed ?? NaN);
     const quotaTotal = Number(q.quotaTotal ?? NaN);
-    const freeRemaining = Number(q.freeRemaining ?? NaN);
-    const planLabel = plan === "pro" ? "Pro" : plan === "free" ? "Free" : plan || "";
-    const freeUsedLabel = Number.isFinite(quotaUsed) && Number.isFinite(quotaTotal)
-      ? `${Math.max(0, quotaUsed)}/${Math.max(0, quotaTotal)}`
-      : "";
-    const parts = [];
-    if (planLabel) parts.push(planLabel);
-    if (freeUsedLabel) parts.push(`${freeUsedLabel} used today`);
-    walletEl.textContent = parts.join(" \u00b7 ") || "";
-    walletEl.style.display = parts.length ? "" : "none";
-  }
+    const spendable = Number(q.spendable ?? NaN);
 
-  const rateEl = panelEl.querySelector("#cp-rate");
-  if (rateEl) {
-    if (s?.autoSubmit && !s?.dryRun) {
-      const range = getSubmitPaceRangeMs(s);
-      const paceLabel = formatPaceLabel(range);
-      const hasActivePace = Boolean(lastAutoSubmitAtMs && activeSubmitPaceStartMs && activeSubmitPaceDelayMs);
-      let text = paceLabel;
-      if (hasActivePace) {
-        const nextAllowedAt = Number(activeSubmitPaceStartMs) + Number(activeSubmitPaceDelayMs);
-        const remainingMs = Math.max(0, nextAllowedAt - Date.now());
-        if (remainingMs > 0) text += ` \u00b7 ${Math.ceil(remainingMs / 1000)}s`;
-      }
-      rateEl.textContent = text;
-      rateEl.style.display = "";
+    if (Number.isFinite(hireBalance) && hireBalance > 0) {
+      walletTextEl.textContent = `${hireBalance} Hires (${Number.isFinite(quotaUsed) ? quotaUsed : 0}/${Number.isFinite(quotaTotal) ? quotaTotal : 3} Free)`;
+    } else if (Number.isFinite(spendable) && spendable > 0) {
+      walletTextEl.textContent = `${spendable} Hires`;
+    } else if (Number.isFinite(quotaUsed) && Number.isFinite(quotaTotal)) {
+      walletTextEl.textContent = `${Math.max(0, quotaUsed)}/${Math.max(0, quotaTotal)} Free Used`;
     } else {
-      rateEl.style.display = "none";
+      walletTextEl.textContent = "Quota Active";
     }
   }
 
-  const logEl = panelEl.querySelector("#cp-log");
   const logs = state.logs || [];
   const nowCard = deriveNowCard(state, logs);
   const nowTitle = panelEl.querySelector("#cp-now-title");
+  const nowJobTitle = panelEl.querySelector("#cp-now-job-title");
   const nowDetail = panelEl.querySelector("#cp-now-detail");
   if (nowTitle) nowTitle.textContent = nowCard.title;
+  if (nowJobTitle) nowJobTitle.textContent = nowCard.jobTitle;
   if (nowDetail) nowDetail.textContent = nowCard.detail;
 
+  const logEl = panelEl.querySelector("#cp-log");
   const typingKind = s?.dryRun ? "Dry Run" : s?.autoSubmit ? "Auto" : "Manual";
   const AI_TYPING_MESSAGES = [
-    "Analyzing the next step...",
-    "Processing your application...",
-    "Reviewing job details...",
-    "Preparing smart responses...",
-    "Checking form fields...",
-    "Evaluating best answers...",
-    "Scanning required fields...",
-    "Optimizing your profile data...",
-    "Verifying application status...",
-    "Working on next action...",
+    "Analyzing next opportunity...",
+    "Smart-filling application fields...",
+    "Reviewing screening questions...",
+    "Verifying application readiness...",
+    "Selecting optimal responses...",
   ];
   const typingMsg = state.running
     ? AI_TYPING_MESSAGES[Math.floor(Date.now() / 3000) % AI_TYPING_MESSAGES.length]
     : "";
-  const typingLine = state.running
-    ? `<div class="cp-line cp-bot cp-typing"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">Copilot</span><span class="cp-kind">${typingKind}</span></div><div class="cp-msg-text"><span class="cp-dot"></span><span class="cp-dot"></span><span class="cp-dot"></span> ${escapeHtml(typingMsg)}</div></div></div>`
+  const typingCard = state.running
+    ? `<div class="cp-typing-card"><span class="cp-dot"></span><span class="cp-dot"></span><span class="cp-dot"></span> ${escapeHtml(typingMsg)}</div>`
     : "";
+
   const logsWindow = logs.slice(-80);
-  const logSignature = buildLogRenderSignature(logsWindow, state, s);
-  if (logSignature !== lastLogRenderSignature) {
+  const logSignature = buildLogRenderSignature(logsWindow, state, s, panelActiveTab);
+  if (logSignature !== lastLogRenderSignature && logEl) {
     const previousDistanceFromBottom = Math.max(
       0,
       Number(logEl.scrollHeight || 0) - Number(logEl.clientHeight || 0) - Number(logEl.scrollTop || 0)
@@ -3840,21 +4962,38 @@ function renderState(state) {
     const wasNearBottom = isLogNearBottom(logEl);
     const shouldStickToBottom = logAutoScrollPinnedToBottom || wasNearBottom;
 
-    logEl.innerHTML =
-      logsWindow
-        .map((l) => {
-          const visual = getLogVisual(l);
-          const level = escapeHtml(visual.level || "info");
-          const role = escapeHtml(visual.role || "cp-bot");
-          const sender = escapeHtml(visual.sender || "Copilot");
-          const kind = escapeHtml(visual.kind || "Update");
-          const msg = escapeHtml(visual.message || "");
-          const metaText = summarizeMeta(l?.meta);
-          const metaHtml = metaText ? `<div class="cp-msg-meta">${escapeHtml(metaText)}</div>` : "";
-          const debugClass = visual.isDebug ? " cp-debug" : "";
-          return `<div class="cp-line ${role} cp-${level}${debugClass}"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">${sender}</span><span class="cp-kind">${kind}</span><span class="cp-time">${escapeHtml(l.ts?.slice(11, 19) || "")}</span></div><div class="cp-msg-text">${msg}</div>${metaHtml}</div></div>`;
-        })
-        .join("") + typingLine;
+    if (panelActiveTab === "feed") {
+      const feedItems = logsWindow.filter((l) => isUserFacingAiLog(l));
+      if (!feedItems.length && !state.running) {
+        logEl.innerHTML = `<div style="text-align:center;padding:28px 12px;color:#94a3b8;font-size:11.5px;display:flex;flex-direction:column;align-items:center;gap:8px;"><span style="color:#6366f1;">${ICONS.sparkle}</span><span>AI Copilot is standing by. Click <strong>Start</strong> to begin auto-applying.</span></div>`;
+      } else {
+        logEl.innerHTML = feedItems.map((l) => formatAiFeedCard(l)).join("") + typingCard;
+      }
+    } else if (panelActiveTab === "debug") {
+      const diagItems = logsWindow.filter((l) => !String(l?.message || "").startsWith("{") && !String(l?.message || "").includes("automation engine"));
+      if (!diagItems.length && !state.running) {
+        logEl.innerHTML = `<div style="text-align:center;padding:28px 12px;color:#94a3b8;font-size:11.5px;display:flex;flex-direction:column;align-items:center;gap:8px;"><span style="color:#6366f1;">${ICONS.activity}</span><span>No decision chain entries yet. Start a run to trace decision checks in real time.</span></div>`;
+      } else {
+        logEl.innerHTML = diagItems.map((l) => formatDecisionChainCard(l)).join("") + typingCard;
+      }
+    } else {
+      logEl.innerHTML =
+        logsWindow
+          .map((l) => {
+            const visual = getLogVisual(l);
+            const level = escapeHtml(visual.level || "info");
+            const role = escapeHtml(visual.role || "cp-bot");
+            const sender = escapeHtml(visual.sender || "Copilot");
+            const kind = escapeHtml(visual.kind || "Update");
+            const msg = escapeHtml(visual.message || "");
+            const metaText = summarizeMeta(l?.meta);
+            const metaHtml = metaText ? `<div class="cp-msg-meta">${escapeHtml(metaText)}</div>` : "";
+            const debugClass = visual.isDebug ? " cp-debug" : "";
+            return `<div class="cp-line ${role} cp-${level}${debugClass}"><div class="cp-bubble"><div class="cp-msg-head"><span class="cp-sender">${sender}</span><span class="cp-kind">${kind}</span><span class="cp-time">${escapeHtml(l.ts?.slice(11, 19) || "")}</span></div><div class="cp-msg-text">${msg}</div>${metaHtml}</div></div>`;
+          })
+          .join("") + typingCard;
+    }
+
     lastLogRenderSignature = logSignature;
 
     if (shouldStickToBottom) {
@@ -3965,18 +5104,122 @@ async function waitForJobsToRender(settings, timeoutMs = 6000) {
   return [];
 }
 
+function getJobListScrollContainer() {
+  const sentinel = document.querySelector("[data-results-list-top-scroll-sentinel]");
+  const ul = document.querySelector("ul:has(li.scaffold-layout__list-item)") || document.querySelector("ul:has([data-occludable-job-id])") || document.querySelector("ul:has(.job-card-container)");
+  const target = sentinel || ul;
+  if (target) {
+    let parent = target.parentElement;
+    while (parent && parent !== document.body) {
+      const style = window.getComputedStyle(parent);
+      if (/(auto|scroll)/.test(style.overflowY || "") || parent.classList.contains("scaffold-layout__list") || parent.classList.contains("jobs-search-results-list")) {
+        return parent;
+      }
+      parent = parent.parentElement;
+    }
+  }
+  return (
+    document.querySelector(".scaffold-layout__list") ||
+    document.querySelector(".jobs-search-results-list") ||
+    document.querySelector(".scaffold-layout__list-detail-inner") ||
+    document.querySelector(".scaffold-layout__list-container") ||
+    document.scrollingElement ||
+    document.body
+  );
+}
+
+async function loadAllJobCardsOnPage(settings) {
+  let cards = collectJobCards();
+  if (!cards.length) {
+    cards = await waitForJobsToRender(settings, 7000);
+  }
+  if (!cards.length) return [];
+
+  const scrollRoot = getJobListScrollContainer();
+  let previousCardCount = cards.length;
+  let stagnantCount = 0;
+
+  // Progressively scroll down to trigger LinkedIn lazy loading until all cards (up to ~25) & pagination appear
+  for (let i = 0; i < 12; i++) {
+    if (scrollRoot && typeof scrollRoot.scrollBy === "function") {
+      scrollRoot.scrollBy({ top: 800, behavior: "smooth" });
+    } else {
+      window.scrollBy({ top: 800, behavior: "smooth" });
+    }
+    await sleep(400);
+
+    const currentCards = collectJobCards();
+    const hasPagination = Boolean(
+      document.querySelector(".jobs-search-pagination, .jobs-search-results-list__pagination, .jobs-search-pagination__pages")
+    );
+
+    if (currentCards.length > previousCardCount) {
+      previousCardCount = currentCards.length;
+      stagnantCount = 0;
+    } else {
+      stagnantCount++;
+      if (stagnantCount >= 2 && (hasPagination || currentCards.length >= 25)) {
+        break;
+      }
+    }
+
+    if (currentCards.length >= 25 && hasPagination) break;
+  }
+
+  // Scroll back to top so processing starts cleanly from card #1
+  if (scrollRoot && typeof scrollRoot.scrollTo === "function") {
+    scrollRoot.scrollTo({ top: 0, behavior: "smooth" });
+  } else {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  await sleep(350);
+
+  return collectJobCards();
+}
+
+async function dismissJobCard(card) {
+  if (!card || !(card instanceof HTMLElement)) return false;
+  try {
+    const dismissBtn = getBySelectorList([
+      "button[aria-label*='Dismiss']",
+      "button[aria-label*='dismiss']",
+      "button.job-card-container__action",
+      ".job-card-list__actions-container button",
+      "button[data-test-icon='close-small']",
+      "button:has(svg[data-test-icon='close-small'])",
+      "button:has(use[href*='close'])",
+      "button[data-control-name*='dismiss']"
+    ], card);
+
+    if (dismissBtn && isVisibleElement(dismissBtn) && !dismissBtn.disabled) {
+      await resilientClick(dismissBtn, "Dismiss job card (X)");
+      await sleep(250);
+      return true;
+    }
+  } catch {
+    // best-effort dismiss
+  }
+  return false;
+}
+
 function getActiveModal() {
   return getBySelectorList([
     ".jobs-easy-apply-modal",
-    ".artdeco-modal[role='dialog']"
+    ".artdeco-modal[role='dialog']",
+    ".artdeco-modal",
+    "div[data-test-modal]",
+    "div[data-view-name*='easy-apply-modal']",
+    "div[role='dialog'][aria-labelledby*='easy-apply']",
+    "div[role='dialog'][aria-label*='Easy Apply']",
+    "div[role='dialog']"
   ]);
 }
 
-async function waitForModalOpen(timeoutMs = 4000) {
+async function waitForModalOpen(timeoutMs = 4500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const modal = getActiveModal();
-    if (modal) return modal;
+    if (modal && isVisibleElement(modal)) return modal;
     await sleep(180);
   }
   return null;
@@ -4783,6 +6026,16 @@ function getStructuredTextFallback(label, settings) {
     return "Immediately";
   }
 
+  if (
+    l.includes("description") ||
+    l.includes("describe") ||
+    l.includes("summary") ||
+    l.includes("about yourself") ||
+    l.includes("bio")
+  ) {
+    return String(settings.linkedinSummary || settings.coverLetter || settings.screeningAnswers?.["description"] || "").trim();
+  }
+
   return "";
 }
 
@@ -5371,6 +6624,10 @@ async function processEasyApplyModal(settings) {
       captureDebugEvent("modal", "RUN_STOPPED_BY_OPERATOR", { stepAttempt: safety, durationMs: endTimer("processEasyApplyModal") });
       return { submitted: false, skipped: true, reachedSubmit: false, reason: "Run stopped by operator" };
     }
+    if (hasDailyEasyApplyLimitSignal(modal) || hasDailyEasyApplyLimitSignal(document)) {
+      await pauseRunForDailyEasyApplyLimit(settings);
+      return { submitted: false, skipped: true, reachedSubmit: false, reason: "LinkedIn daily Easy Apply limit reached" };
+    }
     safety += 1;
     const questionBlocks = collectQuestionBlocks(modal);
     let changedAny = false;
@@ -5489,63 +6746,32 @@ async function processEasyApplyModal(settings) {
         unresolvedFields: unresolvedAfter.slice(0, 12).map((d) => summarizeQuestionBlockState(d))
       });
 
-      const unresolvedQuestions = buildPendingQuestionsFromDiagnostics(
-        unresolvedAfter,
-        modalValidationBeforeActionRaw || "Required field answer missing"
-      );
-      const shouldTryManualAnswerWait =
-        unresolvedQuestions.length > 0 &&
-        !unresolvedImproved &&
-        stepState.preflightAttempts >= 2 &&
-        stepState.manualAnswerWaits < 1;
-      if (shouldTryManualAnswerWait) {
-        stepState.manualAnswerWaits += 1;
-        stepStateBySignature.set(stepSignature, stepState);
-        await sendMessage({ type: "CP_REGISTER_PENDING_QUESTIONS", questions: unresolvedQuestions });
-        await logLine("Required custom fields detected. Waiting for answers from dashboard...", "warn");
-        const waitResult = await waitForPendingAnswersFromSettings(
-          unresolvedQuestions,
-          Number(activeSettings.manualAnswerWaitMs || MANUAL_ANSWER_WAIT_MS),
-          MANUAL_ANSWER_POLL_MS
-        );
-        if (waitResult.ok) {
-          activeSettings = {
-            ...activeSettings,
-            screeningAnswers: {
-              ...(activeSettings.screeningAnswers || {}),
-              ...(waitResult.screeningAnswers || {})
+      // Solve all unresolved custom/required fields using AI Copilot + Resume
+      let aiResolvedAny = false;
+      for (const block of questionBlocks) {
+        const state = getQuestionBlockState(block);
+        if (state && doesQuestionStateNeedAttention(state)) {
+          const aiLabel = state.label || getQuestionLabel(block);
+          if (aiLabel) {
+            const aiAnswer = await requestAiAnswer(aiLabel, state.type, state.options || [], modalValidationBeforeActionRaw);
+            if (aiAnswer) {
+              activeSettings.screeningAnswers[questionKeyFromLabel(aiLabel)] = aiAnswer;
+              activeSettings.screeningAnswers[normalizeLabel(aiLabel)] = aiAnswer;
+              const changed = await fillQuestionBlock(block, activeSettings);
+              if (changed) {
+                aiResolvedAny = true;
+                await logLine(`🤖 AI Auto-Answered from Resume: "${aiLabel.slice(0, 45)}" ➔ ${aiAnswer}`, "info");
+              }
             }
-          };
-          await logLine("Received answers for required fields. Continuing application.", "info");
-          stagnantSteps = 0;
-          previousSignature = getModalSignature(modal);
-          continue;
+          }
         }
-        await debugLog(settings, "Manual answer wait timed out", {
-          unresolvedRequired: unresolvedAfter.length,
-          waitedMs: Number(activeSettings.manualAnswerWaitMs || MANUAL_ANSWER_WAIT_MS)
-        });
-        captureDebugEvent("modal", "MANUAL_ANSWER_WAIT_TIMEOUT", {
-          stepAttempt: safety,
-          unresolvedRequired: unresolvedAfter.length,
-          waitedMs: Number(activeSettings.manualAnswerWaitMs || MANUAL_ANSWER_WAIT_MS)
-        });
-        if (shouldPauseForInput) {
-          await logLine("Need your input for required fields. Open dashboard Jobs to answer, then resume run.", "warn");
-          captureDebugEvent("modal", "PAUSE_FOR_INPUT", {
-            stepAttempt: safety,
-            unresolvedRequired: unresolvedAfter.length,
-            unresolvedFields: unresolvedAfter.slice(0, 8).map((d) => summarizeQuestionBlockState(d)),
-            durationMs: endTimer("processEasyApplyModal")
-          });
-          await sendMessage({ type: "CP_PAUSE" });
-          return {
-            submitted: false,
-            skipped: true,
-            reachedSubmit: false,
-            reason: "Waiting for required custom field answers"
-          };
-        }
+      }
+
+      if (aiResolvedAny) {
+        stagnantSteps = 0;
+        previousSignature = getModalSignature(modal);
+        await sleep(350);
+        continue;
       }
 
       // Avoid blind next-click loops by giving a few no-click preflight attempts first.
@@ -5812,11 +7038,16 @@ async function runCycle(settings) {
     return false;
   }
   if (isPostApplySearchPage()) {
-    captureDebugEvent("cycle", "POST_APPLY_REDIRECT", { durationMs: endTimer("runCycle"), path: window.location.pathname });
-    await debugLog(settings, "Detected post-apply page during run cycle; redirecting", { path: window.location.pathname });
-    resetRemoteLocationKeywordCursor();
-    window.location.href = getResumableSearchUrl(settings);
-    return false;
+    const cleanUrl = getResumableSearchUrl(settings);
+    window.history.replaceState(null, "", cleanUrl);
+    const hasCardsInDom = document.querySelectorAll(".job-card-container, [data-occludable-job-id], li.jobs-search-results__list-item").length > 0;
+    if (!hasCardsInDom) {
+      captureDebugEvent("cycle", "POST_APPLY_REDIRECT", { durationMs: endTimer("runCycle"), path: window.location.pathname });
+      await debugLog(settings, "Detected post-apply page without cards in DOM; returning to search", { path: window.location.pathname });
+      resetRemoteLocationKeywordCursor();
+      window.location.href = cleanUrl;
+      return false;
+    }
   }
 
   if (normalizeSearchUrlWithoutReload(settings)) {
@@ -6049,21 +7280,10 @@ async function runCycle(settings) {
     }
     await reportProgress();
     markJobSeen(viewJobKey);
-    if (runSearchTermSuccessCount >= getSwitchNumber(settings)) {
-      runSearchTermSuccessCount = 0;
-      const switched = await rotateSearchTerm(settings);
-      if (switched) {
-        exhaustedSearchPageStreak = 0;
-        return true;
-      }
-    }
     return true;
   }
 
-  let cards = collectJobCards();
-  if (!cards.length) {
-    cards = await waitForJobsToRender(settings, 7000);
-  }
+  let cards = await loadAllJobCardsOnPage(settings);
   await debugLog(settings, "Selector diagnostics", {
     jobCardContainer: document.querySelectorAll(".job-card-container").length,
     occludable: document.querySelectorAll("[data-occludable-job-id]").length,
@@ -6116,21 +7336,12 @@ async function runCycle(settings) {
   for (const card of cardsToProcess) {
     const state = (await sendMessage({ type: "CP_GET_BOOTSTRAP" })).state;
     if (!state.running || state.paused) return false;
-    if (runSearchTermSuccessCount >= getSwitchNumber(settings) && getConfiguredSearchTerms(settings).length > 1) {
-      runSearchTermSuccessCount = 0;
-      const switched = await rotateSearchTerm(settings);
-      if (switched) {
-        exhaustedSearchPageStreak = 0;
-        return true;
-      }
-    }
-    if (runStats.applied >= Number(settings.maxApplicationsPerRun || 3)) {
-      await logLine("Reached max applications for this run");
-      return false;
-    }
-    if (runStats.skipped >= Number(settings.maxSkipsPerRun || 50)) {
-      await logLine("Reached max skips for this run", "warn");
-      await sendMessage({ type: "CP_STOP" });
+
+    const targetApplyLimit = Math.max(1, Number(settings.maxApplicationsPerRun || 10));
+    if (runStats.applied >= targetApplyLimit) {
+      await logLine(`Reached target application goal (${runStats.applied}/${targetApplyLimit} applied). Run complete.`, "info");
+      await botChat(`Target goal of ${targetApplyLimit} applications completed! Pausing.`);
+      await sendMessage({ type: "CP_PAUSE" });
       return false;
     }
 
@@ -6141,6 +7352,12 @@ async function runCycle(settings) {
       });
       continue;
     }
+
+    const cardMeta = extractCardMeta(card);
+    const candidateTitle = cardMeta.titleRaw || "Job Candidate";
+    await logLine(`[Candidate] Evaluating: "${candidateTitle}" (${cardMeta.companyRaw || 'Company'})`, "info");
+    highlightActiveJobCard(card, `AI Checking: ${candidateTitle.slice(0, 30)}`);
+
     const jobAliasKeys = new Set([jobKey]);
     const recordOutcomeCacheForAliases = (status, reasonCode = "") => {
       for (const alias of jobAliasKeys) {
@@ -6179,12 +7396,13 @@ async function runCycle(settings) {
       classifyExhaustedCandidate();
       await debugLog(settings, "Skipping job from known applied ids", { jobKey });
       runStats.skipped += 1;
+      markJobCardStatus(card, "skipped", "Already Applied");
       await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
       await recordOutcome("SKIPPED", {
         reasonCode: "APPLIED_CACHE_HIT",
         reason: "Known applied job id cache hit",
         jobId: jobKey,
-        ...extractCardMeta(card)
+        ...cardMeta
       });
       recordOutcomeCacheForAliases("SKIPPED", "ALREADY_APPLIED");
       markAppliedForAliases();
@@ -6198,12 +7416,13 @@ async function runCycle(settings) {
       classifyExhaustedCandidate();
       await debugLog(settings, "Skipping job from applied cache", { jobKey, reasonCode: cachedOutcome.reasonCode });
       runStats.skipped += 1;
+      markJobCardStatus(card, "skipped", "Already Applied");
       await logOutcome("info", "Skipped (already applied earlier)", "APPLIED_CACHE_HIT");
       await recordOutcome("SKIPPED", {
         reasonCode: "APPLIED_CACHE_HIT",
         reason: "Applied cache hit from local outcome cache",
         jobId: jobKey,
-        ...extractCardMeta(card)
+        ...cardMeta
       });
       recordOutcomeCacheForAliases("SKIPPED", "ALREADY_APPLIED");
       markAppliedForAliases();
@@ -6217,6 +7436,7 @@ async function runCycle(settings) {
         jobKey,
         reasonCode: cachedOutcome.reasonCode,
       });
+      markJobCardStatus(card, "skipped", "Cooldown");
       await logLine("Deferred retry for recently attempted job (cooldown active).", "info");
       markSeenForAliases();
       continue;
@@ -6226,15 +7446,17 @@ async function runCycle(settings) {
       const stableJobId = jobKey || extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || "";
       if (stableJobId) jobAliasKeys.add(stableJobId);
       runStats.skipped += 1;
+      markJobCardStatus(card, "skipped", "Already Applied");
       await logOutcome("info", "Skipped (already applied)", "ALREADY_APPLIED");
       await recordOutcome("SKIPPED", {
         reasonCode: "ALREADY_APPLIED",
         reason: "LinkedIn card marked as already applied",
         jobId: stableJobId,
-        ...extractCardMeta(card)
+        ...cardMeta
       });
       recordOutcomeCacheForAliases("SKIPPED", "ALREADY_APPLIED");
       markAppliedForAliases();
+      await dismissJobCard(card);
       await reportProgress();
       markSeenForAliases();
       continue;
@@ -6242,31 +7464,32 @@ async function runCycle(settings) {
     const ruleDecision = shouldSkipByRules(card, settings);
     if (ruleDecision.skip) {
       classifyActionableCandidate();
-      const stableJobId = jobKey || extractLinkedInJobIdFromUrl(getCardAnchor(card)?.href) || "";
-      if (stableJobId) jobAliasKeys.add(stableJobId);
       runStats.skipped += 1;
+      markJobCardStatus(card, "skipped", ruleDecision.reasonCode);
       await logOutcome("warn", `Skipped: ${ruleDecision.reason}`, ruleDecision.reasonCode);
       await recordOutcome("SKIPPED", {
         reasonCode: ruleDecision.reasonCode,
         reason: ruleDecision.reason,
-        jobId: stableJobId,
-        ...extractCardMeta(card)
+        jobId: jobKey,
+        ...cardMeta
       });
       recordOutcomeCacheForAliases("SKIPPED", ruleDecision.reasonCode);
+      await dismissJobCard(card);
       await reportProgress();
       markSeenForAliases();
       continue;
     }
 
-    const cardMeta = extractCardMeta(card);
     const anchor = getCardAnchor(card);
     const title = cardMeta.titleRaw || anchor?.textContent?.trim() || card.textContent?.trim()?.slice(0, 80) || "Job";
     const previousJobContext = { ...currentJobContext };
     await debugLog(settings, "Processing card", { title, company: cardMeta.companyRaw || cardMeta.company || "" });
+    highlightActiveJobCard(card, "Opening Details...");
+    highlightDetailPane(title);
     await logLine(`Opening: ${title}`);
     await botChat(`Reading job details for "${title}"...`);
     await sleep(400);
-    await resilientClick(card, "Job card");
+    await selectJobCardInSearchList(card);
     await sleep(1200);
     const detailSnapshot = await waitForDetailPaneRefresh(cardMeta, previousJobContext, 4800);
 
@@ -6303,6 +7526,7 @@ async function runCycle(settings) {
         ...currentJobContext
       });
       recordOutcomeCacheForAliases("SKIPPED", aboutCompanyDecision.reasonCode);
+      await dismissJobCard(card);
       await reportProgress();
       markSeenForAliases();
       continue;
@@ -6319,6 +7543,7 @@ async function runCycle(settings) {
         ...currentJobContext
       });
       recordOutcomeCacheForAliases("SKIPPED", descriptionDecision.reasonCode);
+      await dismissJobCard(card);
       await reportProgress();
       markSeenForAliases();
       continue;
@@ -6330,7 +7555,8 @@ async function runCycle(settings) {
     }
     if (!applyAction.button) {
       if (anchor) {
-        const retryClick = await resilientClick(anchor, "Job card anchor retry");
+        const anchorTarget = anchor.querySelector("span") || anchor;
+        const retryClick = await selectJobCardInSearchList(anchorTarget);
         if (retryClick) {
           await sleep(900);
           applyAction = await waitForApplyButtonFromDetailPane(settings, 7000, "search card anchor retry");
@@ -6360,6 +7586,7 @@ async function runCycle(settings) {
         });
         recordOutcomeCacheForAliases("SKIPPED", "ALREADY_APPLIED");
         markAppliedForAliases();
+        await dismissJobCard(card);
         await reportProgress();
         markSeenForAliases();
         continue;
@@ -6381,6 +7608,7 @@ async function runCycle(settings) {
         ...currentJobContext
       });
       recordOutcomeCacheForAliases("SKIPPED", "NO_APPLY_BUTTON");
+      await dismissJobCard(card);
       await reportProgress();
       markSeenForAliases();
       continue;
@@ -6396,6 +7624,7 @@ async function runCycle(settings) {
           ...currentJobContext
         });
         recordOutcomeCacheForAliases("SKIPPED", "EXTERNAL_APPLY_ONLY");
+        await dismissJobCard(card);
       } else {
         classifyActionableCandidate();
         await resilientClick(applyAction.button, "External Apply");
@@ -6418,7 +7647,11 @@ async function runCycle(settings) {
     await resilientClick(applyAction.button, "Easy Apply");
     await botChat("Easy Apply form opened. Analyzing fields...");
     await sleep(300);
-    const modal = await waitForModalOpen(4500);
+    let modal = await waitForModalOpen(3000);
+    if (!modal && applyAction?.button && isVisibleElement(applyAction.button)) {
+      await resilientClick(applyAction.button, "Easy Apply (retry)");
+      modal = await waitForModalOpen(3500);
+    }
     if (!modal) {
       if (hasDailyEasyApplyLimitSignal()) {
         captureDebugEvent("cycle", "DAILY_LIMIT_IN_MODAL_WAIT", { jobKey, durationMs: endTimer("runCycle") });
@@ -6434,6 +7667,7 @@ async function runCycle(settings) {
         ...currentJobContext
       });
       recordOutcomeCacheForAliases("SKIPPED", "MODAL_NOT_FOUND");
+      await dismissJobCard(card);
       await reportProgress();
       markSeenForAliases();
       continue;
@@ -6453,6 +7687,8 @@ async function runCycle(settings) {
     if (result.submitted || (settings.dryRun && result.reachedSubmit)) {
       runStats.applied += 1;
       runSearchTermSuccessCount += 1;
+      exhaustedSearchPageStreak = 0;
+      markJobCardStatus(card, "applied", "Applied");
       await recordOutcome("APPLIED", {
         reasonCode: settings.dryRun ? "DRY_RUN_REACHED_SUBMIT" : "SUBMITTED",
         reason: settings.dryRun ? "Dry-run reached submit stage" : "Application submitted",
@@ -6460,54 +7696,47 @@ async function runCycle(settings) {
       });
       recordOutcomeCacheForAliases("APPLIED", "SUBMITTED");
       markAppliedForAliases();
+      await dismissJobCard(card);
     } else if (result.skipped) {
       runStats.skipped += 1;
-      if (result.reason) {
-        const reasonNorm = normalizeLabel(result.reason);
-        const reasonCode = reasonNorm.includes("resume is required")
-          ? "RESUME_REQUIRED"
-          : reasonNorm.includes("valid phone")
-          ? "VALIDATION_BLOCKED_PHONE"
-          : (reasonNorm.includes("required") || reasonNorm.includes("selection"))
-            ? "PENDING_USER_INPUT"
-            : "SUBMIT_NOT_REACHED";
-        await logOutcome("warn", `Skipped: ${result.reason}`, reasonCode);
-        await recordOutcome("SKIPPED", {
-          reasonCode,
-          reason: result.reason,
-          ...currentJobContext
-        });
-        recordOutcomeCacheForAliases("SKIPPED", reasonCode);
-      } else {
-        await recordOutcome("SKIPPED", {
-          reasonCode: "SUBMIT_NOT_REACHED",
-          reason: "Submit step not reached",
-          ...currentJobContext
-        });
-        recordOutcomeCacheForAliases("SKIPPED", "SUBMIT_NOT_REACHED");
-      }
+      const skipReason = result.reason || "Easy Apply modal could not reach submit stage";
+      const reasonNorm = normalizeLabel(skipReason);
+      const reasonCode = reasonNorm.includes("resume is required")
+        ? "RESUME_REQUIRED"
+        : reasonNorm.includes("valid phone")
+        ? "VALIDATION_BLOCKED_PHONE"
+        : (reasonNorm.includes("required") || reasonNorm.includes("selection"))
+          ? "PENDING_USER_INPUT"
+          : "SUBMIT_NOT_REACHED";
+      markJobCardStatus(card, "skipped", reasonCode);
+      await logOutcome("warn", `Skipped: ${skipReason}`, reasonCode);
+      await recordOutcome("SKIPPED", {
+        reasonCode,
+        reason: skipReason,
+        ...currentJobContext
+      });
+      recordOutcomeCacheForAliases("SKIPPED", reasonCode);
+      await closePostSubmitUi(settings, { discardDraft: true });
+      await dismissJobCard(card);
     } else {
       runStats.failed += 1;
-      await logOutcome("error", "Failed to process easy apply modal", "MODAL_FLOW_ERROR");
+      const failReason = result.reason || "Failed to process easy apply modal";
+      markJobCardStatus(card, "skipped", "MODAL_FLOW_ERROR");
+      await logOutcome("error", `Failed: ${failReason}`, "MODAL_FLOW_ERROR");
       await recordOutcome("FAILED", {
         reasonCode: "MODAL_FLOW_ERROR",
-        reason: "Failed to process easy apply modal",
+        reason: failReason,
         ...currentJobContext
       });
       recordOutcomeCacheForAliases("FAILED", "MODAL_FLOW_ERROR");
+      await closePostSubmitUi(settings, { discardDraft: true });
+      await dismissJobCard(card);
     }
     await reportProgress();
     markSeenForAliases();
-    if (runSearchTermSuccessCount >= getSwitchNumber(settings)) {
-      runSearchTermSuccessCount = 0;
-      const switched = await rotateSearchTerm(settings);
-      if (switched) {
-        exhaustedSearchPageStreak = 0;
-        return true;
-      }
-    }
     await sleep(900);
   }
+
   const exhaustedResultsPage =
     cycleConsideredCandidates > 0 &&
     cycleExhaustedCandidates === cycleConsideredCandidates &&
@@ -6525,24 +7754,35 @@ async function runCycle(settings) {
       exhaustedSearchPageStreak = 0;
       const movedToNextTerm = await rotateSearchTerm(settings);
       if (movedToNextTerm) return true;
-      await logLine("Recent pages only contained already-applied or external-only jobs. Stopping run.", "info");
+      await logLine("All search keywords and result pages exhausted. Stopping run.", "info");
       await sendMessage({ type: "CP_STOP" });
       return false;
     }
   } else if (cycleConsideredCandidates > 0 || runStats.applied !== cycleStartApplied) {
     exhaustedSearchPageStreak = 0;
   }
+
+  // 1. First, paginate to next results page for the CURRENT keyword
   const movedToNextPage = await gotoNextResultsPage(settings);
-  if (movedToNextPage) return true;
+  if (movedToNextPage) {
+    await logLine(`Moving to next results page for keyword "${getCurrentSearchKeyword() || 'current'}"...`, "info");
+    return true;
+  }
+
+  // 2. Only when ALL pages for the current keyword are fully exhausted, rotate to the NEXT keyword in sequence
   const movedToNextTerm = await rotateSearchTerm(settings);
-  if (movedToNextTerm) return true;
+  if (movedToNextTerm) {
+    exhaustedSearchPageStreak = 0;
+    return true;
+  }
+
   captureDebugEvent("cycle", "CYCLE_END_NO_MORE_PAGES", {
     durationMs: endTimer("runCycle"),
     applied: runStats.applied,
     skipped: runStats.skipped,
     failed: runStats.failed
   });
-  await logLine("No more result pages for the current search. Stopping run.", "info");
+  await logLine("All search keywords and result pages exhausted. Run complete.", "info");
   await sendMessage({ type: "CP_STOP" });
   return false;
 }

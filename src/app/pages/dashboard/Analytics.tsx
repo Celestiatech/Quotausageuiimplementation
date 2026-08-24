@@ -13,64 +13,64 @@ export default function Analytics() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Analytics</h1>
-          <p className="text-gray-600">Real job funnel analytics from your backend pipeline.</p>
+          <h1 className="text-lg font-bold text-gray-900 leading-tight">Analytics</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Real job funnel analytics from your backend pipeline.</p>
         </div>
         <button
           onClick={() => void refresh()}
-          className="px-5 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors flex items-center gap-2"
+          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className="w-3.5 h-3.5" />
           Refresh
         </button>
       </div>
 
-      {loading ? <div className="text-sm text-gray-500">Loading analytics...</div> : null}
-      {error ? <div className="text-sm text-rose-600">{error}</div> : null}
+      {loading ? <div className="text-xs text-gray-400 py-2">Loading analytics...</div> : null}
+      {error ? <div className="text-xs text-rose-600 py-2">{error}</div> : null}
 
-      <div className="grid md:grid-cols-5 gap-4">
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
-          <div className="text-sm text-gray-600">Total Jobs</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.jobs.total}</div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-3.5">
+          <div className="text-[11px] text-gray-500 font-medium">Total Jobs</div>
+          <div className="text-lg font-bold text-gray-900 mt-0.5">{summary.jobs.total}</div>
         </div>
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
-          <div className="text-sm text-gray-600">Submitted</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.submitted}</div>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-3.5">
+          <div className="text-[11px] text-gray-500 font-medium">Submitted</div>
+          <div className="text-lg font-bold text-gray-900 mt-0.5">{summary.applications.submitted}</div>
         </div>
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
-          <div className="text-sm text-gray-600">Failed</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.applications.failed}</div>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-3.5">
+          <div className="text-[11px] text-gray-500 font-medium">Failed</div>
+          <div className="text-lg font-bold text-gray-900 mt-0.5">{summary.applications.failed}</div>
         </div>
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
-          <div className="text-sm text-gray-600">Success Rate</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.metrics.responseRate}%</div>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-3.5">
+          <div className="text-[11px] text-gray-500 font-medium">Success Rate</div>
+          <div className="text-lg font-bold text-gray-900 mt-0.5">{summary.metrics.responseRate}%</div>
         </div>
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-5">
-          <div className="text-sm text-gray-600">Completion</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{summary.metrics.completionRate}%</div>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-3.5">
+          <div className="text-[11px] text-gray-500 font-medium">Completion</div>
+          <div className="text-lg font-bold text-gray-900 mt-0.5">{summary.metrics.completionRate}%</div>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-6">
-          <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-purple-600" />
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-4">
+          <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <BarChart3 className="w-4 h-4 text-purple-600" />
             Jobs Created (Last 7 Days)
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {summary.activityByDay.length === 0 ? (
-              <div className="text-sm text-gray-500">No activity yet.</div>
+              <div className="text-xs text-gray-400 py-4 text-center">No activity yet.</div>
             ) : (
               summary.activityByDay.map((row) => (
                 <div key={row.key}>
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-700">{row.label}</span>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-600">{row.label}</span>
                     <span className="font-semibold text-gray-900">{row.value}</span>
                   </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500" style={{ width: `${(row.value / maxDay) * 100}%` }} />
                   </div>
                 </div>
@@ -79,27 +79,27 @@ export default function Analytics() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-6">
-          <h2 className="font-bold text-gray-900 mb-4">Status Breakdown</h2>
-          <div className="space-y-3">
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-4">
+          <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-3">Status Breakdown</h2>
+          <div className="space-y-2">
             {byStatus.map((row) => (
-              <div key={row.label} className="flex items-center justify-between">
+              <div key={row.label} className="flex items-center justify-between py-1 border-b border-gray-50 last:border-0">
                 <div className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-full ${row.color}`} />
-                  <span className="text-sm text-gray-700">{row.label}</span>
+                  <span className={`w-2.5 h-2.5 rounded-full ${row.color}`} />
+                  <span className="text-xs text-gray-700">{row.label}</span>
                 </div>
-                <span className="font-semibold text-gray-900">{row.value}</span>
+                <span className="text-xs font-semibold text-gray-900">{row.value}</span>
               </div>
             ))}
           </div>
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Improve success by fixing failed-field patterns
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 text-[11px] text-emerald-700 flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+              <span>Improve success with refined targeting</span>
             </div>
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700 flex items-center gap-2">
-              <TrendingDown className="w-4 h-4" />
-              Track cancellations to refine targeting
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-700 flex items-center gap-1.5">
+              <TrendingDown className="w-3.5 h-3.5 shrink-0" />
+              <span>Review blockers to reduce failed runs</span>
             </div>
           </div>
         </div>

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from 'src/lib/prisma';
 import { verifyAuthToken } from '@/app/api/internal/lib/server-auth';
-
-const prisma = new PrismaClient();
 
 export const dynamic = 'force-dynamic';
 

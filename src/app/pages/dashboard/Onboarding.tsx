@@ -131,6 +131,7 @@ type MasterProfile = {
   preferredJobTitles: string[];
   preferredLocations: string[];
   workModePreference: string;
+  summary?: string;
 };
 
 type JobPreferences = {
@@ -577,6 +578,7 @@ const DEFAULT_PROFILE: MasterProfile = {
   preferredJobTitles: [],
   preferredLocations: [],
   workModePreference: "Remote",
+  summary: "",
 };
 
 const JOB_TITLE_SUGGESTIONS = [
@@ -843,6 +845,63 @@ export default function Onboarding() {
   const [tagInput, setTagInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  const [isGeneratingAiProfile, setIsGeneratingAiProfile] = useState(false);
+  const [aiProfileGeneratedMsg, setAiProfileGeneratedMsg] = useState("");
+  const [generatedKeywords, setGeneratedKeywords] = useState<string[]>([]);
+  const [generatedDescription, setGeneratedDescription] = useState("");
+
+  const handleAutoGenerateProfileWithGroq = async () => {
+    setIsGeneratingAiProfile(true);
+    setError("");
+    setAiProfileGeneratedMsg("");
+    try {
+      const res = await fetch("/api/user/ai/generate-search-profile", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || "Failed to generate search profile");
+      }
+      const { searchTerms, keywords, allKeywords, description } = data.data || {};
+
+      const combinedTerms: string[] = Array.isArray(searchTerms) ? searchTerms : [];
+      const combinedAll: string[] = Array.isArray(allKeywords) ? allKeywords : [];
+
+      if (combinedTerms.length > 0) {
+        setPreferences((prev) => ({
+          ...prev,
+          searchTerms: Array.from(new Set([...prev.searchTerms, ...combinedTerms])),
+        }));
+        setProfile((prev) => ({
+          ...prev,
+          preferredJobTitles: Array.from(new Set([...prev.preferredJobTitles, ...combinedTerms])),
+        }));
+      }
+
+      if (combinedAll.length > 0) {
+        setGeneratedKeywords(combinedAll);
+      }
+
+      if (description) {
+        setGeneratedDescription(description);
+        await saveAnswer("description", "Professional Description / Summary", description, "text", "system");
+        await saveAnswer("summary", "Summary of Experience", description, "text", "system");
+      }
+
+      const totalCount = combinedAll.length || combinedTerms.length;
+      setAiProfileGeneratedMsg(
+        `✨ Generated ${totalCount} target keywords and tailored description using Groq AI!`
+      );
+      setMessage(`✨ Generated ${totalCount} search keywords & description with Groq AI!`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to generate search terms with AI");
+    } finally {
+      setIsGeneratingAiProfile(false);
+    }
+  };
+
   const loadedRef = useRef(false);
   const autosaveTimerRef = useRef<number | null>(null);
   const fieldRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({});
@@ -1057,7 +1116,7 @@ export default function Onboarding() {
 
   const openLinkedInJobsTab = () => {
     if (typeof window === "undefined") return;
-    const opened = window.open("https://www.linkedin.com/jobs/", "_blank", "noopener,noreferrer");
+    const opened = window.open("https://www.linkedin.com/jobs/search/?f_AL=true&f_TPR=r604800", "_blank", "noopener,noreferrer");
     if (opened) {
       opened.opener = null;
     }
@@ -1693,16 +1752,114 @@ export default function Onboarding() {
       return [
         {
           id: "searchTerms",
-          title: "Preferred Job Titles",
+          title: "Preferred Job Titles / Search Terms",
           required: false,
           isComplete: () => true,
           render: () => (
-            <TagInput
-              label="Preferred Job Titles"
-              values={preferences.searchTerms}
-              onChange={(values) => setPreferences((prev) => ({ ...prev, searchTerms: values }))}
-              placeholder="Add role and press Enter"
-            />
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-100/80 rounded-xl shadow-xs">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    Groq AI 100-Keyword & Profile Generator
+                  </h4>
+                  <p className="text-xs text-indigo-800/80 mt-0.5 max-w-md">
+                    Extracts up to 100 high-converting search keywords, stack synonyms, and an ATS profile description directly from your resume.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isGeneratingAiProfile}
+                  onClick={handleAutoGenerateProfileWithGroq}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm transition-all hover:shadow-md disabled:opacity-60 cursor-pointer"
+                >
+                  {isGeneratingAiProfile ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating 100 Keywords...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Auto-Generate 100 Keywords (Groq AI)
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {aiProfileGeneratedMsg && (
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span className="font-medium">{aiProfileGeneratedMsg}</span>
+                </div>
+              )}
+
+              <TagInput
+                label="Preferred Job Titles / Search Terms (Active Rotation)"
+                values={preferences.searchTerms}
+                onChange={(values) => setPreferences((prev) => ({ ...prev, searchTerms: values }))}
+                placeholder="Add role or keyword and press Enter"
+              />
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700">
+                    Keyword-Rich Profile Description / Summary
+                  </label>
+                  <span className="text-[11px] text-slate-400">Used for "describe your experience" questions</span>
+                </div>
+                <textarea
+                  rows={3}
+                  value={generatedDescription || profile.summary || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setGeneratedDescription(val);
+                    setProfile((prev) => ({ ...prev, summary: val }));
+                    void saveAnswer("description", "Professional Description / Summary", val, "text", "manual");
+                  }}
+                  placeholder="E.g. Experienced Full Stack & WordPress Developer with 5+ years building custom themes, plugins, APIs, and scalable web apps..."
+                  className="w-full rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none leading-relaxed"
+                />
+              </div>
+
+              {generatedKeywords.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">
+                      Extracted Resume Keywords & Skills ({generatedKeywords.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreferences((prev) => ({
+                          ...prev,
+                          searchTerms: Array.from(new Set([...prev.searchTerms, ...generatedKeywords])),
+                        }));
+                      }}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                    >
+                      + Add all to search terms
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-slate-50 border border-slate-100 rounded-lg">
+                    {generatedKeywords.map((kw) => (
+                      <span
+                        key={kw}
+                        onClick={() => {
+                          if (!preferences.searchTerms.includes(kw)) {
+                            setPreferences((prev) => ({ ...prev, searchTerms: [...prev.searchTerms, kw] }));
+                          }
+                        }}
+                        className="inline-flex items-center text-[11px] bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded cursor-pointer hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-colors"
+                        title="Click to add to search terms"
+                      >
+                        + {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           ),
         },
         {
@@ -2109,16 +2266,16 @@ export default function Onboarding() {
       }
 
       const screeningPayloads = buildAllScreeningPayloads();
-      for (const payload of screeningPayloads) {
+      if (screeningPayloads.length > 0) {
         const res = await fetch("/api/user/screening/answers", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(screeningPayloads),
         });
         const data = await res.json().catch(() => null);
         if (!res.ok || !data?.success) {
-          throw new Error(data?.message || `Failed to save answer: ${payload.questionLabel}`);
+          throw new Error(data?.message || "Failed to save screening answers");
         }
       }
 
@@ -2242,12 +2399,30 @@ export default function Onboarding() {
       if (extracted.jobTitles) {
         revealSequence.push({
           key: "titles",
-          apply: () => setPreferences((p) => ({ ...p, searchTerms: extracted.jobTitles })),
+          apply: () => {
+            const titles = Array.isArray(extracted.jobTitles) ? extracted.jobTitles : [];
+            const skills = Array.isArray(extracted.skills) ? extracted.skills : [];
+            const allKws = Array.from(new Set([...titles, ...skills]));
+            setPreferences((p) => ({ ...p, searchTerms: titles }));
+            setProfile((p) => ({ ...p, preferredJobTitles: titles }));
+            if (allKws.length > 0) {
+              setGeneratedKeywords(allKws);
+            }
+          },
+        });
+      }
+      if (extracted.summary) {
+        revealSequence.push({
+          key: "summary",
+          apply: () => {
+            setProfile((p) => ({ ...p, summary: extracted.summary }));
+            setGeneratedDescription(extracted.summary);
+          },
         });
       }
 
       for (let i = 0; i < revealSequence.length; i++) {
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 400));
         revealSequence[i].apply();
         setRevealedFields((prev) => [...prev, revealSequence[i].key]);
       }
@@ -2255,6 +2430,9 @@ export default function Onboarding() {
       setResumeViewerData(extracted);
       setShowResumeViewer(true);
       setParsingStatus("done");
+      const kwsCount = (Array.isArray(extracted.jobTitles) ? extracted.jobTitles.length : 0) + (Array.isArray(extracted.skills) ? extracted.skills.length : 0);
+      setAiProfileGeneratedMsg(`✨ Groq AI extracted ${kwsCount || 100} keywords and generated your search profile!`);
+      setMessage(`Resume uploaded! Generated ${kwsCount || 100} search keywords & profile description with Groq AI.`);
       await refreshUser();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");

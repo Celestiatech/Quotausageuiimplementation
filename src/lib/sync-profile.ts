@@ -222,10 +222,24 @@ export async function syncProfileToExtension(
     remoteModeSelected ? preferredLocations : [...preferredLocations, ...preferredCountries],
   );
 
+  const badWordsRaw = pickFirstNonEmpty(mergedAnswers, ["bad_words", "exclude_keywords"]);
+  const badWords = parsePreferenceListInput(badWordsRaw);
+  const blacklistedCompaniesRaw = pickFirstNonEmpty(mergedAnswers, ["blacklisted_companies", "company_blacklist"]);
+  const blacklistedCompanies = parsePreferenceListInput(blacklistedCompaniesRaw);
+  const oneWordRaw = pickFirstNonEmpty(mergedAnswers, ["one_word_keywords", "keywords"]);
+  const oneWordKeywords = parsePreferenceListInput(oneWordRaw);
+  const twoWordsRaw = pickFirstNonEmpty(mergedAnswers, ["two_words_keywords", "search_phrases"]);
+  const twoWordsKeywords = parsePreferenceListInput(twoWordsRaw);
+  const skillsRaw = pickFirstNonEmpty(mergedAnswers, ["core_skills", "skills"]);
+  const skills = parsePreferenceListInput(skillsRaw);
+
   const settingsPayload = {
     currentCity,
     searchLocation: resolvedSearchLocation,
     searchTerms: preferredSearchTerms,
+    oneWordKeywords,
+    twoWordsKeywords,
+    skills,
     filterLocations,
     jobType: preferredJobTypes,
     onSite: preferredWorkMode,
@@ -247,8 +261,8 @@ export async function syncProfileToExtension(
     submitRateMaxSec: 70,
     maxApplicationsPerRun: 200,
     maxSkipsPerRun: 50,
-    blacklistedCompanies: [],
-    badWords: [],
+    blacklistedCompanies,
+    badWords,
     fullName,
     firstName,
     lastName,

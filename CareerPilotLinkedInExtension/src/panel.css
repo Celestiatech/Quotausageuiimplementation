@@ -1,19 +1,19 @@
 :root {
-  --cp-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
-  --cp-text: #0b1220;
-  --cp-muted: rgba(11, 18, 32, 0.50);
-  --cp-primary: #6d7bff;
-  --cp-success: #19c58c;
-  --cp-warning: #f4b23f;
-  --cp-error: #f35b5b;
-  --cp-bg: rgba(255, 255, 255, 0.85);
-  --cp-border: rgba(11, 18, 32, 0.08);
-  --cp-shadow: 0 8px 32px rgba(10, 16, 30, 0.12);
+  --cp-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --cp-text: #0f172a;
+  --cp-text-muted: #64748b;
+  --cp-primary: #6366f1;
+  --cp-primary-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --cp-success: #10b981;
+  --cp-warning: #f59e0b;
+  --cp-error: #ef4444;
+  --cp-bg: rgba(255, 255, 255, 0.92);
+  --cp-card-bg: rgba(248, 250, 252, 0.85);
+  --cp-border: rgba(226, 232, 240, 0.8);
+  --cp-shadow: 0 12px 40px -8px rgba(15, 23, 42, 0.16), 0 4px 16px -2px rgba(15, 23, 42, 0.08);
 }
 
-
-
-/* ── Toggle button ── */
+/* ── Toggle Floating Button ── */
 #cp-linkedin-copilot-toggle {
   position: fixed;
   right: 24px;
@@ -22,37 +22,41 @@
   width: 48px;
   height: 48px;
   border: 0;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #6d7bff, #9b7bff);
+  border-radius: 16px;
+  background: var(--cp-primary-gradient);
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(109, 123, 255, 0.35);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.45);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 #cp-linkedin-copilot-toggle:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(109, 123, 255, 0.40);
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 12px 30px -4px rgba(99, 102, 241, 0.55);
 }
 
-/* ── Panel ── */
+/* ── Main Panel Container ── */
 #cp-linkedin-copilot-panel {
   position: fixed;
   right: 24px;
   bottom: 84px;
-  width: 440px;
-  max-height: 80vh;
+  width: 400px;
+  max-height: 84vh;
   z-index: 2147483646;
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
+  border-radius: 20px;
   background: var(--cp-bg);
   color: var(--cp-text);
   font-family: var(--cp-font);
   border: 1px solid var(--cp-border);
   box-shadow: var(--cp-shadow);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   overflow: hidden;
+  transition: box-shadow 0.2s ease;
 }
 #cp-linkedin-copilot-panel.cp-hidden { display: none; }
 
@@ -61,23 +65,26 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--cp-border);
   cursor: move;
   user-select: none;
+  background: rgba(255, 255, 255, 0.5);
 }
 #cp-linkedin-copilot-panel .cp-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 #cp-linkedin-copilot-panel .cp-orb {
-  width: 28px;
-  height: 28px;
+  position: relative;
+  width: 32px;
+  height: 32px;
   border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
 }
 #cp-linkedin-copilot-panel .cp-orb .cp-orb-img {
   width: 100%;
@@ -86,91 +93,174 @@
   object-fit: cover;
 }
 #cp-linkedin-copilot-panel .cp-title {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+#cp-linkedin-copilot-panel .cp-ai-sparkle {
+  font-size: 12px;
+  animation: cp-sparkle 2s infinite ease-in-out;
+}
+@keyframes cp-sparkle {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.9; }
+  50% { transform: scale(1.2) rotate(15deg); opacity: 1; }
 }
 #cp-linkedin-copilot-panel .cp-sub {
-  font-size: 10px;
-  color: var(--cp-muted);
+  font-size: 10.5px;
+  color: var(--cp-text-muted);
+  font-weight: 500;
   margin-top: 1px;
 }
 #cp-linkedin-copilot-panel .cp-head-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 #cp-linkedin-copilot-panel .cp-badge {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 10px;
-  background: rgba(11, 18, 32, 0.06);
-  color: var(--cp-muted);
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--cp-text-muted);
   white-space: nowrap;
+  letter-spacing: 0.01em;
 }
 #cp-linkedin-copilot-panel .cp-badge.cp-run {
-  background: rgba(25, 197, 140, 0.12);
-  color: rgba(12, 105, 77, 0.9);
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
 }
 #cp-linkedin-copilot-panel .cp-badge.cp-pause {
-  background: rgba(244, 178, 63, 0.14);
-  color: rgba(130, 78, 10, 0.9);
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
 }
 #cp-linkedin-copilot-panel .cp-window-actions {
   display: flex;
   gap: 4px;
 }
 #cp-linkedin-copilot-panel .cp-window-actions button {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: 0;
-  border-radius: 6px;
-  background: rgba(11, 18, 32, 0.06);
-  color: var(--cp-muted);
-  font-size: 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--cp-text-muted);
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.12s ease;
 }
 #cp-linkedin-copilot-panel .cp-window-actions button:hover {
-  background: rgba(11, 18, 32, 0.10);
+  background: rgba(15, 23, 42, 0.1);
+  color: #0f172a;
 }
-#cp-linkedin-copilot-panel.cp-dragging .cp-head { cursor: grabbing; }
 
-/* ── Status card ── */
-#cp-linkedin-copilot-panel .cp-now {
-  margin: 8px 12px 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(109, 123, 255, 0.06);
-  border: 1px solid rgba(109, 123, 255, 0.12);
+/* ── Hero AI Action Center ── */
+#cp-linkedin-copilot-panel .cp-hero {
+  margin: 12px 14px 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(99, 102, 241, 0.06), rgba(139, 92, 246, 0.04));
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.04);
 }
-#cp-linkedin-copilot-panel .cp-now-title {
+#cp-linkedin-copilot-panel .cp-hero-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+#cp-linkedin-copilot-panel .cp-hero-status-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cp-primary);
+  box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
+  animation: cp-pulse 2s infinite;
+}
+@keyframes cp-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+#cp-linkedin-copilot-panel .cp-hero-status-title {
   font-size: 11px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cp-primary);
-  margin-bottom: 1px;
 }
-#cp-linkedin-copilot-panel .cp-now-detail {
-  font-size: 10px;
-  color: var(--cp-muted);
+#cp-linkedin-copilot-panel .cp-hero-job-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
   line-height: 1.3;
+  margin-bottom: 2px;
+}
+#cp-linkedin-copilot-panel .cp-hero-job-sub {
+  font-size: 11px;
+  color: var(--cp-text-muted);
+  line-height: 1.35;
+}
+#cp-linkedin-copilot-panel .cp-hero-metrics {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(99, 102, 241, 0.1);
+  flex-wrap: wrap;
+}
+#cp-linkedin-copilot-panel .cp-metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 3px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+#cp-linkedin-copilot-panel .cp-metric-pill svg {
+  display: block;
+  flex-shrink: 0;
+}
+#cp-linkedin-copilot-panel .cp-icon-success {
+  color: #10b981;
+}
+#cp-linkedin-copilot-panel .cp-icon-warning {
+  color: #f59e0b;
+}
+#cp-linkedin-copilot-panel .cp-icon-primary {
+  color: #6366f1;
+}
+#cp-linkedin-copilot-panel .cp-metric-val {
+  font-weight: 700;
+  color: #0f172a;
+}
+#cp-linkedin-copilot-panel .cp-metric-quota {
+  margin-left: auto;
+  color: var(--cp-primary);
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.15);
 }
 
-/* ── Controls ── */
+/* ── Controls & Quick Actions ── */
 #cp-linkedin-copilot-panel .cp-controls {
-  padding: 8px 12px 10px;
+  padding: 6px 14px 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
-
-/* Run mode toggle */
 #cp-linkedin-copilot-panel .cp-run-mode {
   display: flex;
   align-items: center;
@@ -179,7 +269,7 @@
 #cp-linkedin-copilot-panel .cp-run-mode-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   cursor: pointer;
 }
 #cp-linkedin-copilot-panel .cp-run-mode-toggle input {
@@ -190,10 +280,10 @@
   pointer-events: none;
 }
 #cp-linkedin-copilot-panel .cp-switch-ui {
-  width: 30px;
+  width: 32px;
   height: 18px;
   border-radius: 999px;
-  background: rgba(11, 18, 32, 0.14);
+  background: rgba(15, 23, 42, 0.15);
   position: relative;
   flex-shrink: 0;
   transition: background 0.15s ease;
@@ -207,189 +297,319 @@
   height: 14px;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  transition: transform 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 #cp-linkedin-copilot-panel .cp-run-mode-toggle input:checked + .cp-switch-ui {
   background: var(--cp-success);
 }
 #cp-linkedin-copilot-panel .cp-run-mode-toggle input:checked + .cp-switch-ui::after {
-  transform: translateX(12px);
+  transform: translateX(14px);
 }
 #cp-linkedin-copilot-panel .cp-run-mode-label {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  color: rgba(11, 18, 32, 0.72);
+  color: #334155;
 }
 #cp-linkedin-copilot-panel .cp-run-mode-chip {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 6px;
-  background: rgba(11, 18, 32, 0.06);
-  color: var(--cp-muted);
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--cp-text-muted);
 }
 #cp-linkedin-copilot-panel .cp-run-mode-chip.cp-live {
-  background: rgba(25, 197, 140, 0.12);
-  color: rgba(12, 105, 77, 0.9);
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
 }
 #cp-linkedin-copilot-panel .cp-run-mode-chip.cp-dry {
-  background: rgba(244, 178, 63, 0.12);
-  color: rgba(130, 78, 10, 0.9);
-}
-#cp-linkedin-copilot-panel .cp-run-mode-chip.cp-manual {
-  background: rgba(109, 123, 255, 0.10);
-  color: rgba(57, 68, 152, 0.9);
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
 }
 
-/* Quick buttons */
+/* Quick Action Buttons */
 #cp-linkedin-copilot-panel .cp-quick {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
+  gap: 6px;
 }
 #cp-linkedin-copilot-panel .cp-quick button {
   border: 1px solid var(--cp-border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.7);
-  padding: 7px 0;
-  font-size: 11px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 8px 0;
+  font-size: 11.5px;
   font-weight: 700;
-  color: rgba(11, 18, 32, 0.75);
+  color: #334155;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 #cp-linkedin-copilot-panel .cp-quick button:hover {
-  background: rgba(255, 255, 255, 0.95);
+  background: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
 }
 #cp-linkedin-copilot-panel .cp-quick #cp-start {
-  background: linear-gradient(135deg, #6d7bff, #9b7bff);
+  background: var(--cp-primary-gradient);
   border-color: transparent;
   color: #fff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+#cp-linkedin-copilot-panel .cp-quick #cp-start:hover {
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
 }
 #cp-linkedin-copilot-panel .cp-quick #cp-pause {
-  background: rgba(244, 178, 63, 0.10);
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.2);
+  color: #d97706;
 }
 #cp-linkedin-copilot-panel .cp-quick #cp-stop {
-  background: rgba(243, 91, 91, 0.10);
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
 }
 
-/* Info row */
-#cp-linkedin-copilot-panel .cp-info-row {
+/* ── Tab Switcher ── */
+#cp-linkedin-copilot-panel .cp-tab-bar {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-#cp-linkedin-copilot-panel .cp-info-pill {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--cp-muted);
-  padding: 0;
-}
-
-/* ── Log area ── */
-#cp-linkedin-copilot-panel .cp-log {
-  margin: 0 12px;
+  margin: 4px 14px 6px;
+  background: rgba(15, 23, 42, 0.04);
+  padding: 3px;
   border-radius: 10px;
+  gap: 4px;
+}
+#cp-linkedin-copilot-panel .cp-tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--cp-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+#cp-linkedin-copilot-panel .cp-tab svg {
+  display: block;
+}
+#cp-linkedin-copilot-panel .cp-tab.cp-active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+/* ── AI Activity Feed & Logs Area ── */
+#cp-linkedin-copilot-panel .cp-log {
+  margin: 0 14px;
+  border-radius: 12px;
   border: 1px solid var(--cp-border);
-  background: rgba(255, 255, 255, 0.4);
-  padding: 6px 8px;
-  overflow: auto;
+  background: rgba(248, 250, 252, 0.6);
+  padding: 8px 10px;
+  overflow-y: auto;
   flex: 1 1 auto;
-  min-height: 160px;
-  max-height: none;
+  min-height: 180px;
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-/* Log entries */
+/* Clean AI Feed Cards */
+#cp-linkedin-copilot-panel .cp-ai-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+  font-size: 11.5px;
+  line-height: 1.4;
+  animation: cp-fade-in 0.2s ease-out;
+}
+@keyframes cp-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+#cp-linkedin-copilot-panel .cp-ai-card.cp-submitted {
+  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+#cp-linkedin-copilot-panel .cp-ai-card.cp-submitted .cp-ai-icon {
+  color: #059669;
+}
+#cp-linkedin-copilot-panel .cp-ai-card.cp-skipped {
+  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+#cp-linkedin-copilot-panel .cp-ai-card.cp-skipped .cp-ai-icon {
+  color: #d97706;
+}
+#cp-linkedin-copilot-panel .cp-ai-card.cp-error {
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+#cp-linkedin-copilot-panel .cp-ai-card.cp-error .cp-ai-icon {
+  color: #dc2626;
+}
+#cp-linkedin-copilot-panel .cp-ai-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--cp-primary);
+  margin-top: 1px;
+}
+
+/* ── Decision Chain & Diagnostic Trace ── */
+#cp-linkedin-copilot-panel .cp-diag-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  font-size: 11px;
+  line-height: 1.35;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  animation: cp-fade-in 0.2s ease-out;
+}
+#cp-linkedin-copilot-panel .cp-diag-card.cp-diag-success {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.04);
+}
+#cp-linkedin-copilot-panel .cp-diag-card.cp-diag-warn {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.04);
+}
+#cp-linkedin-copilot-panel .cp-diag-card.cp-diag-error {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.04);
+}
+#cp-linkedin-copilot-panel .cp-diag-card.cp-diag-muted {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: rgba(241, 245, 249, 0.5);
+}
+#cp-linkedin-copilot-panel .cp-diag-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#cp-linkedin-copilot-panel .cp-diag-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--cp-primary);
+}
+#cp-linkedin-copilot-panel .cp-diag-card.cp-diag-success .cp-diag-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+#cp-linkedin-copilot-panel .cp-diag-card.cp-diag-warn .cp-diag-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+#cp-linkedin-copilot-panel .cp-diag-card.cp-diag-muted .cp-diag-badge {
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
+}
+#cp-linkedin-copilot-panel .cp-diag-code {
+  font-size: 9px;
+  font-family: monospace;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid #e2e8f0;
+}
+#cp-linkedin-copilot-panel .cp-diag-time {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: #94a3b8;
+  font-family: monospace;
+}
+#cp-linkedin-copilot-panel .cp-diag-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #1e293b;
+}
+#cp-linkedin-copilot-panel .cp-diag-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--cp-primary);
+}
+#cp-linkedin-copilot-panel .cp-diag-msg {
+  word-break: break-word;
+}
+#cp-linkedin-copilot-panel .cp-ai-icon svg {
+  display: block;
+}
+#cp-linkedin-copilot-panel .cp-ai-text {
+  flex: 1;
+  color: #1e293b;
+}
+#cp-linkedin-copilot-panel .cp-ai-text strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+#cp-linkedin-copilot-panel .cp-ai-time {
+  font-size: 9.5px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+/* Raw Log View (when toggled to detailed logs) */
 #cp-linkedin-copilot-panel .cp-line {
-  margin: 3px 0;
+  margin: 2px 0;
 }
-#cp-linkedin-copilot-panel .cp-line.cp-user { text-align: right; }
-
 #cp-linkedin-copilot-panel .cp-bubble {
   display: inline-block;
   border-radius: 8px;
   padding: 5px 8px;
-  max-width: 92%;
-  text-align: left;
-  border: 1px solid transparent;
-}
-#cp-linkedin-copilot-panel .cp-bot .cp-bubble {
-  background: rgba(255, 255, 255, 0.5);
-}
-#cp-linkedin-copilot-panel .cp-user .cp-bubble {
-  background: rgba(109, 123, 255, 0.08);
-}
-#cp-linkedin-copilot-panel .cp-line.cp-error .cp-bubble {
-  background: rgba(243, 91, 91, 0.06);
-  border-color: rgba(243, 91, 91, 0.18);
-}
-#cp-linkedin-copilot-panel .cp-line.cp-warn .cp-bubble {
-  background: rgba(244, 178, 63, 0.08);
-  border-color: rgba(244, 178, 63, 0.20);
+  max-width: 95%;
+  font-size: 11px;
+  background: #ffffff;
+  border: 1px solid var(--cp-border);
 }
 #cp-linkedin-copilot-panel:not(.cp-debug-ui) .cp-line.cp-debug {
   display: none;
 }
-#cp-linkedin-copilot-panel .cp-line.cp-debug .cp-bubble {
-  border-style: dashed;
-  opacity: 0.75;
-}
 
-#cp-linkedin-copilot-panel .cp-msg-head {
+/* Typing / AI Working Indicator */
+#cp-linkedin-copilot-panel .cp-typing-card {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 1px;
-}
-#cp-linkedin-copilot-panel .cp-sender {
-  font-size: 10px;
-  font-weight: 700;
-  color: rgba(11, 18, 32, 0.75);
-}
-#cp-linkedin-copilot-panel .cp-kind {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(109, 123, 255, 0.10);
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--cp-primary);
-}
-#cp-linkedin-copilot-panel .cp-line.cp-bot .cp-kind {
-  background: rgba(109, 123, 255, 0.10);
-  color: var(--cp-primary);
-}
-#cp-linkedin-copilot-panel .cp-time {
-  margin-left: auto;
-  font-size: 9px;
-  color: rgba(11, 18, 32, 0.25);
-}
-#cp-linkedin-copilot-panel .cp-msg-text {
-  font-size: 11px;
-  color: rgba(11, 18, 32, 0.80);
-  line-height: 1.35;
-  word-break: break-word;
-}
-#cp-linkedin-copilot-panel .cp-msg-meta {
-  margin-top: 2px;
-  font-size: 9px;
-  color: rgba(11, 18, 32, 0.35);
-  line-height: 1.3;
-}
-
-/* Typing indicator */
-#cp-linkedin-copilot-panel .cp-typing .cp-bubble {
-  border: 1px solid rgba(109, 123, 255, 0.15);
-  background: rgba(109, 123, 255, 0.04);
-}
-#cp-linkedin-copilot-panel .cp-typing .cp-msg-text {
-  display: flex;
-  align-items: center;
-  gap: 5px;
 }
 #cp-linkedin-copilot-panel .cp-dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--cp-primary);
   animation: cp-dot-pulse 1.4s ease-in-out infinite;
@@ -402,79 +622,85 @@
   28% { opacity: 1; transform: translateY(-2px); }
 }
 
-/* ── Composer ── */
+/* ── Composer / Command Bar ── */
 #cp-linkedin-copilot-panel .cp-composer {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 6px;
   align-items: center;
-  margin: 8px 12px 10px;
-  padding: 4px 4px 4px 10px;
-  border-radius: 10px;
+  margin: 8px 14px 12px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 12px;
   border: 1px solid var(--cp-border);
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
 }
 #cp-linkedin-copilot-panel .cp-composer:focus-within {
-  border-color: rgba(109, 123, 255, 0.30);
+  border-color: var(--cp-primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 #cp-linkedin-copilot-panel .cp-composer input {
   border: 0;
   outline: none;
   width: 100%;
   font-size: 12px;
-  color: rgba(11, 18, 32, 0.85);
+  color: #0f172a;
   background: transparent;
   padding: 6px 0;
 }
 #cp-linkedin-copilot-panel .cp-composer input::placeholder {
-  color: var(--cp-muted);
+  color: var(--cp-text-muted);
 }
 #cp-linkedin-copilot-panel .cp-composer button {
-  width: 32px;
-  height: 32px;
+  padding: 6px 12px;
   border: 0;
   border-radius: 8px;
   background: var(--cp-primary);
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+#cp-linkedin-copilot-panel .cp-composer button:hover {
+  opacity: 0.9;
 }
 
-/* ── Icon buttons ── */
+/* ── Icon Buttons ── */
 #cp-linkedin-copilot-panel .cp-icon-btn {
   width: 24px;
   height: 24px;
   border: 0;
   border-radius: 6px;
-  background: rgba(11, 18, 32, 0.06);
-  color: var(--cp-muted);
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--cp-text-muted);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
 #cp-linkedin-copilot-panel .cp-icon-btn:hover {
-  background: rgba(11, 18, 32, 0.10);
+  background: rgba(15, 23, 42, 0.1);
 }
 
-/* ── Minimized / Maximized ── */
+/* ── Minimized / Maximized States ── */
 #cp-linkedin-copilot-panel.cp-minimized {
   max-height: none !important;
   height: auto !important;
 }
-#cp-linkedin-copilot-panel.cp-minimized .cp-now,
+#cp-linkedin-copilot-panel.cp-minimized .cp-hero,
 #cp-linkedin-copilot-panel.cp-minimized .cp-controls,
+#cp-linkedin-copilot-panel.cp-minimized .cp-tab-bar,
 #cp-linkedin-copilot-panel.cp-minimized .cp-log,
 #cp-linkedin-copilot-panel.cp-minimized .cp-composer {
   display: none;
 }
 #cp-linkedin-copilot-panel.cp-maximized {
-  width: 520px !important;
-  max-height: none !important;
-  height: calc(100vh - 20px) !important;
+  width: 480px !important;
+  max-height: calc(100vh - 40px) !important;
+  height: calc(100vh - 40px) !important;
 }
 #cp-linkedin-copilot-panel.cp-maximized .cp-log {
-  min-height: 240px;
   max-height: none;
   flex: 1;
 }
@@ -484,6 +710,116 @@
   #cp-linkedin-copilot-toggle { right: 14px; bottom: 14px; width: 42px; height: 42px; }
   #cp-linkedin-copilot-panel { right: 8px; left: 8px; width: auto; bottom: 68px; max-height: calc(100vh - 78px); }
 }
-@media (max-width: 560px) {
-  #cp-linkedin-copilot-panel { right: 0; left: 0; bottom: 0; max-height: 100vh; height: 100vh; border-radius: 0; }
+
+/* ── Live Job Card Tracking & Highlighting on LinkedIn ── */
+.cp-active-eval-card {
+  position: relative !important;
+  outline: 2.5px solid #6366f1 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.4) !important;
+  background: rgba(99, 102, 241, 0.04) !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease-in-out !important;
+  z-index: 5 !important;
 }
+
+.cp-active-eval-card .job-card-list__title,
+.cp-active-eval-card .artdeco-entity-lockup__title,
+.cp-active-eval-card a.job-card-container__link {
+  color: #4338ca !important;
+  font-weight: 800 !important;
+}
+
+.cp-card-live-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
+  pointer-events: none;
+  animation: cp-badge-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cp-card-live-badge .cp-badge-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: cp-pulse-glow 1s infinite alternate;
+}
+
+@keyframes cp-pulse-glow {
+  from { opacity: 0.3; transform: scale(0.75); }
+  to { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes cp-badge-pop {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.cp-card-completed-applied {
+  border-left: 4px solid #10b981 !important;
+  background: rgba(16, 185, 129, 0.04) !important;
+}
+
+.cp-card-completed-skipped {
+  opacity: 0.72 !important;
+  border-left: 3px solid #94a3b8 !important;
+}
+
+/* Injected Outcome Badges on Job Tiles */
+.cp-card-outcome-tag {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin-top: 4px !important;
+  margin-bottom: 2px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+  letter-spacing: 0.02em !important;
+  width: fit-content !important;
+  pointer-events: none !important;
+  animation: cp-badge-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.cp-card-outcome-tag.cp-tag-applied {
+  background: #ecfdf5 !important;
+  color: #065f46 !important;
+  border: 1px solid #a7f3d0 !important;
+}
+
+.cp-card-outcome-tag.cp-tag-skipped {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+/* Detail page live highlight */
+.cp-detail-live-indicator {
+  margin: 6px 0 10px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.06) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #4338ca;
+  animation: cp-fade-in 0.2s ease-out;
+}
+

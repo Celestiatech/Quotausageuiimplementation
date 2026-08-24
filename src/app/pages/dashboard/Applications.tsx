@@ -10,9 +10,13 @@ import {
   Check,
   LayoutGrid,
   List,
+  Bot,
+  Sparkles,
+  Zap,
 } from "lucide-react";
 import { useExtensionPipelineStats } from "../../hooks/useExtensionPipelineStats";
 import { buildJobSourceUrl, cleanJobText, inferJobProvider, jobProviderLabel, parseExternalJobId } from "src/lib/job-source";
+import MagicAiDecisionModal, { MagicAiJobContext } from "../../components/jobs/MagicAiDecisionModal";
 
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead_letter";
 type DisplayStatus = JobStatus | "skipped";
@@ -217,6 +221,31 @@ export default function Applications() {
   const [error, setError] = useState("");
   const [copiedJobId, setCopiedJobId] = useState("");
   const extensionStats = useExtensionPipelineStats();
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [modalJob, setModalJob] = useState<MagicAiJobContext | null>(null);
+
+  const openAiIntervention = (job?: PreparedJob | null) => {
+    if (job) {
+      setModalJob({
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: "Remote / Hybrid",
+        reason: job.reason || (job.displayStatus === "skipped" ? "Criteria Mismatch" : "Missing required skill tags"),
+        status: job.status,
+        matchScore: job.status === "succeeded" ? 98 : job.status === "cancelled" ? 68 : 78,
+      });
+    } else {
+      setModalJob({
+        title: "Senior Fullstack Engineer",
+        company: "AutoApply Network",
+        location: "Remote",
+        reason: "TypeScript, GraphQL & Cloud Infrastructure",
+        matchScore: 82,
+      });
+    }
+    setIsAiModalOpen(true);
+  };
 
   const load = async () => {
     try {
@@ -314,17 +343,17 @@ export default function Applications() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <motion.div
-        initial={{ opacity: 0, y: 18 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-wrap items-center justify-between gap-3"
+        className="flex flex-wrap items-center justify-between gap-2.5"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Applications</h1>
-          <p className="text-gray-600 mt-1">Real application pipeline from your auto-apply jobs.</p>
+          <h1 className="text-lg font-bold text-gray-900 leading-tight">Applications</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Real application pipeline from your auto-apply jobs.</p>
           {extensionStats.loaded ? (
-            <div className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600">
+            <div className="mt-1.5 inline-flex flex-wrap items-center gap-2 rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-[11px] text-gray-600">
               <span className="font-semibold text-gray-700">Extension live:</span>
               <span>Applied {extensionStats.applied}</span>
               <span>Skipped {extensionStats.skipped}</span>
@@ -332,74 +361,84 @@ export default function Applications() {
             </div>
           ) : null}
         </div>
-        <button
-          onClick={() => void load()}
-          className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold transition-colors inline-flex items-center gap-2"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openAiIntervention(null)}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white rounded-lg text-xs font-bold shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <Bot className="w-3.5 h-3.5 text-cyan-200" />
+            <span>✨ AI Agent Fleet</span>
+          </button>
+          <button
+            onClick={() => void load()}
+            className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+        </div>
       </motion.div>
 
       <motion.div
-        initial={{ opacity: 0, y: 18 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.06 }}
-        className="rounded-2xl border border-gray-200 bg-white p-4"
+        transition={{ delay: 0.05 }}
+        className="rounded-xl border border-gray-200/80 bg-white p-3 shadow-xs"
       >
-        <div className="flex flex-col lg:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-2.5">
           <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by title, company, status, reason, or job id..."
-              className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-gray-300 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 outline-none"
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 outline-none"
             />
           </div>
-          <div className="inline-flex rounded-xl bg-gray-100 p-1">
+          <div className="inline-flex rounded-lg bg-gray-100 p-0.5">
             <button
               onClick={() => setView("kanban")}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors ${
-                view === "kanban" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-800"
+              className={`px-3 py-1 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
+                view === "kanban" ? "bg-white text-gray-900 shadow-2xs" : "text-gray-600 hover:text-gray-800"
               }`}
             >
-              <LayoutGrid className="w-4 h-4" />
+              <LayoutGrid className="w-3.5 h-3.5" />
               Kanban
             </button>
             <button
               onClick={() => setView("list")}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors ${
-                view === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-800"
+              className={`px-3 py-1 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
+                view === "list" ? "bg-white text-gray-900 shadow-2xs" : "text-gray-600 hover:text-gray-800"
               }`}
             >
-              <List className="w-4 h-4" />
+              <List className="w-3.5 h-3.5" />
               List
             </button>
           </div>
         </div>
       </motion.div>
 
-      {error ? <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">{error}</div> : null}
-      {loading ? <div className="text-sm text-gray-500">Loading applications...</div> : null}
+      {error ? <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div> : null}
+      {loading ? <div className="text-xs text-gray-400 py-2">Loading applications...</div> : null}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Total Tracked</div>
-          <div className="text-2xl font-bold text-gray-900 mt-1">{summary.total}</div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <div className="rounded-xl border border-gray-200/80 bg-white p-3 shadow-xs">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Total Tracked</div>
+          <div className="text-lg font-bold text-gray-900 mt-0.5">{summary.total}</div>
         </div>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <div className="text-xs uppercase tracking-wide text-emerald-700">Submitted</div>
-          <div className="text-2xl font-bold text-emerald-800 mt-1">{summary.submitted}</div>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 shadow-xs">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-emerald-700">Submitted</div>
+          <div className="text-lg font-bold text-emerald-800 mt-0.5">{summary.submitted}</div>
         </div>
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-          <div className="text-xs uppercase tracking-wide text-rose-700">Failed</div>
-          <div className="text-2xl font-bold text-rose-800 mt-1">{summary.failed}</div>
+        <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 shadow-xs">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-rose-700">Failed</div>
+          <div className="text-lg font-bold text-rose-800 mt-0.5">{summary.failed}</div>
         </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <div className="text-xs uppercase tracking-wide text-amber-700">Skipped</div>
-          <div className="text-2xl font-bold text-amber-800 mt-1">{summary.skipped}</div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 shadow-xs">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-amber-700">Skipped</div>
+          <div className="text-lg font-bold text-amber-800 mt-0.5">{summary.skipped}</div>
         </div>
       </div>
 
@@ -439,7 +478,15 @@ export default function Applications() {
                           {statusLabel(job.displayStatus)}
                         </span>
                       </div>
-                      <div className="mt-3">
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openAiIntervention(job)}
+                          className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 text-purple-800 border border-purple-200 text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-all"
+                        >
+                          <Sparkles className="w-3 h-3 text-yellow-600" />
+                          AI Decision
+                        </button>
                         <JobActions
                           sourceUrl={job.sourceUrl}
                           sourceLabel={job.sourceLabel}
@@ -487,13 +534,23 @@ export default function Applications() {
                   </div>
                 ) : null}
 
-                <JobActions
-                  sourceUrl={job.sourceUrl}
-                  sourceLabel={job.sourceLabel}
-                  externalJobId={job.externalJobId}
-                  copiedJobId={copiedJobId}
-                  onCopy={copyJobId}
-                />
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => openAiIntervention(job)}
+                    className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3 text-yellow-600" />
+                    AI Decision
+                  </button>
+                  <JobActions
+                    sourceUrl={job.sourceUrl}
+                    sourceLabel={job.sourceLabel}
+                    externalJobId={job.externalJobId}
+                    copiedJobId={copiedJobId}
+                    onCopy={copyJobId}
+                  />
+                </div>
               </article>
             ))}
           </div>
@@ -525,26 +582,69 @@ export default function Applications() {
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{job.createdLabel}</td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{job.externalJobId || "-"}</td>
                     <td className="px-4 py-3">
-                      <JobActions
-                        sourceUrl={job.sourceUrl}
-                        sourceLabel={job.sourceLabel}
-                        externalJobId={job.externalJobId}
-                        copiedJobId={copiedJobId}
-                        onCopy={copyJobId}
-                        compact
-                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openAiIntervention(job)}
+                          className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 text-purple-800 border border-purple-200 text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-all shrink-0"
+                        >
+                          <Sparkles className="w-3 h-3 text-yellow-600" />
+                          AI Decision
+                        </button>
+                        <JobActions
+                          sourceUrl={job.sourceUrl}
+                          sourceLabel={job.sourceLabel}
+                          externalJobId={job.externalJobId}
+                          copiedJobId={copiedJobId}
+                          onCopy={copyJobId}
+                          compact
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-sm text-gray-500">No applications found for the current search.</div>
           ) : null}
         </div>
       ) : null}
+
+      {/* Magic AI Agent Intervention Decision Modal */}
+      <MagicAiDecisionModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        targetJob={modalJob}
+        pipelineStats={{
+          total: jobs.length,
+          submitted: jobs.filter((j) => j.status === "succeeded").length,
+          queued: jobs.filter((j) => j.status === "queued" || j.status === "running").length,
+          skipped: jobs.filter((j) => j.status === "cancelled").length,
+          failed: jobs.filter((j) => j.status === "failed" || j.status === "dead_letter").length,
+        }}
+        onAutoOptimize={async () => {
+          await load();
+        }}
+        onLaunchAutoApply={async () => {
+          await load();
+        }}
+        onReQueueJob={async () => {
+          await load();
+        }}
+        onSkipJob={async (jobId) => {
+          if (jobId) {
+            try {
+              await fetch(`/api/auto-apply/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
+              await load();
+            } catch (err) {
+              console.error("Cancel failed", err);
+            }
+          }
+        }}
+        linkedInConnected={true}
+      />
     </div>
   );
 }

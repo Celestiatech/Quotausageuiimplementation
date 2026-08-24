@@ -30,12 +30,26 @@
                         },
     "include":  [
                     "next-env.d.ts",
-                    "**/*.ts",
-                    "**/*.tsx",
+                    "app/**/*.ts",
+                    "app/**/*.tsx",
+                    "src/**/*.ts",
+                    "src/**/*.tsx",
+                    "middleware.ts",
                     ".next/types/**/*.ts"
                 ],
     "exclude":  [
                     "node_modules",
+                    "**/node_modules",
+                    "AutoApplyCvMeetCopilotLiveExtension",
+                    "Auto_job_applier_linkedIn",
+                    "CareerPilotIndeedExtension",
+                    "CareerPilotLinkedInExtension",
+                    "HROutreachExtension",
+                    "JobsSmartOutreachExtension",
+                    "whatsapp-extension",
+                    "extensiondesign",
+                    ".opencode",
+                    ".claude",
                     "src/main.tsx",
                     "vite.config.ts"
                 ]

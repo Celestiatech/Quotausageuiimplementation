@@ -428,16 +428,16 @@ export default function Resume() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Resume Builder</h1>
-          <p className="text-gray-600">Build ATS-friendly resumes with your profile data.</p>
+          <h1 className="text-lg font-bold text-gray-900 leading-tight">Resume Builder</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Build ATS-friendly resumes with your profile data.</p>
         </div>
         <button
           onClick={() => navigate("/dashboard/onboarding")}
-          className="px-5 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors"
+          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-xs font-semibold transition-colors"
         >
           Open Onboarding
         </button>
@@ -445,15 +445,15 @@ export default function Resume() {
 
       {/* Status messages */}
       {saved && (
-        <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4">
-          <CheckCircle2 className="w-5 h-5 text-green-600" />
-          <span className="text-green-700 font-medium">Resume data saved successfully!</span>
+        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-2.5 text-xs text-green-700 font-medium">
+          <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+          <span>Resume data saved successfully!</span>
         </div>
       )}
       {error && (
-        <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-700 font-medium">{error}</span>
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-2.5 text-xs text-red-700 font-medium">
+          <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+          <span>{error}</span>
         </div>
       )}
 
@@ -470,55 +470,53 @@ export default function Resume() {
       />
       <div
         onClick={() => !isUploading && fileInputRef.current?.click()}
-        className={`rounded-2xl p-6 border-2 cursor-pointer transition-all ${
+        className={`rounded-xl p-3.5 border cursor-pointer transition-all shadow-xs ${
           isUploading
             ? "border-purple-300 bg-purple-50/80"
-            : "bg-white border-gray-200 hover:border-purple-400 hover:bg-purple-50/50 hover:shadow-lg hover:-translate-y-0.5"
+            : "bg-white border-gray-200/80 hover:border-purple-300 hover:bg-purple-50/30 hover:shadow-sm"
         }`}
       >
         {isUploading ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
-                <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+                <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-base font-semibold text-gray-900">Uploading & parsing resume...</p>
-                <p className="text-sm text-gray-500">Sit back and relax — it will take a minute</p>
+                <p className="text-xs font-semibold text-gray-900">Uploading & parsing resume...</p>
+                <p className="text-[11px] text-gray-500">Extracting skills, experience, and education</p>
               </div>
             </div>
             <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
               <div className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full animate-pulse" style={{ width: "60%" }} />
             </div>
-            <div className="min-h-[40px] flex items-center justify-center">
-              <p className="text-sm text-gray-500 italic text-center">
-                Did you know? {FUN_FACTS[uploadFactIndex]}
-              </p>
-            </div>
+            <p className="text-[11px] text-gray-500 italic text-center">
+              Did you know? {FUN_FACTS[uploadFactIndex]}
+            </p>
           </div>
         ) : (
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-100 flex items-center justify-center shrink-0">
-              <UploadCloud className="w-6 h-6 text-purple-500" />
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-100 flex items-center justify-center shrink-0">
+              <UploadCloud className="w-4.5 h-4.5 text-purple-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-base font-semibold text-gray-900">Upload Resume to Auto-Fill</p>
-              <p className="text-sm text-gray-500">PDF, DOCX, TXT · Max 5MB — Click to browse</p>
+              <p className="text-xs font-bold text-gray-900">Upload Resume to Auto-Fill</p>
+              <p className="text-[11px] text-gray-500">PDF, DOCX, TXT · Max 5MB — Click to browse</p>
               {user?.resumeFileName && (
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-[10px] text-gray-400 mt-0.5">
                   Previously uploaded: <span className="font-medium text-gray-600">{user.resumeFileName}</span>
                 </p>
               )}
             </div>
-            <div className="hidden sm:flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 rounded-lg">
-              <UploadCloud className="w-3.5 h-3.5" />
+            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 rounded-lg border border-purple-100">
+              <UploadCloud className="w-3 h-3" />
               Choose File
             </div>
           </div>
         )}
       </div>
 
-      <div className="grid lg:grid-cols-5 gap-6">
+      <div className="grid lg:grid-cols-5 gap-4 items-start">
         {/* Left Panel — Resume Data Editor */}
         <div className="lg:col-span-3 space-y-4">
           <ResumeDataForm
@@ -531,8 +529,8 @@ export default function Resume() {
 
         {/* Right Panel — Templates */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white rounded-2xl p-5 border-2 border-gray-200">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">ATS Templates</h2>
+          <div className="bg-white rounded-xl p-4 border border-gray-200/80 shadow-xs">
+            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-3 pb-1.5 border-b border-gray-100">ATS Templates</h2>
             <ResumeTemplateCard
               selected={selectedTemplate}
               onSelect={setSelectedTemplate}
@@ -542,26 +540,20 @@ export default function Resume() {
           </div>
 
           {/* Quick Links */}
-          <div className="bg-white rounded-2xl p-5 border-2 border-gray-200 space-y-3">
-            <h3 className="font-bold text-gray-900">Quick Links</h3>
+          <div className="bg-white rounded-xl p-4 border border-gray-200/80 shadow-xs space-y-2.5">
+            <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Quick Links</h3>
             <a
-              href="https://www.linkedin.com/jobs/"
+              href="https://www.linkedin.com/jobs/search/?f_AL=true&f_TPR=r604800"
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50 transition-colors text-sm"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs"
             >
-              <ExternalLink className="w-4 h-4" />
-              Open LinkedIn Jobs
+              <ExternalLink className="w-3.5 h-3.5" />
+              Open LinkedIn Easy Apply Jobs
             </a>
-            <div className="text-xs text-gray-500 leading-relaxed">
+            <div className="text-[11px] text-gray-500 leading-relaxed">
               Upload your resume on LinkedIn Easy Apply once. Future applies will reuse the latest attached resume.
             </div>
-            {user?.resumeFileName && (
-              <div className="bg-gray-50 rounded-lg p-3 text-sm">
-                <span className="text-gray-500">Legacy file:</span>{" "}
-                <span className="font-medium text-gray-800">{user.resumeFileName}</span>
-              </div>
-            )}
           </div>
         </div>
       </div>
