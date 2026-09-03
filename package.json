@@ -11,6 +11,8 @@
     "build:with-migrate": "prisma migrate deploy && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "seo:audit": "node scripts/audit-seo.mjs",
+    "screenshots:generate": "python scripts/generate-store-screenshots.py",
     "check": "npm run prisma:generate && npm run typecheck",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",

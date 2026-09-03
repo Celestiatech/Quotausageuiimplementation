@@ -30,7 +30,7 @@ export function Footer() {
               <img
                 src="/logos/brandmark-80.png"
                 alt="AutoApply CV logo"
-                className="w-10 h-10 rounded-xl shadow-lg"
+                className="w-10 h-10 object-contain"
                 width={40}
                 height={40}
                 loading="lazy"
@@ -81,11 +81,26 @@ export function Footer() {
 
           {/* Links */}
           <div>
-            <h2 className="font-semibold text-gray-900 mb-4">Product</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">Product & Automations</h2>
             <ul className="space-y-3">
               <li>
+                <Link to="/auto-apply-linkedin" className="text-gray-600 hover:text-[#8B5CF6] transition-colors font-medium">
+                  LinkedIn Auto Apply Bot
+                </Link>
+              </li>
+              <li>
+                <Link to="/auto-apply-jobs" className="text-gray-600 hover:text-[#8B5CF6] transition-colors font-medium">
+                  Auto Apply to Jobs
+                </Link>
+              </li>
+              <li>
+                <Link to="/auto-apply-chrome-extension" className="text-gray-600 hover:text-[#8B5CF6] transition-colors font-medium">
+                  Chrome Extension Copilot
+                </Link>
+              </li>
+              <li>
                 <Link to="/product" className="text-gray-600 hover:text-[#8B5CF6] transition-colors">
-                  Product
+                  Product Overview
                 </Link>
               </li>
               <li>

@@ -41,9 +41,9 @@ copyDirRecursive(
   path.join(stagingLinkedin, 'src')
 );
 
-const zip1 = path.join(workspaceRoot, 'AutoApplyCV-LinkedIn-Copilot-v2.6.0-ChromeStore.zip');
+const zip1 = path.join(workspaceRoot, 'AutoApplyCV-LinkedIn-Copilot-v2.6.1-ChromeStore.zip');
 const zip2 = path.join(workspaceRoot, 'CareerPilotLinkedInExtension.zip');
-const zip3 = path.join(workspaceRoot, 'AutoApplyCV-Copilot-v2.6.0-chrome-store.zip');
+const zip3 = path.join(workspaceRoot, 'AutoApplyCV-Copilot-v2.6.1-chrome-store.zip');
 
 [zip1, zip2, zip3].forEach((z) => {
   if (fs.existsSync(z)) fs.unlinkSync(z);

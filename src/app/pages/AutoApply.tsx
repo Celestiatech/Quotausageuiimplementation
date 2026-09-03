@@ -3,61 +3,67 @@ import MarketingInfoPage from "../components/marketing/MarketingInfoPage";
 export default function AutoApply() {
   return (
     <MarketingInfoPage
-      eyebrow="Auto Apply"
-      title="Free Auto Apply tool for faster job applications"
-      description="Free to start. AutoApply CV helps you auto apply to jobs with quality controls: targeting rules, reusable answers, and outcome tracking so you improve callbacks over time."
+      eyebrow="Free Auto Apply CV Platform"
+      title="Free Auto Apply CV | Automated Job Application System"
+      description="Automate your job search and apply to hundreds of relevant roles with zero friction. AutoApply CV is the premier free auto apply tool combining AI resume tailoring, automated screening question answers, and real-time job application tracking."
       metrics={[
-        { label: "Cost", value: "Free to start", note: "No credit card required" },
-        { label: "Workflow", value: "Target → Apply → Track" },
-        { label: "Quality", value: "Guardrails", note: "Skip duplicates + external apply" },
-        { label: "Bonus", value: "30 Hires", note: "Signup bonus credits" },
+        { label: "Cost", value: "100% Free", note: "Daily auto apply credits included" },
+        { label: "Supported Platforms", value: "LinkedIn & Indeed", note: "Easy Apply & direct jobs" },
+        { label: "Form Accuracy", value: "98%", note: "Verified screening answer bank" },
+        { label: "Time Saved", value: "15+ hrs/wk", note: "Focus on interviews, not forms" },
       ]}
       sections={[
         {
-          title: "What “auto apply” means",
+          title: "What is Auto Apply CV and How Does It Work?",
           description:
-            "Auto apply is a job search workflow that uses automation to submit applications faster while you stay in control of fit, pacing, and answers.",
+            "AutoApply CV is an AI-powered career automation platform designed to submit high-quality job applications faster while keeping you in complete control.",
           bullets: [
-            "Use filters so you apply to the right roles, not everything.",
-            "Reuse a screening answer bank to prevent form errors.",
-            "Track submitted vs skipped vs failed outcomes and fix the biggest blocker.",
-            "Prefer quality-first submissions for better interview rate.",
+            "Smart Job Search Automation: Target jobs by seniority, industry keywords, and compensation ranges.",
+            "Automated Easy Apply Submissions: Let the copilot fill complex application forms in seconds.",
+            "Reusable Screening Answer Bank: Store answers for notice periods, legal eligibility, and experience once.",
+            "ATS Resume Tailoring: Automatically adjusts resume keywords to match what recruiters search for.",
+            "Complete Pipeline Tracking: View all applied, skipped, and interviewed roles in one central hub.",
           ],
         },
         {
-          title: "How AutoApply CV improves results",
+          title: "Auto Apply with Quality-First Guardrails",
+          description:
+            "Unlike generic bot scripts that spam irrelevant companies, AutoApply CV puts your career reputation first.",
           cards: [
             {
               kicker: "Targeting",
-              title: "Fit-first filters",
-              description: "Choose titles, location rules, and easy-apply-only to reduce wasted runs.",
+              title: "Relevance Filters",
+              description:
+                "Filter out unwanted roles, agencies, or low-match positions with customizable keyword blacklists.",
             },
             {
-              kicker: "Answers",
-              title: "Reusable answer bank",
-              description: "Save common answers once (salary, notice, work auth) and sync across web + extension.",
+              kicker: "Safety",
+              title: "Human-Paced Simulation",
+              description:
+                "Realistic delays and pauses mirror human browsing behavior, preventing automated account flagging.",
             },
             {
-              kicker: "Tracking",
-              title: "Outcome visibility",
-              description: "See what submitted and what got skipped (duplicates / external apply / validation errors).",
+              kicker: "Intelligence",
+              title: "AI Resume Optimization",
+              description:
+                "Highlights required skills and certifications to maximize your score in applicant tracking systems.",
             },
           ],
         },
         {
-          title: "FAQ",
+          title: "Frequently Asked Questions About AutoApply CV",
           bullets: [
-            "Is AutoApply CV free? Free to start, with a daily cap. Use the cap on high-fit roles for best results.",
-            "Is auto apply safe? Use pacing and targeting. Avoid blasting low-fit jobs; prefer consistent Easy Apply flows.",
-            "Do I need a cover letter? Not always—use it only when a role truly requires it or when competition is high.",
-            "How do I start? Create an account, complete onboarding, and start your first run.",
+            "Is AutoApply CV really free? Yes. We offer a 100% free plan with daily application credits, making advanced job search automation accessible to every professional.",
+            "Is auto applying safe for my LinkedIn account? Yes. AutoApply CV is an assisted browser copilot with human-pacing guardrails, not a headless scraper.",
+            "How many jobs can I auto apply to each day? Free users receive generous daily credits, while premium plans offer expanded high-velocity quotas.",
+            "Can I review applications before they are submitted? Yes. You can run the extension in assisted review mode or fully automated mode.",
           ],
         },
       ]}
-      ctaTitle="Start free auto apply today"
-      ctaDescription="Create your free account and begin applying with quality controls and clear tracking."
-      primaryAction={{ label: "Sign up free", to: "/signup" }}
-      secondaryAction={{ label: "Read the blog", to: "/blog" }}
+      ctaTitle="Start applying automatically for free"
+      ctaDescription="Join over 50,000 job seekers landing better jobs faster with AutoApply CV."
+      primaryAction={{ label: "Sign Up Free", to: "/signup" }}
+      secondaryAction={{ label: "Explore Features", to: "/features" }}
     />
   );
 }

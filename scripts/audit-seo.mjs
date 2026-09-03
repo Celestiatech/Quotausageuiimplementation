@@ -1,0 +1,120 @@
+import fs from "fs";
+import path from "path";
+
+const colors = {
+  reset: "\x1b[0m",
+  green: "\x1b[32m",
+  red: "\x1b[31m",
+  yellow: "\x1b[33m",
+  cyan: "\x1b[36m",
+  bold: "\x1b[1m",
+};
+
+console.log(`\n${colors.bold}${colors.cyan}====================================================${colors.reset}`);
+console.log(`${colors.bold}${colors.cyan}       AutoApply CV - Full-Site SEO Audit          ${colors.reset}`);
+console.log(`${colors.bold}${colors.cyan}====================================================${colors.reset}\n`);
+
+// 1. Check index.html base tags
+const indexHtmlPath = path.resolve("index.html");
+if (fs.existsSync(indexHtmlPath)) {
+  const indexHtml = fs.readFileSync(indexHtmlPath, "utf-8");
+  console.log(`${colors.bold}1. Checking index.html (Static Crawl):${colors.reset}`);
+
+  const hasTitle = indexHtml.match(/<title>(.*?)<\/title>/i);
+  const hasDesc = indexHtml.match(/<meta[^>]*name=["']description["'][^>]*content=["'](.*?)["']/i);
+  const hasCanonical = indexHtml.match(/<link[^>]*rel=["']canonical["'][^>]*href=["'](.*?)["']/i);
+  const hasKeywords = indexHtml.match(/<meta[^>]*name=["']keywords["'][^>]*content=["'](.*?)["']/i);
+  const hasJsonLd = indexHtml.includes('type="application/ld+json"');
+
+  if (hasTitle) {
+    console.log(`  ${colors.green}✔ Title:${colors.reset} "${hasTitle[1]}" (${hasTitle[1].length} chars)`);
+  } else {
+    console.log(`  ${colors.red}✖ Title missing${colors.reset}`);
+  }
+
+  if (hasDesc) {
+    console.log(`  ${colors.green}✔ Description:${colors.reset} "${hasDesc[1].substring(0, 60)}..." (${hasDesc[1].length} chars)`);
+  } else {
+    console.log(`  ${colors.red}✖ Description missing${colors.reset}`);
+  }
+
+  if (hasCanonical) {
+    console.log(`  ${colors.green}✔ Canonical:${colors.reset} ${hasCanonical[1]}`);
+  } else {
+    console.log(`  ${colors.yellow}⚠ Canonical tag missing in index.html${colors.reset}`);
+  }
+
+  if (hasKeywords) {
+    console.log(`  ${colors.green}✔ Meta Keywords:${colors.reset} Found ${hasKeywords[1].split(",").length} target terms`);
+  }
+
+  if (hasJsonLd) {
+    console.log(`  ${colors.green}✔ Structured Data:${colors.reset} JSON-LD Schema detected`);
+  }
+}
+
+// 2. Check sitemap.xml
+console.log(`\n${colors.bold}2. Checking public/sitemap.xml:${colors.reset}`);
+const sitemapPath = path.resolve("public/sitemap.xml");
+let sitemapUrls = [];
+if (fs.existsSync(sitemapPath)) {
+  const sitemap = fs.readFileSync(sitemapPath, "utf-8");
+  const matches = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)];
+  sitemapUrls = matches.map((m) => m[1]);
+  console.log(`  ${colors.green}✔ Sitemap exists with ${sitemapUrls.length} indexed URLs${colors.reset}`);
+} else {
+  console.log(`  ${colors.red}✖ sitemap.xml not found in public/${colors.reset}`);
+}
+
+// 3. Audit routes defined in seoConfig.ts
+console.log(`\n${colors.bold}3. Auditing Route Configurations (src/app/seo/seoConfig.ts):${colors.reset}`);
+const seoConfigPath = path.resolve("src/app/seo/seoConfig.ts");
+if (fs.existsSync(seoConfigPath)) {
+  const seoConfig = fs.readFileSync(seoConfigPath, "utf-8");
+
+  const routeRegex = /"(\/[^"]*)":\s*\{([^}]+(?:\{[^}]+\}[^}]*)*)\}/g;
+  let match;
+  let auditedCount = 0;
+  let issueCount = 0;
+
+  while ((match = routeRegex.exec(seoConfig)) !== null) {
+    const route = match[1];
+    const block = match[2];
+    auditedCount++;
+
+    const titleMatch = block.match(/title:\s*["'`](.*?)["'`]/);
+    const descMatch = block.match(/description:\s*["'`](.*?)["'`]/);
+    const hasSchema = block.includes("structuredData");
+
+    const issues = [];
+    if (!titleMatch) {
+      issues.push("Missing title");
+    }
+
+    if (!descMatch) {
+      issues.push("Missing description");
+    }
+
+    if (issues.length === 0) {
+      console.log(`  ${colors.green}✔ ${route}${colors.reset} ${hasSchema ? "(Rich Schema: ✔)" : ""}`);
+    } else {
+      issueCount++;
+      console.log(`  ${colors.yellow}⚠ ${route}:${colors.reset} ${issues.join(" | ")}`);
+    }
+  }
+
+  console.log(`\n${colors.bold}Summary:${colors.reset} Audited ${auditedCount} core routes. ${issueCount === 0 ? colors.green + "All passed!" : colors.yellow + issueCount + " warnings."}${colors.reset}`);
+}
+
+// 4. Check robots.txt
+console.log(`\n${colors.bold}4. Checking public/robots.txt:${colors.reset}`);
+const robotsPath = path.resolve("public/robots.txt");
+if (fs.existsSync(robotsPath)) {
+  const robots = fs.readFileSync(robotsPath, "utf-8");
+  const allowsIndex = !robots.includes("Disallow: /");
+  const hasSitemap = robots.includes("sitemap.xml");
+  console.log(`  ${allowsIndex ? colors.green + "✔ Crawling permitted (no blocking rules)" : colors.red + "✖ Blocking all crawlers"}${colors.reset}`);
+  console.log(`  ${hasSitemap ? colors.green + "✔ Sitemap linked in robots.txt" : colors.yellow + "⚠ Recommend adding Sitemap link"}${colors.reset}`);
+}
+
+console.log(`\n${colors.bold}${colors.cyan}====================================================${colors.reset}\n`);

@@ -427,12 +427,13 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="mt-6 rounded-2xl overflow-hidden border border-gray-200 bg-white">
+          <div className="mt-8 rounded-2xl overflow-hidden border border-purple-100/80 bg-white shadow-xl hover:shadow-2xl transition-all duration-300">
             <MediaSlot
               imageSrc={mediaAssets.reliabilityEvidenceImageSrc}
-              className="w-full h-[260px] object-cover"
+              className="w-full h-auto max-h-[540px] object-cover md:object-contain bg-slate-50"
+              alt="AutoApply CV Reliability, Modal Check and Duplicate Prevention Guardrails"
               placeholderTitle="Reliability evidence image"
-              placeholderHint="Add annotated screenshot: duplicate skip, cooldown, and validation pause/resume flow."
+              placeholderHint="Live verification logs showing modal check, duplicate prevention, and human pacing."
             />
           </div>
         </div>

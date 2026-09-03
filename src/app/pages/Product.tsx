@@ -3,65 +3,71 @@ import MarketingInfoPage from "../components/marketing/MarketingInfoPage";
 export default function Product() {
   return (
     <MarketingInfoPage
-      eyebrow="Product"
-      title="Free platform for high-quality job search execution"
-      description="Free to start. AutoApply CV combines controlled LinkedIn automation, AI resume optimization, and pipeline visibility so you can move faster without lowering application quality."
+      eyebrow="AutoApply CV Product Suite"
+      title="Complete AI Job Search Automation & LinkedIn Apply Bot Platform"
+      description="Free to start. AutoApply CV unites powerful LinkedIn Easy Apply automation, intelligent AI resume tailoring, automated recruiter outreach, and centralized application tracking into one seamless workflow."
       metrics={[
-        { label: "Workflow", value: "Discovery -> Apply -> Track" },
-        { label: "Control", value: "Human-in-the-loop", note: "Pause, review, resume anytime" },
-        { label: "Optimization", value: "ATS + role fit" },
-        { label: "Coverage", value: "Daily apply planning" },
+        { label: "Core Engine", value: "LinkedIn Auto Apply Bot", note: "Client-side Easy Apply copilot" },
+        { label: "Resume Tech", value: "AI ATS Optimization", note: "Real-time keyword tailoring" },
+        { label: "Outreach", value: "HR Email Finder", note: "Verified recruiter contacts" },
+        { label: "Safety", value: "Human-in-the-Loop", note: "Pause, review & resume anytime" },
       ]}
       sections={[
         {
-          title: "Core capabilities",
+          title: "Core Platform Features & Tools",
           cards: [
             {
               kicker: "Automation",
-              title: "LinkedIn Auto Apply Copilot",
-              description: "Execute faster on Easy Apply jobs with guardrails for required questions, resume prompts, and external-apply filtering.",
+              title: "LinkedIn Auto Apply Bot",
+              description:
+                "Apply to hundreds of LinkedIn Easy Apply jobs automatically with customizable search filters, human typing pacing, and duplicate prevention.",
             },
             {
-              kicker: "Resume",
-              title: "AI resume tailoring",
-              description: "Adapt resume content to job language and role signals so your profile remains relevant to ATS and recruiters.",
+              kicker: "Resume AI",
+              title: "AI Resume Tailoring & ATS Builder",
+              description:
+                "Automatically adapts your resume bullets and technical skills to match target job descriptions, ensuring maximum pass rates through ATS filters.",
             },
             {
-              kicker: "Screening",
-              title: "Reusable answer bank",
-              description: "Capture screening questions once, sync across dashboard + extension, and reduce repeated manual edits.",
+              kicker: "Efficiency",
+              title: "Reusable Screening Answer Bank",
+              description:
+                "Store verified answers to common recruiter questions (years of experience, visa status, notice period) and auto-fill them on every application.",
             },
             {
               kicker: "Tracking",
-              title: "Application pipeline",
-              description: "See applied, skipped, and failed outcomes with reasons so you can correct blockers quickly.",
+              title: "Job Application Tracker CRM",
+              description:
+                "Organize your entire pipeline with Kanban-style boards. Track applied, skipped, interviewing, and offered stages in real time.",
             },
             {
-              kicker: "Insights",
-              title: "Conversion analytics",
-              description: "Monitor submission volume, skip reasons, and interview progress to improve your search strategy weekly.",
+              kicker: "Chrome Extension",
+              title: "In-Browser Copilot Extension",
+              description:
+                "The AutoApply CV extension sits alongside your job search window, providing live feedback, instant autofill, and automatic data synchronization.",
             },
             {
-              kicker: "Setup",
-              title: "Guided install + onboarding",
-              description: "Use in-product install tours and profile sync to get from account setup to first applications in minutes.",
+              kicker: "Outreach",
+              title: "HR & Recruiter Email Finder",
+              description:
+                "Discover decision-makers and hiring managers at target companies and send personalized follow-up emails to boost your response rate.",
             },
           ],
         },
         {
-          title: "Designed for consistent quality",
+          title: "Designed for Safe, High-Converting Job Search Automation",
           bullets: [
-            "Prefer fit and completion quality over blind high-volume applications.",
-            "Keep manual override available at every important workflow step.",
-            "Persist settings + search state so runs do not drift into noisy loops.",
-            "Surface actionable validation errors directly to the dashboard in real time.",
+            "Quality-First Pacing: Prevents account bans by using randomized human-like delays and mouse movement simulation.",
+            "Smart Duplicate Guard: Automatically detects and skips roles you have already submitted to across platforms.",
+            "Live Error Detection: Surfaces validation issues immediately and lets you fix answer fields with a single click.",
+            "Transparent Conversion Analytics: Track weekly application velocity, callback rates, and interview conversion ratios.",
           ],
         },
       ]}
-      ctaTitle="See the full platform flow"
-      ctaDescription="Review how setup, automation, and optimization work together before you start your first run."
-      primaryAction={{ label: "How It Works", to: "/how-it-works" }}
-      secondaryAction={{ label: "View Pricing", to: "/pricing" }}
+      ctaTitle="Accelerate your job search with AutoApply CV"
+      ctaDescription="Experience how automated job applying, AI resume building, and application tracking transform your career."
+      primaryAction={{ label: "Sign Up Free", to: "/signup" }}
+      secondaryAction={{ label: "How It Works", to: "/how-it-works" }}
     />
   );
 }

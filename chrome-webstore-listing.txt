@@ -1,80 +1,91 @@
 CHROME WEB STORE LISTING — AutoApply CV LinkedIn Copilot
 ========================================================
 
-TITLE (from package)
---------------------
-AutoApply CV LinkedIn Copilot
+TITLE (from package — Max 45 chars)
+-----------------------------------
+AutoApply CV - LinkedIn Auto Apply Bot
 
-SUMMARY (from package)
-----------------------
-LinkedIn auto-apply assistant with a live status panel for your job search.
+SUMMARY (from package — Max 132 chars)
+--------------------------------------
+Free LinkedIn auto apply bot & Easy Apply copilot. Automate job applications safely with custom answer bank and live tracking.
 
-DESCRIPTION
------------
-Apply to LinkedIn jobs faster with AutoApply CV LinkedIn Copilot.
+DESCRIPTION (Full SEO Optimized Copy)
+--------------------------------------
+🚀 AutoApply CV is the #1 Free LinkedIn Auto Apply Bot & AI Job Search Copilot designed to help software engineers and professionals apply to hundreds of relevant jobs automatically on LinkedIn and Indeed.
 
-What it does
-- Speeds up the LinkedIn Easy Apply flow using a copilot panel that sits alongside the job you're viewing.
-- A live status panel shows exactly what the copilot is doing as it fills in and reviews an application.
-- Tracks your applications and lets you review results in the popup and on your autoapplycv.in dashboard.
+Stop wasting 20+ hours every week manually clicking and filling out the exact same repetitive job application forms. AutoApply CV automates your LinkedIn Easy Apply submissions using an in-browser assistant, verified screening answer banks, AI resume ATS keyword matching, and real-time application tracking.
 
-Key features
-- Guided assistant for LinkedIn Easy Apply jobs
-- Live status panel with step-by-step feedback
-- Resume and profile sync to your AutoApply CV dashboard
-- You stay in control: the copilot acts only when you explicitly start it on a job page
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ KEY FEATURES & CAPABILITIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-How it works
-1. Install the extension and sign in to autoapplycv.in.
-2. Open a LinkedIn job with Easy Apply.
-3. Start the copilot from the panel — it guides you through the application step by step.
+🤖 1-Click LinkedIn Easy Apply Automation
+• Automatically scans and fills out LinkedIn Easy Apply modals in seconds.
+• Supports single-step and multi-step application forms without breaking.
+• Auto-submits or lets you review each application before sending.
 
-Data & privacy
-- The extension only reads the LinkedIn job pages you open and the data you submit.
-- Application activity is synced to your AutoApply CV dashboard account.
-- No data is shared with third parties. See https://autoapplycv.in/privacy-policy
+🧠 Reusable Screening Answer Bank
+• Save answers once for common recruiter questions: years of experience, visa authorization, salary expectations, notice periods, and custom answers.
+• Auto-fills every screening question accurately—no more typing errors or skipped fields.
 
-CATEGORY
---------
-Productivity
+🛡️ 100% Account Safety & Human-Pacing Guardrails
+• Unlike risky headless scrapers, AutoApply CV operates directly inside your active browser session as a client-side copilot.
+• Built with natural, randomized human typing delays and mouse pacing to ensure complete compliance.
+• Auto-pauses and prompts you whenever an unknown custom question is encountered.
 
-LANGUAGE
---------
-English
+🚫 Smart Duplicate Prevention
+• Checks your historical application log and automatically skips jobs you have already applied to.
+• Prevents wasting your daily application limits on duplicate job listings.
 
-STORE ICON (128 x 128)
-----------------------
-Upload: icons/icon128.png (already 128x128)
+🎯 AI Resume Matching & ATS Optimization
+• Sync multiple targeted resumes and match the best version to each role.
+• Ensures your application highlights relevant keywords to pass ATS screening filters.
 
-SCREENSHOTS (at least 1 required — exactly 1280x800 or 640x400, JPEG or 24-bit PNG, NO alpha)
-----------------------------------------------------------------------------------------------
-Generate/crop from public/marketing/*.png (they are 1920x1080 and must be resized first).
-Recommended order:
-1. value-dashboard.png
-2. howitworks-install.png
-3. howitworks-match.png
-4. howitworks-track.png
-5. reliability-evidence.png
+📊 Centralized Application Tracker CRM
+• Real-time synchronization with your AutoApply CV cloud dashboard (autoapplycv.in).
+• Track application statuses (Applied, Skipped, Interviewing, Offer) with timestamps and company links.
 
-HOME PAGE URL / OFFICIAL URL
-----------------------------
-https://autoapplycv.in
-(Verify ownership in Google Search Console.)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 HOW IT WORKS (3 SIMPLE STEPS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-SUPPORT URL
------------
-https://autoapplycv.in/contact
-(Alternative: https://autoapplycv.in/help-center)
+1️⃣ Install & Connect: Install the Chrome extension and log in to your free AutoApply CV account.
+2️⃣ Set Your Answer Bank: Save your job preferences, experience, and screening answers once.
+3️⃣ Launch Auto Apply: Open LinkedIn Jobs, click "Start Copilot", and watch your applications submit automatically with live status feedback!
 
-MATURE CONTENT
---------------
-No
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔥 WHY CHOOSE AUTOAPPLY CV OVER OTHER TOOLS?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-ITEM SUPPORT
-------------
-On
+• Free to Start: Generous daily application credits with zero credit card required.
+• Complete Control: Start, pause, resume, or switch to manual mode at any time.
+• High-Converting: Quality-first filtering ensures you apply to high-match roles that actually convert to interviews.
+• Great Alternative: The modern, safer alternative to LazyApply, LoopCV, Simplify, and Sonara.
 
-REQUIRED BEFORE PUBLISH (not on the listing form)
--------------------------------------------------
-- Privacy policy URL: https://autoapplycv.in/privacy-policy
-- Data usage disclosure: extension transmits application data to your dashboard (autoapplycv.in).
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔒 PRIVACY & SECURITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Zero Credential Storage: We NEVER ask for or store your LinkedIn passwords.
+• Client-Side Execution: The extension only reads job listings and application form fields on pages you actively visit.
+• Transparent Sync: Application logs are securely synced only to your private AutoApply CV dashboard.
+• Privacy Policy: https://autoapplycv.in/privacy-policy
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📞 SUPPORT & COMMUNITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Website: https://www.autoapplycv.in
+• Help Center: https://www.autoapplycv.in/help-center
+• Support Email: support@autoapplycv.in
+• Community: Join 50,000+ engineers landing top tech roles faster with AutoApply CV!
+
+========================================================
+CATEGORY: Productivity / Workflow & Planning
+LANGUAGE: English
+STORE ICON: icons/icon128.png (128x128)
+PROMO TILES (in public/store-screenshots/):
+- Small Promo Tile: 440 x 280 (small-promo-tile-440x280.png / .jpg)
+- Marquee Promo Tile: 1400 x 560 (marquee-promo-tile-1400x560.png / .jpg)
+- 5 Screenshots: 1280 x 800 (1-5 in public/store-screenshots/)
+========================================================

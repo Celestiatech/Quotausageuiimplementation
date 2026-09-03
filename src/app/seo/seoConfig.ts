@@ -32,9 +32,9 @@ export function normalizeCanonicalBaseUrl(value?: string) {
 
 export const SEO_BY_PATH: Record<string, SeoEntry> = {
   "/": {
-    title: "Free AutoApply CV | LinkedIn Auto Apply Bot for Software Engineers",
+    title: "Free AutoApply CV | Free LinkedIn Auto Apply Bot & Job Search Automation",
     description:
-      "Apply to LinkedIn jobs automatically with AutoApply CV. Includes page-ready waits, duplicate prevention, AI resume optimization, and full job tracking.",
+      "Free LinkedIn auto apply bot & job search automation. Apply to LinkedIn Easy Apply jobs automatically with AutoApply CV, featuring custom answer banks, duplicate prevention, and real-time tracking.",
     index: true,
     structuredData: [
       {
@@ -111,22 +111,110 @@ export const SEO_BY_PATH: Record<string, SeoEntry> = {
     ],
   },
   "/auto-apply-linkedin": {
-    title: "Auto Apply LinkedIn | Free LinkedIn Auto Apply | AutoApply CV",
+    title: "LinkedIn Auto Apply Bot (Free) | AutoApply CV",
     description:
-      "Free to start: learn how to auto apply on LinkedIn using Easy Apply targeting, reusable answers, and tracking for better callbacks.",
+      "Free LinkedIn auto apply bot & Easy Apply copilot. Automate job applications safely on LinkedIn with custom answer banks, smart resume matching, and live tracking.",
     index: true,
+    structuredData: [
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        name: "AutoApply CV - LinkedIn Auto Apply Bot",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Chrome Browser Extension, Web",
+        offers: {
+          "@type": "Offer",
+          price: "0",
+          priceCurrency: "USD",
+        },
+        description:
+          "Free LinkedIn auto apply bot and Easy Apply copilot for software engineers and professionals.",
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: [
+          {
+            "@type": "Question",
+            name: "Is there a free LinkedIn auto apply bot?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "Yes. AutoApply CV provides a free LinkedIn auto apply bot and Chrome extension copilot that automates Easy Apply submissions with safety pacing and answer bank sync.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "How does the LinkedIn auto apply bot work?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "The AutoApply CV extension sits alongside your LinkedIn job search, identifies Easy Apply jobs matching your criteria, automatically fills screening questions from your saved answers, and tracks applied roles in your dashboard.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "Will LinkedIn ban my account for using an auto apply bot?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "AutoApply CV is engineered with human-in-the-loop safety controls, realistic delays, duplicate prevention, and pause/resume capabilities so you remain completely in control of your LinkedIn account.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "Can I track my LinkedIn auto apply job applications?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "Yes. Every application submitted by the LinkedIn auto apply bot is logged with status (applied, skipped, failed), role details, company name, and timestamps in your AutoApply CV dashboard.",
+            },
+          },
+        ],
+      },
+    ],
   },
   "/auto-apply-jobs": {
-    title: "Auto Apply Jobs | Free Auto Apply Jobs Strategy | AutoApply CV",
+    title: "Auto Apply Jobs (Free) | Automated Job Applications | AutoApply CV",
     description:
-      "Free to start: a quality-first auto apply jobs strategy with targeting rules, resume alignment, and outcome tracking.",
+      "Free auto apply jobs tool to apply to LinkedIn and Indeed roles automatically. Match resumes, submit applications with verified answers, and track interviews.",
     index: true,
+    structuredData: {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: [
+        {
+          "@type": "Question",
+          name: "How can I auto apply to jobs for free?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "You can sign up on AutoApply CV for free, configure your job preferences and screening answers, and use the automated copilot to apply to matched jobs.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Which platforms does AutoApply CV support for auto applying?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "AutoApply CV currently supports LinkedIn Easy Apply and Indeed jobs, with intelligent form filling and outcome tracking.",
+          },
+        },
+      ],
+    },
   },
   "/auto-apply-chrome-extension": {
-    title: "Auto Apply Chrome Extension | Free Auto Apply Extension | AutoApply CV",
+    title: "Auto Apply Chrome Extension for LinkedIn (Free) | AutoApply CV",
     description:
-      "Free to start: use the AutoApply CV Chrome extension workflow to streamline auto apply with synced answers and tracking.",
+      "Free auto apply Chrome extension for LinkedIn Easy Apply. Automates repetitive application forms, syncs screening answers, and prevents duplicate applications.",
     index: true,
+    structuredData: {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "AutoApply CV Chrome Extension",
+      applicationCategory: "BrowserExtension",
+      operatingSystem: "Google Chrome",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+      },
+    },
   },
   "/about": {
     title: "About | AutoApply CV",

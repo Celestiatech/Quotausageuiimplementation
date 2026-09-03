@@ -44,7 +44,7 @@ export function Navigation() {
               <img
                 src="/logos/brandmark-80.png"
                 alt="AutoApply CV logo"
-                className="w-10 h-10 rounded-xl shadow-lg"
+                className="w-10 h-10 object-contain"
                 width={40}
                 height={40}
                 loading="eager"

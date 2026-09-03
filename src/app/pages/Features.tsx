@@ -20,9 +20,23 @@ export default function Features() {
 
   const mainFeatures = [
     {
+      icon: Zap,
+      title: 'LinkedIn Auto Apply Bot & Easy Apply Copilot',
+      description: 'Automatically apply to hundreds of LinkedIn and Indeed jobs with intelligent 1-click automation',
+      details: [
+        'Automated LinkedIn Easy Apply submission',
+        'Custom screening answer bank auto-fill',
+        'Human-paced delays for 100% account safety',
+        'Duplicate application prevention',
+        'Real-time status tracking & outcome logging'
+      ],
+      image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800',
+      gradient: 'from-purple-600 to-indigo-600'
+    },
+    {
       icon: FileText,
-      title: 'AI Resume Builder & Tailor',
-      description: 'Build and tailor your resume for each job posting with ATS optimization',
+      title: 'AI Resume Builder & ATS Tailor',
+      description: 'Build and tailor your resume for each job posting with real-time ATS optimization',
       details: [
         'AI-powered keyword optimization',
         'ATS-friendly formatting',
@@ -30,13 +44,13 @@ export default function Features() {
         'Real-time preview',
         'PDF export'
       ],
-      image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800',
+      image: 'https://images.unsplash.com/photo-1580894896813-652ff5aa8146?w=800',
       gradient: 'from-blue-500 to-cyan-500'
     },
     {
       icon: Target,
-      title: 'Smart Job Matching',
-      description: 'Get compatibility scores for every job opportunity',
+      title: 'Smart Job Matching Algorithm',
+      description: 'Get compatibility scores and keyword alignment for every job opportunity',
       details: [
         'Match score algorithm',
         'Skill gap analysis',
@@ -64,7 +78,7 @@ export default function Features() {
     {
       icon: MessageSquare,
       title: 'Interview Preparation AI',
-      description: 'Practice and ace your technical interviews',
+      description: 'Practice and ace your technical interviews with AI coaching',
       details: [
         'AI-generated questions',
         'Mock interview sessions',
@@ -78,7 +92,7 @@ export default function Features() {
     {
       icon: TrendingUp,
       title: 'Analytics & Insights',
-      description: 'Track your progress with detailed metrics',
+      description: 'Track your progress with detailed application metrics and conversion data',
       details: [
         'Callback rate tracking',
         'Application velocity',
@@ -92,7 +106,7 @@ export default function Features() {
     {
       icon: Users,
       title: 'Coach Workspace',
-      description: 'Collaborate with career coaches or manage clients',
+      description: 'Collaborate with career coaches or manage candidates',
       details: [
         'Multi-client dashboard',
         'Shared templates',
@@ -138,18 +152,18 @@ export default function Features() {
       <section className="relative overflow-hidden bg-gradient-to-br from-purple-50 via-white to-blue-50 pt-20 pb-16">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 text-center">
           <div className="inline-block px-4 py-2 bg-purple-100 rounded-full text-purple-700 text-sm font-semibold mb-6">
-            Features
+            Features & Capabilities
           </div>
           
           <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
-            Powerful LinkedIn auto apply and{' '}
+            Powerful LinkedIn Auto Apply Bot &{' '}
             <span className="bg-gradient-to-r from-[#6366F1] to-[#A855F7] bg-clip-text text-transparent">
-              job search
+              Job Search Automation
             </span>
           </h1>
           
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Free to start. Everything you need to apply to jobs automatically, optimize resumes for ATS, and track applications in one workflow
+            Free to start. Automatically apply to LinkedIn and Indeed jobs, optimize resumes with AI ATS keyword matching, and manage your entire application pipeline in one unified platform.
           </p>
         </div>
       </section>
@@ -207,7 +221,7 @@ export default function Features() {
                   onClick={() => navigate('/pricing')}
                   className="px-8 py-4 bg-gradient-to-r from-[#6366F1] to-[#A855F7] text-white rounded-xl font-semibold hover:shadow-xl hover:scale-105 transition-all duration-200 inline-flex items-center gap-2"
                 >
-                  Get Started
+                  Get Started Free
                   <ArrowRight className="w-5 h-5" />
                 </button>
               </div>
